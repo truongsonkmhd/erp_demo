@@ -9,6 +9,8 @@
  * Functions used by inline on* handlers are exposed on window at the bottom.
  */
 
+import { installWorkflow, workflowBadges } from "@/features/vldc/workflow/views";
+
 type ShellBridge = {
   show: (page: string) => void;
   openModal: (title: string, html: string) => void;
@@ -36,6 +38,7 @@ const navGroups=[
 let current='lanhdao', currentPage='dashboard';
 // Login, quick-account cards, setup() and switchRole() moved to React (LoginScreen, Sidebar, Topbar, store).
 export function setCurrentRole(k: string) { current = k; }
+export function getCurrentRole(): string { return current; }
 const pages={dashboard:['Dashboard điều hành','Tổng quan theo vai trò'],action:['Action Center','Một nơi xử lý mọi việc chờ'],assistant:['AI Knowledge Workspace','Tìm kiếm tài liệu, văn bản, hồ sơ nhân sự, thiết bị và dữ liệu nghiệp vụ'],projects:['Nhiệm vụ / Dự án','Hồ sơ số dự án, WBS, rủi ro, nguồn lực'],finance:['Kế hoạch - Tài chính','Ngân sách, chi phí, cam kết chi, thanh toán'],equipment:['Thiết bị','Vòng đời tài sản, kiểm định, điều chuyển'],hr:['Nhân sự','Hồ sơ năng lực, chứng chỉ, điều động'],dms:['DMS - Quản trị tài liệu','Metadata, version, tìm kiếm, check-in/out'],documents:['Văn bản','Văn bản đến/đi, trình ký, SLA'],contracts:['Hợp đồng CLM','Từ dự thảo đến thanh lý và nghĩa vụ'],generator:['Sinh văn bản','Tạo Word/PDF mô phỏng từ dữ liệu ERP'],reports:['Trung tâm báo cáo','Dashboard, Report Builder, scheduled reports'],alerts:['Cảnh báo & Rules','Quản trị quy tắc cảnh báo'],audit:['Audit Timeline','Truy vết thao tác và phiên bản']};
 const visualMap={assistant:['field-visual','AI Knowledge Workspace','Tìm kiếm có dẫn nguồn trên DMS, văn bản, nhân sự, thiết bị, dự án, hợp đồng và dữ liệu lịch sử.'],dashboard:['executive-visual','Trung tâm điều hành số','Bức tranh tổng hợp về nhiệm vụ, nguồn lực, tài chính, hồ sơ và các quyết định cần xử lý.'],projects:['project-visual','Nhiệm vụ & Dự án','Quản trị xuyên suốt kế hoạch, WBS, tiến độ, hiện trường, nghiệm thu và nguồn lực.'],equipment:['equipment-visual','Thiết bị & Tài sản kỹ thuật','Theo dõi vòng đời, điều chuyển, kiểm định, hiệu chuẩn và mức sử dụng thiết bị địa vật lý.'],hr:['people-visual','Nhân sự & Năng lực','Quản trị hồ sơ, skill matrix, điều động và năng lực chuyên môn của các đơn vị.'],dms:['field-visual','Hồ sơ số & Dữ liệu','DMS, hồ sơ dự án, metadata, version, lưu trữ lịch sử và dữ liệu chuyên ngành.'],documents:['executive-visual','Văn bản & Điều hành','Tiếp nhận, phân luồng, trình ký, SLA và truy vết văn bản điện tử.'],contracts:['project-visual','Hợp đồng & Nghĩa vụ','Quản lý toàn vòng đời hợp đồng, nghiệm thu, thanh toán và công nợ.'],finance:['executive-visual','Kế hoạch – Tài chính','Theo dõi kế hoạch, dự toán, nguồn vốn, cam kết chi và phân tích quản trị.'],accounting:['executive-visual','Trung tâm Kế toán','Chứng từ, thanh toán, tạm ứng, công nợ, tài sản và báo cáo kế toán.'],calendar:['people-visual','Lịch & Kế hoạch','Lịch Liên đoàn, đơn vị, dự án và cá nhân trên một không gian làm việc thống nhất.'],communications:['people-visual','Thông báo & Truyền thông nội bộ','Thông tin theo phạm vi, nhắc việc và liên kết trực tiếp tới hồ sơ cần xử lý.']};
 function addVisualHero(p){let cfg=visualMap[p];if(!cfg||p==='dashboard')return;let c=document.getElementById('content');if(!c||c.querySelector('.module-hero'))return;let h=document.createElement('div');h.className='module-hero '+cfg[0];h.innerHTML='<div><div class="hero-tag">VLDC DIGITAL WORKPLACE</div><h2>'+cfg[1]+'</h2><p>'+cfg[2]+'</p></div><div class="hero-tag">'+(pages[p]?.[0]||'Nghiệp vụ')+'</div>';c.prepend(h)}
@@ -921,8 +924,9 @@ export function getPageMeta(p: string): [string, string] | undefined { return pa
 export function hasPage(p: string): boolean { return typeof render[p] === 'function'; }
 export function renderPage(p: string) { currentPage = p; render[p](); addVisualHero(p); }
 export function getShellBadges() {
- const tasks = ownerTasks().filter(t => !['Hoàn thành', 'Đã duyệt'].includes(t.status)).length;
- const notices = myNotices().filter(x => !x.read).length;
+ const shared = workflowBadges(current);
+ const tasks = ownerTasks().filter(t => !['Hoàn thành', 'Đã duyệt'].includes(t.status)).length + shared.tasks;
+ const notices = myNotices().filter(x => !x.read).length + shared.notices;
  const events = myEvents().filter(x => x.date === '08/10/2026').length;
  return {
   tasks: { count: tasks, cls: tasks ? 'b-danger' : 'b-ok' },
@@ -946,3 +950,6 @@ Object.assign(window, {
  createDirective, directiveDetail, createMeeting, meetingDetail, createRisk,
  openUnit, researchForm, researchDetail
 });
+
+// Shared cross-account workflow (directives, delegated tasks, payment dossiers) backed by Firestore.
+installWorkflow(render, { show, openModal, closeModal });

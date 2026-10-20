@@ -55,6 +55,10 @@ export const vldcActions = {
   refresh() {
     setState({ badgeSeq: state.badgeSeq + 1 })
   },
+  /** Re-renders the current page in place (used when shared workflow data changes). */
+  rerender() {
+    setState({ navSeq: state.navSeq + 1 })
+  },
 }
 
 connectShell(vldcActions)

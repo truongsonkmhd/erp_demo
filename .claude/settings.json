@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(MSYS_NO_PATHCONV=1 timeout 90 /d/node.exe shot.mjs ketoan@vldc.local 123456 /vldc/vouchers C:/Users/ADMIN/AppData/Local/Temp/claude/d--DATN-ERP-DEMO/267832d8-32f1-43a4-8bb8-d6d502da0db2/scratchpad/ketoan.png)",
+      "Bash(sed -i \"s#returnByValue: true }\\)\\).result\\)\\);#returnByValue: true, awaitPromise: true }\\)\\).result\\)\\);#\" shot.mjs)",
+      "Bash(EVAL='fetch\\(\"/api/menus/me?module=vldc\",{headers:{Authorization:\"Bearer \"+localStorage.getItem\\(\"pts_access_token\"\\)}}\\).then\\(r=>r.status+\" \"+r.headers.get\\(\"content-type\"\\)\\).catch\\(e=>String\\(e\\)\\)' MSYS_NO_PATHCONV=1 timeout 90 /d/node.exe shot.mjs ketoan@vldc.local 123456 /vldc/vouchers C:/Users/ADMIN/AppData/Local/Temp/claude/d--DATN-ERP-DEMO/267832d8-32f1-43a4-8bb8-d6d502da0db2/scratchpad/ketoan.png)"
+    ]
+  }
+}

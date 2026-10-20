@@ -1,0 +1,54 @@
+server:
+  port: ${SERVER_PORT:1122}
+  tomcat:
+    accept-count: 2000
+    max-connections: 10000
+
+logging:
+  level:
+    com.xxxx.ddd: INFO
+
+spring:
+  application:
+    name: hoangminh-pts-auth
+  datasource:
+    url: ${MYSQL_URL:jdbc:mysql://localhost:3319/erp-demo?allowPublicKeyRetrieval=true&useSSL=false}
+    username: ${MYSQL_USER:root}
+    password: ${MYSQL_PASSWORD:root1234}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    type: com.zaxxer.hikari.HikariDataSource
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 2
+      connection-timeout: 3000
+      validation-timeout: 1000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+  jpa:
+    database: mysql
+    show-sql: false
+    hibernate:
+      ddl-auto: none
+  jackson:
+    serialization:
+      indent-output: true
+  threads:
+    virtual:
+      enabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+security:
+  jwt:
+    base64-secret: ${JWT_BASE64_SECRET:/SGtKxuVt+rk6LLA79sNk9eqScKybeTpW/N9Hx5lm7csNQEUVb1MMciwvXMnh5x4A+qR2YSsq7eqMRHlk+6ZnQ==}
+    token-validity-in-seconds: ${JWT_TOKEN_VALIDITY_SECONDS:86400}
+    token-validity-in-seconds-for-remember-me: ${JWT_REMEMBER_ME_VALIDITY_SECONDS:2592000}
+    refresh-token-validity-in-seconds: ${JWT_REFRESH_VALIDITY_SECONDS:604800}
+    refresh-token-validity-in-seconds-for-remember-me: ${JWT_REFRESH_REMEMBER_ME_VALIDITY_SECONDS:2592000}

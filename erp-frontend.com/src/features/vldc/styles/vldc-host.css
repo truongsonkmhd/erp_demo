@@ -1,0 +1,527 @@
+/* VLDC shell (sidebar, topbar, command palette) + polish over the legacy page styles.
+   Hand-written; vldc.css is the generated legacy sheet. Shell classes are prefixed "vx-". */
+
+.vldc-scope.vx-shell {
+  --vx-side: 272px;
+  --vx-side-collapsed: 76px;
+  --vx-navy: #062640;
+  --vx-navy-2: #0a3657;
+  --vx-navy-line: rgba(255, 255, 255, 0.08);
+  --vx-nav-text: #c3d4e2;
+  --vx-accent: #0f6eb8;
+  --vx-accent-soft: #e8f2fb;
+  --vx-gold: #f5c454;
+  --vx-radius: 12px;
+  --vx-ring: 0 0 0 3px rgba(15, 110, 184, 0.28);
+  --vx-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+
+  display: grid;
+  grid-template-columns: var(--vx-side) minmax(0, 1fr);
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+  /* Tailwind preflight sets 1.5 on html; the legacy pages expect the browser default. */
+  line-height: normal;
+  -webkit-font-smoothing: antialiased;
+  transition: grid-template-columns 0.22s var(--vx-ease);
+}
+.vldc-scope.vx-shell.is-collapsed {
+  grid-template-columns: var(--vx-side-collapsed) minmax(0, 1fr);
+}
+
+/* ---------- shared bits ---------- */
+.vldc-scope .vx-icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  position: relative;
+  transition: background 0.15s, color 0.15s, transform 0.1s;
+}
+.vldc-scope .vx-icon-btn:active { transform: scale(0.95); }
+.vldc-scope kbd {
+  font: 600 10px/1 "Segoe UI", system-ui, sans-serif;
+  padding: 4px 6px;
+  border-radius: 6px;
+  border: 1px solid currentColor;
+  opacity: 0.55;
+  white-space: nowrap;
+}
+.vldc-scope :is(button, a, select, input:not(.vx-bare)):focus-visible {
+  outline: none;
+  box-shadow: var(--vx-ring);
+}
+.vldc-scope .vx-link {
+  border: 0;
+  background: none;
+  color: var(--vx-gold);
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0 0 0 6px;
+}
+.vldc-scope .vx-nav-empty {
+  padding: 14px 12px;
+  font-size: 12px;
+  color: #8fa9bd;
+  line-height: 1.5;
+}
+.vldc-scope .vx-main .vx-nav-empty { color: var(--muted); }
+
+/* ---------- sidebar ---------- */
+.vldc-scope .vx-side {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, var(--vx-navy) 0%, var(--vx-navy-2) 100%);
+  color: #fff;
+  overflow: hidden;
+  z-index: 40;
+}
+.vldc-scope .vx-brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 16px 14px 14px 16px;
+}
+.vldc-scope .vx-logo {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #eaf7ff, #fff);
+  border: 2px solid #8cd2ff;
+  color: var(--vx-accent);
+  font-weight: 900;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+.vldc-scope .vx-brand-text { min-width: 0; flex: 1; }
+.vldc-scope .vx-brand-text b { display: block; font-size: 15px; letter-spacing: 0.01em; }
+.vldc-scope .vx-brand-text span { display: block; font-size: 11px; color: #9db7cc; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vldc-scope .vx-side .vx-icon-btn { color: #9db7cc; }
+.vldc-scope .vx-side .vx-icon-btn:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
+
+.vldc-scope .vx-role {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 12px 12px;
+  padding: 10px 12px;
+  border-radius: var(--vx-radius);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--vx-navy-line);
+}
+.vldc-scope .vx-role b { display: block; font-size: 12.5px; }
+.vldc-scope .vx-role span { display: block; font-size: 11px; color: #9db7cc; margin-top: 2px; }
+.vldc-scope .vx-role-dot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: #3ddc97;
+  box-shadow: 0 0 0 3px rgba(61, 220, 151, 0.18);
+}
+
+.vldc-scope label.vx-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 12px 8px;
+  padding: 0 10px;
+  height: 38px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid var(--vx-navy-line);
+  color: #9db7cc;
+  font-size: 12px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.vldc-scope label.vx-search:focus-within { border-color: #5fb2ec; background: rgba(255, 255, 255, 0.1); }
+.vldc-scope .vx-search input {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #fff;
+  font-size: 13px;
+  box-shadow: none;
+}
+.vldc-scope .vx-search input::placeholder { color: #87a3b9; }
+.vldc-scope .vx-search-clear { border: 0; background: none; color: inherit; cursor: pointer; display: grid; padding: 2px; }
+
+.vldc-scope .vx-nav {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 10px 12px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+.vldc-scope .vx-skeleton {
+  height: 14px;
+  margin: 14px 10px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.06));
+  background-size: 200% 100%;
+  animation: vx-shimmer 1.2s linear infinite;
+}
+@keyframes vx-shimmer { to { background-position: -200% 0; } }
+
+.vldc-scope .vx-group + .vx-group { margin-top: 2px; }
+.vldc-scope .vx-group-head {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 10px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--vx-nav-text);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.vldc-scope .vx-group-head:hover { background: rgba(255, 255, 255, 0.06); color: #fff; }
+.vldc-scope .vx-group.is-active > .vx-group-head { color: #fff; }
+.vldc-scope .vx-group.is-active > .vx-group-head svg:first-child { color: var(--vx-gold); }
+.vldc-scope .vx-label { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vldc-scope .vx-count {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #9db7cc;
+}
+.vldc-scope .vx-chevron { flex: none; opacity: 0.6; transition: transform 0.2s var(--vx-ease); }
+.vldc-scope .vx-group-head[aria-expanded="true"] .vx-chevron { transform: rotate(180deg); }
+
+.vldc-scope .vx-items {
+  position: relative;
+  margin: 2px 0 6px 19px;
+  padding-left: 10px;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  animation: vx-drop 0.18s var(--vx-ease);
+}
+@keyframes vx-drop { from { opacity: 0; transform: translateY(-4px); } }
+.vldc-scope .vx-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  margin: 1px 0;
+  border-radius: 8px;
+  color: #b4c7d6;
+  font-size: 13px;
+  text-decoration: none;
+  transition: background 0.15s, color 0.15s;
+}
+.vldc-scope .vx-item svg { flex: none; opacity: 0.75; }
+.vldc-scope .vx-item span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vldc-scope .vx-item:hover { background: rgba(255, 255, 255, 0.06); color: #fff; }
+.vldc-scope .vx-item.is-active {
+  background: linear-gradient(90deg, #0d5685, #0b6fab);
+  color: #fff;
+  font-weight: 600;
+  box-shadow: inset 3px 0 0 var(--vx-gold), 0 6px 16px rgba(0, 0, 0, 0.18);
+}
+.vldc-scope .vx-item.is-active svg { opacity: 1; }
+
+.vldc-scope .vx-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 12px 14px 14px;
+  border-top: 1px solid var(--vx-navy-line);
+}
+.vldc-scope .vx-avatar {
+  width: 36px;
+  height: 36px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #1a86d1, #0b5e98);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 800;
+}
+.vldc-scope .vx-user-text { flex: 1; min-width: 0; }
+.vldc-scope .vx-user-text b { display: block; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vldc-scope .vx-user-text span { display: block; font-size: 11px; color: #9db7cc; margin-top: 2px; }
+
+/* collapsed rail */
+.vldc-scope.is-collapsed .vx-brand { flex-direction: column; padding: 14px 0 10px; gap: 10px; }
+.vldc-scope.is-collapsed :is(.vx-brand-text, .vx-role, .vx-search, .vx-label, .vx-count, .vx-chevron, .vx-user-text) { display: none; }
+.vldc-scope.is-collapsed .vx-nav { padding: 6px 10px; }
+.vldc-scope.is-collapsed .vx-group-head { justify-content: center; padding: 11px 0; }
+.vldc-scope.is-collapsed .vx-user { flex-direction: column; padding: 12px 0; }
+
+/* ---------- topbar ---------- */
+.vldc-scope .vx-main { min-width: 0; display: flex; flex-direction: column; }
+.vldc-scope .vx-top {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 72px;
+  padding: 10px 28px;
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: saturate(1.4) blur(12px);
+  border-bottom: 1px solid var(--line);
+}
+.vldc-scope .vx-menu-btn { display: none; color: var(--ink); }
+.vldc-scope .vx-title { flex: 1; min-width: 0; }
+.vldc-scope .vx-crumbs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.vldc-scope .vx-title h1 {
+  margin: 3px 0 0;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vldc-scope .vx-title p {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vldc-scope .vx-quick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 280px;
+  height: 40px;
+  padding: 0 10px 0 13px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: #f5f8fb;
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.vldc-scope .vx-quick span { flex: 1; text-align: left; }
+.vldc-scope .vx-quick:hover { border-color: #b9d3e8; background: #fff; }
+.vldc-scope .vx-actions { display: flex; align-items: center; gap: 4px; }
+.vldc-scope .vx-action { color: #4a6378; }
+.vldc-scope .vx-action:hover { background: var(--vx-accent-soft); color: var(--vx-accent); }
+.vldc-scope .vx-action.is-active { background: var(--vx-accent-soft); color: var(--vx-accent); }
+.vldc-scope .vx-action.is-ai { color: var(--purple); }
+.vldc-scope .vx-action.is-ai:hover { background: #f0ecfb; }
+.vldc-scope .vx-badge {
+  position: absolute;
+  top: 3px;
+  right: 2px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  border: 2px solid #fff;
+  background: var(--vx-accent);
+  color: #fff;
+  font-size: 9.5px;
+  font-weight: 800;
+  line-height: 1;
+}
+.vldc-scope .vx-badge.is-danger { background: var(--danger); }
+.vldc-scope select.vx-role-select {
+  width: auto;
+  height: 38px;
+  margin-left: 6px;
+  padding: 0 30px 0 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+/* ---------- content polish (legacy page markup) ---------- */
+.vldc-scope .vx-main .content {
+  padding: 24px 28px 40px;
+  animation: vx-page 0.24s var(--vx-ease);
+}
+@keyframes vx-page { from { opacity: 0; transform: translateY(6px); } }
+.vldc-scope .vx-main .btn {
+  transition: filter 0.15s, transform 0.1s, box-shadow 0.15s;
+}
+.vldc-scope .vx-main .btn:hover { filter: brightness(0.96); box-shadow: 0 4px 12px rgba(19, 49, 73, 0.1); }
+.vldc-scope .vx-main .btn:active { transform: translateY(1px); }
+.vldc-scope .vx-main .btn-primary:hover { filter: brightness(1.08); }
+.vldc-scope .vx-main :is(.card, .kpi) { transition: box-shadow 0.2s, transform 0.2s; }
+.vldc-scope .vx-main .kpi:hover { transform: translateY(-2px); box-shadow: 0 14px 32px rgba(26, 62, 91, 0.12); }
+.vldc-scope .vx-main tbody tr { transition: background 0.12s; }
+.vldc-scope .vx-main tbody tr:hover { background: #f5f9fd; }
+.vldc-scope .vx-main th { background: #f8fafc; }
+.vldc-scope .vx-main td { font-size: 12px; }
+/* .vx-bare: shell inputs that draw their own focus state on the wrapper. */
+.vldc-scope :is(input, select, textarea):not(.vx-bare):focus {
+  outline: none;
+  border-color: #5fa8de;
+  box-shadow: var(--vx-ring);
+}
+
+/* modal: above the shell, softer entrance */
+.vldc-scope .modal {
+  z-index: 70;
+  backdrop-filter: blur(3px);
+  animation: vx-fade 0.15s ease-out;
+}
+.vldc-scope .modal-box { animation: vx-pop 0.2s var(--vx-ease); }
+.vldc-scope .modal-head .vx-icon-btn { color: var(--muted); }
+.vldc-scope .modal-head .vx-icon-btn:hover { background: #eef3f8; color: var(--ink); }
+@keyframes vx-fade { from { opacity: 0; } }
+@keyframes vx-pop { from { opacity: 0; transform: translateY(8px) scale(0.98); } }
+
+/* ---------- command palette ---------- */
+.vldc-scope .vx-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 12vh 16px 16px;
+  background: rgba(6, 30, 50, 0.45);
+  backdrop-filter: blur(3px);
+  animation: vx-fade 0.12s ease-out;
+}
+.vldc-scope .vx-palette {
+  width: min(620px, 100%);
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 30px 80px rgba(4, 26, 44, 0.35);
+  animation: vx-pop 0.18s var(--vx-ease);
+}
+.vldc-scope .vx-palette-input {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+}
+.vldc-scope .vx-palette-input input {
+  flex: 1;
+  height: 56px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  font-size: 15px;
+  color: var(--ink);
+  background: transparent;
+}
+.vldc-scope .vx-palette-input:focus-within { color: var(--vx-accent); }
+.vldc-scope .vx-palette-list { overflow-y: auto; padding: 8px; }
+.vldc-scope .vx-palette-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+.vldc-scope .vx-palette-item svg:first-child { color: var(--muted); flex: none; }
+.vldc-scope .vx-palette-item.is-active { background: var(--vx-accent-soft); }
+.vldc-scope .vx-palette-item.is-active svg { color: var(--vx-accent); }
+.vldc-scope .vx-palette-title { flex: 1; font-weight: 600; }
+.vldc-scope .vx-palette-group { font-size: 12px; color: var(--muted); }
+
+/* ---------- responsive ---------- */
+.vldc-scope .vx-backdrop { display: none; }
+
+@media (max-width: 1280px) {
+  .vldc-scope .vx-quick { width: auto; }
+  .vldc-scope .vx-quick span, .vldc-scope .vx-quick kbd { display: none; }
+}
+
+@media (max-width: 1024px) {
+  .vldc-scope.vx-shell,
+  .vldc-scope.vx-shell.is-collapsed { grid-template-columns: minmax(0, 1fr); }
+  .vldc-scope .vx-side {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: min(300px, 86vw);
+    height: auto;
+    transform: translateX(-100%);
+    transition: transform 0.25s var(--vx-ease);
+    box-shadow: 20px 0 50px rgba(0, 0, 0, 0.25);
+  }
+  .vldc-scope.is-mobile-open .vx-side { transform: none; }
+  .vldc-scope.is-mobile-open .vx-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 35;
+    background: rgba(6, 30, 50, 0.45);
+    animation: vx-fade 0.15s ease-out;
+  }
+  /* The drawer always shows the full menu, whatever the desktop rail preference is. */
+  .vldc-scope.is-collapsed .vx-brand { flex-direction: row; padding: 16px 14px 14px 16px; }
+  .vldc-scope.is-collapsed :is(.vx-brand-text, .vx-label, .vx-count, .vx-chevron, .vx-user-text) { display: block; }
+  .vldc-scope.is-collapsed :is(.vx-role, .vx-search) { display: flex; }
+  .vldc-scope.is-collapsed .vx-group-head { justify-content: flex-start; padding: 10px; }
+  .vldc-scope.is-collapsed .vx-user { flex-direction: row; padding: 12px 12px 14px 14px; }
+  .vldc-scope .vx-collapse-btn,
+  .vldc-scope .vx-search kbd { display: none; }
+  .vldc-scope .vx-menu-btn { display: inline-grid; }
+  .vldc-scope .vx-top { padding: 10px 16px; gap: 10px; }
+  .vldc-scope .vx-main .content { padding: 16px; }
+}
+
+@media (max-width: 640px) {
+  .vldc-scope .vx-title p, .vldc-scope .vx-crumbs { display: none; }
+  .vldc-scope .vx-title h1 { font-size: 17px; margin: 0; }
+  .vldc-scope .vx-actions .vx-action:not(.is-ai):nth-child(n + 3) { display: none; }
+  .vldc-scope select.vx-role-select { max-width: 120px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vldc-scope *, .vldc-scope *::before, .vldc-scope *::after { animation: none !important; transition: none !important; }
+}

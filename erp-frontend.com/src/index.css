@@ -1,0 +1,283 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  Liên đoàn Vật lý Địa chất Design System
+  - System-wide Brand Colors (xanh lục đậm & vàng đồng)
+  - Centralized Font Scale System (--font-scale & --base-font-size)
+*/
+
+@layer base {
+  :root {
+    /* -------------------------------------------------------------
+       1. GLOBAL FONT SCALE SYSTEM (Thay đổi --font-scale để chỉnh toàn bộ font hệ thống)
+       ------------------------------------------------------------- */
+    --base-font-size: 14px;
+    --font-scale: 1; /* Thay đổi từ 1 sang 1.1... để điều chỉnh kích thước chữ toàn hệ thống */
+
+    --text-xs: calc(0.75rem * var(--font-scale));
+    --text-sm: calc(0.875rem * var(--font-scale));
+    --text-base: calc(1rem * var(--font-scale));
+    --text-lg: calc(1.125rem * var(--font-scale));
+    --text-xl: calc(1.25rem * var(--font-scale));
+    --text-2xl: calc(1.5rem * var(--font-scale));
+    --text-3xl: calc(1.75rem * var(--font-scale));
+    --text-4xl: calc(2.25rem * var(--font-scale));
+    --text-5xl: calc(3rem * var(--font-scale));
+
+    /* -------------------------------------------------------------
+       2. BRAND COLORS
+       ------------------------------------------------------------- */
+    --brand-blue: 213 98% 44%;      /* #0265DC (FOB Blue) */
+    --brand-blue-hover: 213 98% 38%;
+    --brand-blue-active: 213 98% 32%;
+    --button-disabled: 210 15% 92%;
+    --button-disabled-foreground: 212 15% 55%;
+    --brand-orange: 32 83% 53%;      /* #EB8F23 */
+    --brand-orange-hover: 32 83% 46%;
+
+    --header-from: 0 0% 100%;
+    --header-to: 0 0% 100%;
+    --header-border: 220 13% 88%;
+    --header-text: 160.4 60.5% 14.9%;
+    --header-text-muted: 159 17% 35%;
+    --header-chip-bg: 197 68% 97%;
+    --header-chip-border: 210 20% 85%;
+    --header-chip-hover: 197 68% 93%;
+    --primary-dark: 160.4 60.5% 14.9%;
+    --sidebar-active-bg: 158.6 45% 92%;
+    --sidebar-active-text: 160.4 60.5% 14.9%;
+
+    --background: 0 0% 100%;
+    --foreground: 0 0% 20%;         /* #333333 */
+
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 20%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 20%;
+
+    /* Primary: Federation green (#176B4D) */
+    --primary: 158.6 64.6% 25.5%;
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 158.6 55% 36%;
+
+    /* Accent / secondary: metallic gold (#E0A526) */
+    --secondary: 41 75% 51.4%;
+    --secondary-foreground: 160.4 60.5% 14.9%;
+
+    --muted: 220 13% 96%;           /* #F5F7FA */
+    --muted-foreground: 0 0% 40%;
+
+    --accent: 41 75% 51.4%;
+    --accent-foreground: 160.4 60.5% 14.9%;
+
+    --destructive: 0 75% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    --success: 142 71% 35%;
+    --success-hover: 142 72% 29%;
+    /* Success toast theo giao diện tham chiếu: #E8FAF2 / #82E2B4 / #00A651 */
+    --toast-success-background: 147 64% 95%;
+    --toast-success-border: 151 62% 70%;
+    --toast-success-foreground: 149 100% 33%;
+    /* Error toast theo giao diện tham chiếu: #FFF5F5 / #FFA39E / #A8071A */
+    --toast-error-background: 0 86% 97%;
+    --toast-error-border: 0 93% 82%;
+    --toast-error-foreground: 0 65% 35%;
+    /* Warning toast theo giao diện tham chiếu: #FFFBEB / #FCD34D / #D97706 */
+    --toast-warning-background: 48 96% 95%;
+    --toast-warning-border: 43 96% 78%;
+    --toast-warning-foreground: 32 95% 44%;
+    /* Info toast theo giao diện tham chiếu: #F0F9FF / #7DD3FC / #0284C7 */
+    --toast-info-background: 204 100% 97%;
+    --toast-info-border: 199 89% 78%;
+    --toast-info-foreground: 199 98% 39%;
+
+    --border: 220 13% 88%;
+    --input: 220 13% 82%;
+    --ring: 158.6 64.6% 25.5%;
+
+    /* Gradients */
+    --gradient-brand: linear-gradient(90deg, hsl(var(--header-from)), hsl(var(--header-to)));
+    --gradient-blue: linear-gradient(135deg, hsl(213 98% 44%), hsl(213 98% 36%));
+
+    --radius: 0.75rem;
+
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 215 25% 27%;
+    --sidebar-primary: 158.6 64.6% 25.5%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 158.6 45% 94%;
+    --sidebar-accent-foreground: 160.4 60.5% 14.9%;
+    --sidebar-border: 210 20% 88%;
+    --sidebar-ring: 158.6 64.6% 35%;
+  }
+
+  .dark {
+    color-scheme: dark;
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+
+    --header-from: 161.3 61.5% 10.2%;
+    --header-to: 160.4 60.5% 14.9%;
+    --header-border: 217.2 32.6% 17.5%;
+    --header-text: 0 0% 100%;
+    --header-text-muted: 144.5 29.7% 85.5%;
+    --header-chip-bg: 0 0% 100% / 0.12;
+    --header-chip-border: 0 0% 100% / 0.28;
+    --header-chip-hover: 0 0% 100% / 0.20;
+    --primary-dark: 161.3 61.5% 10.2%;
+    --sidebar-active-bg: 158.6 45% 18%;
+    --sidebar-active-text: 158.6 60% 85%;
+
+    --primary: 158.6 64.6% 35%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 41 75% 51.4%;
+    --secondary-foreground: 160.4 60.5% 14.9%;
+
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+
+    --accent: 41 75% 51.4%;
+    --accent-foreground: 160.4 60.5% 14.9%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 158.6 64.6% 45%;
+
+    --sidebar-background: 222 47% 8%;
+    --sidebar-foreground: 210 40% 96%;
+    --sidebar-primary: 158.6 64.6% 45%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 158.6 35% 16%;
+    --sidebar-accent-foreground: 210 40% 96%;
+    --sidebar-border: 217 33% 17%;
+    --sidebar-ring: 158.6 64.6% 45%;
+
+  }
+}
+
+@layer components {
+  .boat-loading-track {
+    @apply relative overflow-hidden;
+    isolation: isolate;
+  }
+
+  .boat-loading-scene {
+    @apply absolute inset-0;
+    animation: boat-drift 2.2s ease-in-out infinite;
+    transform-origin: center bottom;
+  }
+
+  .boat-loading-image {
+    @apply absolute inset-0 z-20 m-auto h-full w-full object-contain;
+  }
+
+  .boat-loading-bubbles {
+    @apply absolute inset-0 z-40;
+    pointer-events: none;
+  }
+
+  .boat-loading-bubbles span {
+    @apply absolute bottom-[22%] rounded-full border border-primary/20 bg-white/90;
+    width: 7px;
+    height: 7px;
+    opacity: 0;
+    animation: boat-bubble 2.4s ease-out infinite;
+  }
+
+  .boat-loading-bubbles span:nth-child(1) { left: 27%; animation-delay: 0s; }
+  .boat-loading-bubbles span:nth-child(2) { left: 33%; width: 4px; height: 4px; animation-delay: 0.7s; }
+  .boat-loading-bubbles span:nth-child(3) { left: 40%; width: 9px; height: 9px; animation-delay: 1.35s; }
+  .boat-loading-bubbles span:nth-child(4) { left: 47%; width: 5px; height: 5px; animation-delay: 0.3s; }
+  .boat-loading-bubbles span:nth-child(5) { left: 54%; width: 8px; height: 8px; animation-delay: 1.65s; }
+  .boat-loading-bubbles span:nth-child(6) { left: 61%; width: 4px; height: 4px; animation-delay: 0.95s; }
+  .boat-loading-bubbles span:nth-child(7) { left: 67%; width: 7px; height: 7px; animation-delay: 1.9s; }
+  .boat-loading-bubbles span:nth-child(8) { left: 72%; width: 5px; height: 5px; animation-delay: 0.45s; }
+  .boat-loading-bubbles span:nth-child(9) { left: 51%; width: 3px; height: 3px; animation-delay: 2.1s; }
+
+  .boat-loading-foam {
+    @apply absolute inset-0 z-30;
+    pointer-events: none;
+  }
+
+  .boat-loading-foam span {
+    @apply absolute bottom-[25%] h-1.5 w-1.5 rounded-full bg-white shadow-sm;
+    opacity: 0;
+    animation: boat-foam 1.8s ease-out infinite;
+  }
+
+  .boat-loading-foam span:nth-child(1) { left: 27%; animation-delay: 0s; }
+  .boat-loading-foam span:nth-child(2) { left: 34%; width: 4px; height: 4px; animation-delay: 0.25s; }
+  .boat-loading-foam span:nth-child(3) { left: 42%; animation-delay: 0.5s; }
+  .boat-loading-foam span:nth-child(4) { left: 51%; width: 4px; height: 4px; animation-delay: 0.75s; }
+  .boat-loading-foam span:nth-child(5) { left: 59%; animation-delay: 1s; }
+  .boat-loading-foam span:nth-child(6) { left: 67%; width: 4px; height: 4px; animation-delay: 1.25s; }
+  .boat-loading-foam span:nth-child(7) { left: 73%; animation-delay: 1.5s; }
+
+  .boat-loading-dot {
+    animation: boat-dot 900ms ease-in-out infinite;
+  }
+}
+
+@keyframes boat-drift {
+  0%, 100% { transform: translate3d(-8px, 1px, 0) rotate(-1deg); }
+  50% { transform: translate3d(8px, -3px, 0) rotate(1deg); }
+}
+
+@keyframes boat-bubble {
+  0% { transform: translate3d(0, 0, 0) scale(0.4); opacity: 0; }
+  18% { opacity: 0.9; }
+  70% { opacity: 0.55; }
+  100% { transform: translate3d(9px, -46px, 0) scale(1.15); opacity: 0; }
+}
+
+@keyframes boat-foam {
+  0% { transform: translate3d(-8px, 2px, 0) scale(0.4); opacity: 0; }
+  25% { opacity: 0.95; }
+  100% { transform: translate3d(12px, -5px, 0) scale(1.2); opacity: 0; }
+}
+
+@keyframes boat-dot {
+  0%, 100% { opacity: 0.25; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(-2px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .boat-loading-scene,
+  .boat-loading-foam span,
+  .boat-loading-bubbles span,
+  .boat-loading-dot {
+    animation: none;
+  }
+}
+
+@layer base {
+  html {
+    font-size: var(--base-font-size);
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: Roboto, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    font-weight: 400;
+    letter-spacing: 0;
+  }
+}

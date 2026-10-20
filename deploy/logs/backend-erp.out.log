@@ -1,0 +1,38 @@
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v3.3.5)
+
+2026-10-08 14:37:43.065|main|INFO|com.xxxx.StartApplication|Starting StartApplication using Java 21.0.12 with PID 19980 (D:\DATN\ERP-DEMO\erp-start\target\xxxx-start-1.0-SNAPSHOT.jar started by ADMIN in D:\DATN\ERP-DEMO)
+2026-10-08 14:37:43.069|main|INFO|com.xxxx.StartApplication|No active profile set, falling back to 1 default profile: "default"
+2026-10-08 14:37:46.941|main|INFO|o.s.d.r.c.RepositoryConfigurationDelegate|Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-10-08 14:37:47.338|main|INFO|o.s.d.r.c.RepositoryConfigurationDelegate|Finished Spring Data repository scanning in 381 ms. Found 5 JPA repository interfaces.
+2026-10-08 14:37:51.244|main|INFO|o.s.b.w.e.tomcat.TomcatWebServer|Tomcat initialized with port 1122 (http)
+2026-10-08 14:37:51.422|main|INFO|o.a.catalina.core.StandardService|Starting service [Tomcat]
+2026-10-08 14:37:51.423|main|INFO|o.a.catalina.core.StandardEngine|Starting Servlet engine: [Apache Tomcat/10.1.31]
+2026-10-08 14:37:51.576|main|INFO|o.a.c.c.C.[Tomcat].[localhost].[/]|Initializing Spring embedded WebApplicationContext
+2026-10-08 14:37:51.580|main|INFO|o.s.b.w.s.c.ServletWebServerApplicationContext|Root WebApplicationContext: initialization completed in 8370 ms
+2026-10-08 14:37:52.967|main|INFO|o.h.jpa.internal.util.LogHelper|HHH000204: Processing PersistenceUnitInfo [name: default]
+2026-10-08 14:37:53.262|main|INFO|org.hibernate.Version|HHH000412: Hibernate ORM core version 6.5.3.Final
+2026-10-08 14:37:53.392|main|INFO|o.h.c.i.RegionFactoryInitiator|HHH000026: Second-level cache disabled
+2026-10-08 14:37:54.194|main|INFO|o.s.o.j.p.SpringPersistenceUnitInfo|No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-10-08 14:37:54.318|main|INFO|com.zaxxer.hikari.HikariDataSource|HikariPool-1 - Starting...
+2026-10-08 14:37:54.945|main|INFO|com.zaxxer.hikari.pool.HikariPool|HikariPool-1 - Added connection com.mysql.cj.jdbc.ConnectionImpl@eb695e8
+2026-10-08 14:37:55.044|main|INFO|com.zaxxer.hikari.HikariDataSource|HikariPool-1 - Start completed.
+2026-10-08 14:37:55.216|main|WARN|org.hibernate.orm.deprecation|HHH90000025: MySQLDialect does not need to be specified explicitly using 'hibernate.dialect' (remove the property setting and it will be selected by default)
+2026-10-08 14:37:57.854|main|INFO|o.h.e.t.j.p.i.JtaPlatformInitiator|HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-10-08 14:37:57.860|main|INFO|o.s.o.j.LocalContainerEntityManagerFactoryBean|Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-10-08 14:37:58.814|main|INFO|o.s.d.j.r.query.QueryEnhancerFactory|Hibernate is in classpath; If applicable, HQL parser will be used.
+2026-10-08 14:38:03.051|main|WARN|o.s.b.a.o.j.JpaBaseConfiguration$JpaWebConfiguration|spring.jpa.open-in-view is enabled by default. Therefore, database queries may be performed during view rendering. Explicitly configure spring.jpa.open-in-view to disable this warning
+2026-10-08 14:38:03.161|main|INFO|o.s.s.c.a.a.c.InitializeUserDetailsBeanManagerConfigurer$InitializeUserDetailsManagerConfigurer|Global AuthenticationManager configured with UserDetailsService bean with name authUserDetailsService
+2026-10-08 14:38:04.231|main|INFO|o.s.b.a.e.web.EndpointLinksResolver|Exposing 2 endpoints beneath base path '/actuator'
+2026-10-08 14:38:05.598|main|INFO|o.s.b.w.e.tomcat.TomcatWebServer|Tomcat started on port 1122 (http) with context path '/'
+2026-10-08 14:38:05.631|main|INFO|com.xxxx.StartApplication|Started StartApplication in 25.139 seconds (process running for 26.839)
+2026-10-08 14:38:06.224|tomcat-handler-0|INFO|o.a.c.c.C.[Tomcat].[localhost].[/]|Initializing Spring DispatcherServlet 'dispatcherServlet'
+2026-10-08 14:38:06.224|tomcat-handler-0|INFO|o.s.web.servlet.DispatcherServlet|Initializing Servlet 'dispatcherServlet'
+2026-10-08 14:38:06.226|tomcat-handler-0|INFO|o.s.web.servlet.DispatcherServlet|Completed initialization in 1 ms

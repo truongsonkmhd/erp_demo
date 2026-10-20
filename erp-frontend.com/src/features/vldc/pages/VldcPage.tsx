@@ -1,10 +1,13 @@
-import { useEffect, useLayoutEffect, useState } from "react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { useLocation, useNavigate, useParams } from "react-router-dom"
 import toast from "react-hot-toast"
 import { useAuth } from "@/services/auth/AuthContext"
 import { hasPage, renderPage, setCurrentRole } from "@/features/vldc/legacy/engine"
 import { setVldcNavigator, useVldcRole, useVldcShell, vldcActions } from "@/features/vldc/store"
 import { useVldcMenus } from "@/features/vldc/useVldcMenus"
+import { workflowStore } from "@/features/vldc/workflow/repository"
+import { setWorkflowContext } from "@/features/vldc/workflow/views"
+import { WORKFLOW_PAGES } from "@/features/vldc/workflow/rules"
 import { VldcSidebar } from "@/features/vldc/components/VldcSidebar"
 import { VldcTopbar } from "@/features/vldc/components/VldcTopbar"
 import { VldcModal } from "@/features/vldc/components/VldcModal"
@@ -13,6 +16,9 @@ import "@/features/vldc/styles/vldc.css"
 import "@/features/vldc/styles/vldc-host.css"
 
 const COLLAPSED_KEY = "vldc.sidebar.collapsed"
+
+/** Shared workflow subscription is started once per app session (survives StrictMode remounts). */
+let workflowStarted: Promise<() => void> | null = null
 
 function readCollapsed() {
   try {
@@ -56,6 +62,45 @@ export default function VldcPage() {
     setVldcNavigator(navigate)
   }, [navigate])
 
+  const roleRef = useRef(role)
+  roleRef.current = role
+  const modalRef = useRef(modal)
+  modalRef.current = modal
+  const dirtyRef = useRef(false)
+  const pageRef = useRef(pageId)
+  pageRef.current = pageId
+  /** Set for realtime re-renders so the page keeps its scroll position. */
+  const keepScrollRef = useRef(false)
+
+  // Who the shared workflow acts as (set during render so the layout effect below already sees it).
+  const isAdmin = !!user?.roleCodes?.includes("admin")
+  const perms = isAdmin ? ["*"] : (user?.permissions || []).map((p) => p.code || p.id)
+  setWorkflowContext({ role: () => roleRef.current, perms: () => perms, userName: () => userName })
+
+  // Realtime: badges always refresh; pages that show workflow data re-render in place, now or after
+  // the open modal closes so forms are not wiped. Other pages keep their patched DOM untouched.
+  useEffect(() => {
+    workflowStarted ??= workflowStore.start()
+    return workflowStore.onChange(() => {
+      vldcActions.refresh()
+      if (!WORKFLOW_PAGES.has(pageRef.current)) return
+      if (modalRef.current) {
+        dirtyRef.current = true
+        return
+      }
+      keepScrollRef.current = true
+      vldcActions.rerender()
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!modal && dirtyRef.current) {
+      dirtyRef.current = false
+      keepScrollRef.current = true
+      vldcActions.rerender()
+    }
+  }, [modal])
+
   // Modals and the mobile drawer belong to the page that opened them.
   useEffect(() => {
     setMobileOpen(false)
@@ -89,7 +134,8 @@ export default function VldcPage() {
     if (!known) return
     setCurrentRole(role)
     renderPage(pageId)
-    window.scrollTo({ top: 0 })
+    if (keepScrollRef.current) keepScrollRef.current = false
+    else window.scrollTo({ top: 0 })
   }, [pageId, role, navSeq, known])
 
   const handleLogout = async () => {

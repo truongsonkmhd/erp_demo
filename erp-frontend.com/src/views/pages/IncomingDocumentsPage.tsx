@@ -1,3 +1,4 @@
+import { useDepartmentOptions } from "@/hooks/useOrgOptions"
 import { useEffect, useMemo, useState } from "react"
 import {
   FileText,
@@ -104,6 +105,7 @@ function getUrgencyBadge(urgency: string) {
 }
 
 export default function IncomingDocumentsPage() {
+  const unitOptions = useDepartmentOptions(UNITS_LIST)
   const [documents, setDocuments] = useState<IncomingDocument[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
@@ -172,7 +174,7 @@ export default function IncomingDocumentsPage() {
   // Open Assign Modal
   const openAssignModal = (item: IncomingDocument) => {
     setAssignDoc(item)
-    setAssignUnit(item.assignedToUnit || UNITS_LIST[0])
+    setAssignUnit(item.assignedToUnit || unitOptions[0])
     setAssignUser(item.assignedToUser || "")
     setCoordinatingUnits(item.coordinatingUnits || [])
     setAssignDueDate(item.dueDate || new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10))
@@ -720,7 +722,7 @@ export default function IncomingDocumentsPage() {
                 <Label className="mb-1.5 block font-semibold">Đơn vị chủ trì xử lý (*)</Label>
                 <SelectField
                   label=""
-                  options={UNITS_LIST.map((unit) => ({ value: unit, label: unit }))}
+                  options={unitOptions.map((unit) => ({ value: unit, label: unit }))}
                   value={assignUnit}
                   onValueChange={setAssignUnit}
                   triggerClassName="bg-white"

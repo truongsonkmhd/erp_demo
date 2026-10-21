@@ -1,4 +1,4 @@
-import { escapeHtml as esc, formatDate, formatMoney, formatTime, jsCall } from "./html"
+import { escapeHtml as esc, formatDate, formatMoney, formatTime, jsCall, statusBadge } from "./html"
 import {
   DELEGATES,
   PAYMENT_STEPS,
@@ -19,8 +19,13 @@ import {
 } from "./rules"
 import type { WorkItem } from "./types"
 import { workflowStore as store } from "./repository"
+import { leaderDashboardHtml } from "./leaderDashboard"
+import { performanceHtml, unitDetailHtml } from "./kpiViews"
+import { kpiUnits, unitKpis } from "./kpi"
+import { vldcData } from "../data/registry"
+import { liveAlerts } from "../data/liveAlerts"
 
-export { escapeHtml } from "./html"
+export { escapeHtml, statusBadge } from "./html"
 
 type Shell = { show(page: string): void; openModal(title: string, html: string): void; closeModal(): void }
 type Context = { role(): string; perms(): string[]; userName(): string }
@@ -52,15 +57,6 @@ const roleTitle = (role: string) => ROLE_TITLES[role] || role
 const currentPage = () => window.location.pathname.split("/").filter(Boolean).pop() || "dashboard"
 const content = () => document.getElementById("content")
 
-export function statusBadge(item: WorkItem): string {
-  const s = item.status
-  const cls = s === "Hoàn thành" || s === "Đã chi" || s === "Đã phê duyệt" ? "b-ok"
-    : s === "Bị trả lại" ? "b-danger"
-      : s === "Chờ duyệt" || s === "Đang trình" ? "b-warn"
-        : "b-info"
-  return `<span class="badge ${cls}">${esc(s)}</span>`
-}
-
 function riskBadge(item: WorkItem, all: WorkItem[]): string {
   return isAtRisk(item, all, today()) ? ' <span class="badge b-danger">Nguy cơ trễ</span>' : ""
 }
@@ -71,7 +67,7 @@ function progressBar(value: number): string {
 
 /** Strip shown when Firestore is unreachable and data is browser-local. */
 export function offlineBanner(): string {
-  return store.mode() === "offline"
+  return store.mode() === "offline" || vldcData.offline()
     ? '<div class="alert" style="margin-bottom:12px"><span class="dot yellow"></span><div><b>Đang chạy chế độ offline</b><div class="mini">Dữ liệu chỉ có trên máy này.</div></div></div>'
     : ""
 }
@@ -262,8 +258,10 @@ function wfSubmitPayment() {
 }
 
 function wfResetDemo() {
-  if (!confirm("Xoá toàn bộ dữ liệu luồng giao việc và nạp lại dữ liệu mẫu?")) return
-  void run(() => store.reset())
+  if (!confirm("Xoá toàn bộ dữ liệu (luồng giao việc, dự án, tài chính, thiết bị, lịch...) và nạp lại dữ liệu mẫu?")) return
+  void run(async () => {
+    await Promise.all([store.reset(), vldcData.resetAll()])
+  })
 }
 
 const readKey = (role: string) => `vldc_read_${role}`
@@ -339,6 +337,19 @@ function leaderStats(): string {
   return `<div class="grid kpis" style="margin-bottom:14px">${box("Chỉ đạo & việc đang mở", open.length, "Toàn Liên đoàn")}${box("Nguy cơ trễ", risky.length, "Cần đôn đốc")}${box("Chờ tôi duyệt", waiting.length, "Đã báo cáo hoàn thành")}${box("Hồ sơ chờ phê duyệt", pendingPayments.length, "Thanh toán liên phòng")}</div>`
 }
 
+function wfUnitKpi(unitId: string) {
+  const unit = kpiUnits().find((u) => u.id === unitId)
+  shell.openModal(`KPI • ${unit?.name ?? unitId}`, unitDetailHtml(unitId, store.items(), today()))
+}
+
+/** Swaps the Command Center's hard-coded unit heatmap for the computed one. */
+function commandHeatmap() {
+  const map = content()?.querySelector(".heatmap")
+  if (!map) return
+  const cell = (v: number | null) => `<div class="score ${v == null ? "" : v >= 85 ? "good" : v >= 70 ? "watch" : "bad"}">${v == null ? "–" : `${v}%`}</div>`
+  map.innerHTML = `<div class="head">Đơn vị</div><div class="head">Tiến độ</div><div class="head">Đúng hạn</div><div class="head">Chất lượng</div><div class="head">Điểm</div>${unitKpis(store.items(), today()).map((k) => `<div><a href="javascript:void 0" ${jsCall("wfUnitKpi", k.unit.id)}><b>${esc(k.unit.name)}</b></a></div>${cell(k.criteria.progress.value)}${cell(k.criteria.onTime.value)}${cell(k.criteria.quality.value)}<div class="score ${k.rating}">${k.score ?? "–"}</div>`).join("")}`
+}
+
 function wfNotice(id: string, itemId: string) {
   markRead(ctx.role(), id)
   store.items().some((x) => x.id === itemId) ? wfOpen(itemId) : shell.show(currentPage())
@@ -360,11 +371,30 @@ export function installWorkflow(render: Record<string, () => void>, nextShell: S
   wrap(render, "action", () => inboxBlock())
   wrap(render, "notifications", noticesBlock)
   wrap(render, "payments", paymentsBlock)
-  wrap(render, "dashboard", () => `${ctx.role() === "lanhdao" ? leaderStats() : ""}${inboxBlock(5)}`)
+  // The leader gets a purpose-built dashboard instead of the stacked legacy demo blocks.
+  const unitDashboard = render.dashboard
+  render.dashboard = function () {
+    const el = content()
+    if (ctx.role() === "lanhdao" && el) {
+      el.innerHTML = leaderDashboardHtml(store.items(), { projects: vldcData.get("projects"), disbursement: vldcData.get("disbursement"), risks: vldcData.get("risks"), alerts: liveAlerts(vldcData.get("alertRules")) }, today(), inboxBlock(5), offlineBanner())
+      return
+    }
+    unitDashboard()
+    prepend(inboxBlock(5))
+  }
   wrap(render, "command", () => (ctx.role() === "lanhdao" ? leaderStats() : ""))
+  const command = render.command
+  render.command = function () {
+    command()
+    if (ctx.role() === "lanhdao") commandHeatmap()
+  }
+  render.performance = function () {
+    const el = content()
+    if (el) el.innerHTML = performanceHtml(store.items(), ctx.role(), today())
+  }
   Object.assign(window, {
     wfOpen, wfAct, wfCreateDirective, wfSubmitDirective, wfDelegate, wfSubmitDelegate,
-    wfCreatePayment, wfSubmitPayment, wfResetDemo, wfNotice,
+    wfCreatePayment, wfSubmitPayment, wfResetDemo, wfNotice, wfUnitKpi,
     createDirective: wfCreateDirective,
     directiveDetail: wfOpen,
   })

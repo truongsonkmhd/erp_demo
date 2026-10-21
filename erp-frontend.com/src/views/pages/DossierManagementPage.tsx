@@ -1,3 +1,4 @@
+import { useDepartmentOptions } from "@/hooks/useOrgOptions"
 import { useEffect, useMemo, useState } from "react"
 import {
   FolderKanban,
@@ -88,6 +89,7 @@ function getDossierStatusBadge(status: DossierStatus) {
 }
 
 export default function DossierManagementPage() {
+  const departmentOptions = useDepartmentOptions(DEPARTMENTS_LIST)
   const [dossiers, setDossiers] = useState<Dossier[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
@@ -450,7 +452,7 @@ export default function DossierManagementPage() {
               label=""
               options={[
                 { value: "all", label: "Tất cả đơn vị" },
-                ...DEPARTMENTS_LIST.map((dep) => ({ value: dep, label: dep })),
+                ...departmentOptions.map((dep) => ({ value: dep, label: dep })),
               ]}
               value={deptFilter}
               onValueChange={setDeptFilter}
@@ -796,7 +798,7 @@ export default function DossierManagementPage() {
             <div className="grid grid-cols-2 gap-3">
               <SelectField
                 label="Đơn vị lập (*)"
-                options={DEPARTMENTS_LIST.map((d) => ({ value: d, label: d }))}
+                options={departmentOptions.map((d) => ({ value: d, label: d }))}
                 value={editItem ? editForm.department : createForm.department}
                 onValueChange={(val) => {
                   if (editItem) setEditForm((prev) => ({ ...prev, department: val }))

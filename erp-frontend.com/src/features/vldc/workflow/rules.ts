@@ -357,7 +357,7 @@ export function ownerInbox(role: string, all: WorkItem[]): WorkItem[] {
 }
 
 /** Engine pages that show shared workflow data and must re-render on realtime changes. */
-export const WORKFLOW_PAGES = new Set(["directives", "action", "notifications", "payments", "dashboard", "command"])
+export const WORKFLOW_PAGES = new Set(["directives", "action", "notifications", "payments", "dashboard", "command", "performance", "crossflow", "accounting", "units", "audit", "alerts", "reports"])
 
 /** Why the owner cannot report completion yet ("" when nothing blocks it). */
 export function blockedReason(item: WorkItem, role: string, all: WorkItem[]): string {

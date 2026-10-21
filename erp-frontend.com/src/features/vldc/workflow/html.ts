@@ -1,3 +1,5 @@
+import type { WorkItem } from "./types.ts"
+
 const ENTITIES: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }
 
 /** Escapes text before it is interpolated into the engine's HTML strings. */
@@ -33,4 +35,13 @@ export function formatTime(iso: string): string {
 
 export function formatMoney(amount?: number): string {
   return `${new Intl.NumberFormat("vi-VN").format(amount || 0)} đ`
+}
+
+export function statusBadge(item: WorkItem): string {
+  const s = item.status
+  const cls = s === "Hoàn thành" || s === "Đã chi" || s === "Đã phê duyệt" ? "b-ok"
+    : s === "Bị trả lại" ? "b-danger"
+      : s === "Chờ duyệt" || s === "Đang trình" ? "b-warn"
+        : "b-info"
+  return `<span class="badge ${cls}">${escapeHtml(s)}</span>`
 }

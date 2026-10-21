@@ -1,3 +1,4 @@
+import { usePeopleOptions } from "@/hooks/useOrgOptions"
 import { useMemo, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -164,6 +165,7 @@ function ProjectCard({
 }
 
 export default function Projects({ pageTitle }: { pageTitle?: string } = {}) {
+  const salesPeople = usePeopleOptions(DEFAULT_SALES_PEOPLE)
   const { user } = useAuth()
   const { t } = useLocale()
   const [searchName, setSearchName] = useState("")
@@ -240,9 +242,9 @@ export default function Projects({ pageTitle }: { pageTitle?: string } = {}) {
   const handleOpenAssignDialog = (project: Project) => {
     if (!can(user, "projects-marketing:update")) return
     const currentAssign = assignments[project.id]
-    const initialSale = currentAssign?.manager || project.manager || DEFAULT_SALES_PEOPLE[0]
+    const initialSale = currentAssign?.manager || project.manager || salesPeople[0]
     setAssigningProject(project)
-    if (DEFAULT_SALES_PEOPLE.includes(initialSale)) {
+    if (salesPeople.includes(initialSale)) {
       setSelectedSaleName(initialSale)
       setCustomSaleName("")
     } else {
@@ -288,7 +290,7 @@ export default function Projects({ pageTitle }: { pageTitle?: string } = {}) {
   const handleConfirmAssignment = (project: Project) => {
     if (!can(user, "projects-marketing:update")) return
     const currentAssign = assignments[project.id]
-    const currentManager = currentAssign?.manager || project.manager || DEFAULT_SALES_PEOPLE[0]
+    const currentManager = currentAssign?.manager || project.manager || salesPeople[0]
 
     const updated = {
       ...assignments,
@@ -358,7 +360,7 @@ export default function Projects({ pageTitle }: { pageTitle?: string } = {}) {
 
         const handleStatusChange = (newStatus: "not_notified" | "lead_notified" | "pending" | "assigned") => {
           if (!can(user, "projects-marketing:update")) return
-          const currentManager = assignInfo?.manager || item.manager || DEFAULT_SALES_PEOPLE[0]
+          const currentManager = assignInfo?.manager || item.manager || salesPeople[0]
           const updated = {
             ...assignments,
             [item.id]: {
@@ -510,7 +512,7 @@ export default function Projects({ pageTitle }: { pageTitle?: string } = {}) {
         </DropdownMenu>
       ),
     },
-  ], [assignments, t, user])
+  ], [assignments, t, user, salesPeople])
 
   const isReassign = Boolean(
     assigningProject && (assignments[assigningProject.id]?.manager || assigningProject.manager)
@@ -661,7 +663,7 @@ export default function Projects({ pageTitle }: { pageTitle?: string } = {}) {
             <div className="space-y-2">
               <Label className="text-xs font-semibold text-foreground">{t("projects.selectSales")}</Label>
               <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
-                {DEFAULT_SALES_PEOPLE.map((sale) => (
+                {salesPeople.map((sale) => (
                   <label
                     key={sale}
                     className={`flex items-center gap-3 p-2.5 rounded-lg border text-xs cursor-pointer transition-all ${

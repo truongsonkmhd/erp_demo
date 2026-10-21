@@ -525,3 +525,38 @@
 @media (prefers-reduced-motion: reduce) {
   .vldc-scope *, .vldc-scope *::before, .vldc-scope *::after { animation: none !important; transition: none !important; }
 }
+
+/* Liên đoàn trưởng dashboard (workflow/leaderDashboard.ts) + inline SVG charts (workflow/charts.ts). */
+.vldc-scope .leader-dash { display: grid; gap: 14px; }
+.vldc-scope .ld-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+.vldc-scope .ld-head h2 { margin: 2px 0 0; font-size: 21px; color: var(--ink); }
+.vldc-scope .ld-head .eyebrow { color: var(--muted); }
+.vldc-scope .ld-actions { display: flex; gap: 8px; }
+.vldc-scope .leader-dash .kpi .value.danger { color: var(--danger); }
+.vldc-scope .ld-charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 1100px) {
+  .vldc-scope .ld-charts { grid-template-columns: 1fr; }
+}
+
+/* Cap the width so text inside the SVG never scales past ~1.4x in a single-column layout. */
+.vldc-scope .viz-svg { display: block; width: 100%; max-width: 640px; height: auto; overflow: visible; }
+.vldc-scope .viz-svg text { font-family: inherit; }
+.vldc-scope .viz-small { font-size: 10px; fill: var(--muted); }
+.vldc-scope .viz-label { font-size: 11px; fill: var(--ink); font-weight: 600; }
+.vldc-scope .viz-val { font-size: 10px; fill: var(--ink); font-variant-numeric: tabular-nums; }
+.vldc-scope .viz-flag { font-size: 10px; fill: var(--danger); font-weight: 700; }
+.vldc-scope .viz-hit { cursor: pointer; }
+.vldc-scope .viz-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 10px; font-size: 12px; color: var(--muted); }
+.vldc-scope .viz-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.vldc-scope .viz-legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.vldc-scope .viz-legend b { color: var(--ink); font-variant-numeric: tabular-nums; }
+
+/* KPI & Performance Center (workflow/kpiViews.ts). */
+.vldc-scope .kpi-unit-row { display: grid; grid-template-columns: 80px 1fr auto; gap: 12px; align-items: center; padding: 10px; margin: 4px -10px; border-radius: 12px; cursor: pointer; transition: background .15s; }
+.vldc-scope .kpi-unit-row:hover { background: #f1f6fb; }
+.vldc-scope .kpi-unit-row b { font-size: 12px; }
+.vldc-scope .kpi-unit-side { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.vldc-scope .kpi-muted { opacity: .55; }
+.vldc-scope .kpi-heatmap { grid-template-columns: 1.6fr repeat(5, .7fr); }
+.vldc-scope .kpi-detail-head { display: flex; gap: 14px; align-items: center; }
+@media (max-width: 900px) { .vldc-scope .kpi-heatmap { grid-template-columns: 1.4fr repeat(5, 1fr); overflow-x: auto; } }

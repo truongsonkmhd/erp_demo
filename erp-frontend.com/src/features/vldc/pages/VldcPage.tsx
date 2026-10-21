@@ -8,6 +8,10 @@ import { useVldcMenus } from "@/features/vldc/useVldcMenus"
 import { workflowStore } from "@/features/vldc/workflow/repository"
 import { setWorkflowContext } from "@/features/vldc/workflow/views"
 import { WORKFLOW_PAGES } from "@/features/vldc/workflow/rules"
+import { vldcData } from "@/features/vldc/data/registry"
+import { setAuditActor } from "@/features/vldc/data/audit"
+import { applySignedInUser, loadOrgFromBackend } from "@/features/vldc/data/orgLoader"
+import { DATASETS } from "@/features/vldc/data/datasets"
 import { VldcSidebar } from "@/features/vldc/components/VldcSidebar"
 import { VldcTopbar } from "@/features/vldc/components/VldcTopbar"
 import { VldcModal } from "@/features/vldc/components/VldcModal"
@@ -62,6 +66,16 @@ export default function VldcPage() {
     setVldcNavigator(navigate)
   }, [navigate])
 
+  // Titles, units and the signed-in person come from the backend; pages re-render once they arrive.
+  const roleCodesKey = (user?.roleCodes || []).join(",")
+  useEffect(() => {
+    applySignedInUser(roleCodesKey ? roleCodesKey.split(",") : [], user?.fullName || "")
+    void loadOrgFromBackend().then((ok) => {
+      vldcActions.refresh()
+      if (ok) vldcActions.rerender()
+    })
+  }, [roleCodesKey, user?.fullName])
+
   const roleRef = useRef(role)
   roleRef.current = role
   const modalRef = useRef(modal)
@@ -76,21 +90,29 @@ export default function VldcPage() {
   const isAdmin = !!user?.roleCodes?.includes("admin")
   const perms = isAdmin ? ["*"] : (user?.permissions || []).map((p) => p.code || p.id)
   setWorkflowContext({ role: () => roleRef.current, perms: () => perms, userName: () => userName })
+  setAuditActor(() => ({ role: roleRef.current, name: userName }))
 
-  // Realtime: badges always refresh; pages that show workflow data re-render in place, now or after
-  // the open modal closes so forms are not wiped. Other pages keep their patched DOM untouched.
+  // Realtime: badges always refresh; pages that show workflow or business data re-render in place, now
+  // or after the open modal closes so forms are not wiped. Other pages keep their patched DOM untouched.
   useEffect(() => {
     workflowStarted ??= workflowStore.start()
-    return workflowStore.onChange(() => {
+    void vldcData.startAll()
+    const onData = (shows: (page: string) => boolean) => () => {
       vldcActions.refresh()
-      if (!WORKFLOW_PAGES.has(pageRef.current)) return
+      if (!shows(pageRef.current)) return
       if (modalRef.current) {
         dirtyRef.current = true
         return
       }
       keepScrollRef.current = true
       vldcActions.rerender()
-    })
+    }
+    const offWorkflow = workflowStore.onChange(onData((page) => WORKFLOW_PAGES.has(page)))
+    const offData = vldcData.onAnyChange((key) => onData((page) => (DATASETS[key].pages as readonly string[]).includes(page))())
+    return () => {
+      offWorkflow()
+      offData()
+    }
   }, [])
 
   useEffect(() => {

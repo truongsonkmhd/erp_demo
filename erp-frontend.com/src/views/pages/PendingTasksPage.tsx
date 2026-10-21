@@ -54,6 +54,8 @@ import {
   resetDossiersDemoData,
 } from "@/services/DossierService";
 
+// Demo "view as" switcher: names must match the handlers in the seeded dossiers (INITIAL_DOSSIERS),
+// so this list stays with the seed rather than coming from the user list.
 export const DEMO_ROLES = [
   { id: "creator", name: "Người lập", actorName: "Phạm Văn Minh", dept: "Phòng Mua sắm - Vật tư" },
   { id: "dept_head", name: "Trưởng đơn vị", actorName: "Lê Thị Ngọc", dept: "Phòng Kế hoạch - Tài chính" },

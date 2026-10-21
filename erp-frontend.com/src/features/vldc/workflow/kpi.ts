@@ -1,0 +1,102 @@
+import { isClosed, rolledUpProgress } from "./rules.ts"
+import type { WorkItem } from "./types.ts"
+import { UNIT_DEFS, rolesOfUnit, unitName, type UnitCode } from "../data/org.ts"
+
+/** Unit KPIs computed from the shared work items, so every page shows the same, traceable numbers. */
+
+export type Unit = { id: string; name: string; short: string; roles: string[] }
+
+/** KPI units: every department except the leadership, field units first (ids are tbl_department codes). */
+const KPI_ORDER: UnitCode[] = ["MD", "DB", "HK", "TT", "KT", "KHTC", "TCHC"]
+
+export function kpiUnits(): Unit[] {
+  return KPI_ORDER.map((code) => {
+    const def = UNIT_DEFS.find((u) => u.code === code)!
+    return { id: code, name: unitName(code), short: def.short, roles: rolesOfUnit(code) }
+  })
+}
+
+export const unitOfRole = (role: string): Unit | undefined => kpiUnits().find((u) => u.roles.includes(role))
+
+export type CriterionKey = "progress" | "quality" | "onTime" | "evidence" | "cost"
+
+/** Weights from the published KPI structure; "cost" has no data source yet and is left out of the score. */
+export const CRITERIA: { key: CriterionKey; label: string; weight: number; rule: string }[] = [
+  { key: "progress", label: "Tiến độ", weight: 30, rule: "Trung bình % hoàn thành các việc (việc đã duyệt = 100%)" },
+  { key: "quality", label: "Chất lượng / Nghiệm thu", weight: 25, rule: "Tỷ lệ việc đã báo cáo hoàn thành mà không bị trả lại" },
+  { key: "onTime", label: "SLA / Đúng hạn", weight: 20, rule: "Tỷ lệ việc chưa quá hạn hoặc được duyệt trước hạn" },
+  { key: "cost", label: "Chi phí / Hiệu quả", weight: 15, rule: "Chưa kết nối dữ liệu tài chính – tạm loại khỏi điểm" },
+  { key: "evidence", label: "Hồ sơ / Minh chứng", weight: 10, rule: "Tỷ lệ việc đã triển khai có minh chứng" },
+]
+
+/** A ratio criterion: null value when nothing qualifies yet. */
+export type Criterion = { value: number | null; hit: number; of: number }
+
+export type ItemFlags = { overdue: boolean; returned: boolean; noEvidence: boolean; late: boolean }
+
+export type UnitKpi = {
+  unit: Unit
+  items: WorkItem[]
+  done: number
+  open: number
+  criteria: Record<Exclude<CriterionKey, "cost">, Criterion>
+  score: number | null
+  rating: "good" | "watch" | "bad" | "none"
+}
+
+const pct = (hit: number, of: number): Criterion => ({ value: of ? Math.round((hit / of) * 100) : null, hit, of })
+const approvedOn = (item: WorkItem) => [...item.history].reverse().find((h) => h.action === "approve")?.at.slice(0, 10)
+
+export function itemFlags(item: WorkItem, today: string): ItemFlags {
+  const closed = isClosed(item)
+  const approved = approvedOn(item)
+  return {
+    overdue: !closed && item.due < today,
+    late: closed && !!approved && approved > item.due,
+    returned: item.history.some((h) => h.action === "return"),
+    noEvidence: item.status !== "Mới giao" && !item.evidence?.trim(),
+  }
+}
+
+export const RATING_LABELS: Record<UnitKpi["rating"], string> = { good: "Tốt", watch: "Theo dõi", bad: "Cần can thiệp", none: "Chưa có việc" }
+
+export function ratingOf(score: number | null): UnitKpi["rating"] {
+  return score == null ? "none" : score >= 85 ? "good" : score >= 70 ? "watch" : "bad"
+}
+
+export function unitKpi(unit: Unit, all: WorkItem[], today: string): UnitKpi {
+  const items = all.filter((x) => x.type !== "payment" && unit.roles.includes(x.owner)).sort((a, b) => a.due.localeCompare(b.due))
+  const flags = items.map((x) => itemFlags(x, today))
+  const submitted = items.filter((x) => x.history.some((h) => h.action === "submit"))
+  const started = items.filter((x) => x.status !== "Mới giao")
+  const progressSum = items.reduce((s, x) => s + rolledUpProgress(x, all), 0)
+  const criteria = {
+    progress: { value: items.length ? Math.round(progressSum / items.length) : null, hit: progressSum, of: items.length },
+    quality: pct(submitted.filter((x) => !x.history.some((h) => h.action === "return")).length, submitted.length),
+    onTime: pct(flags.filter((f) => !f.overdue && !f.late).length, items.length),
+    evidence: pct(started.filter((x) => x.evidence?.trim()).length, started.length),
+  }
+  const scored = CRITERIA.filter((c) => c.key !== "cost" && criteria[c.key as keyof typeof criteria].value != null)
+  const weight = scored.reduce((s, c) => s + c.weight, 0)
+  const score = weight ? Math.round(scored.reduce((s, c) => s + c.weight * (criteria[c.key as keyof typeof criteria].value as number), 0) / weight) : null
+  const done = items.filter(isClosed).length
+  return { unit, items, done, open: items.length - done, criteria, score, rating: ratingOf(score) }
+}
+
+export function unitKpis(all: WorkItem[], today: string): UnitKpi[] {
+  return kpiUnits().map((u) => unitKpi(u, all, today))
+}
+
+/** Liên đoàn-wide figures: averages over units that have work, plus raw overdue count. */
+export function overallKpi(kpis: UnitKpi[], today: string) {
+  const avg = (pick: (k: UnitKpi) => number | null) => {
+    const vals = kpis.map(pick).filter((v): v is number => v != null)
+    return vals.length ? Math.round(vals.reduce((s, v) => s + v, 0) / vals.length) : null
+  }
+  return {
+    score: avg((k) => k.score),
+    onTime: avg((k) => k.criteria.onTime.value),
+    quality: avg((k) => k.criteria.quality.value),
+    overdue: kpis.reduce((s, k) => s + k.items.filter((x) => itemFlags(x, today).overdue).length, 0),
+  }
+}

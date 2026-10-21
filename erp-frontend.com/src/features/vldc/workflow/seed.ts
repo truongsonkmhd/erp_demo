@@ -23,6 +23,57 @@ export function buildSeed(today: string): WorkItem[] {
   const payment = (id: string, title: string, amount: number, days: number, parentId?: string) =>
     put(createPayment({ id, title, amount, due: due(days), parentId }, "chunhiem", ALL, at(clock += 2)))
 
+  // Earlier work (started 2–3 weeks ago) so each unit's KPI has finished, returned, late and overdue items to measure.
+  type Past = { start: number; due: number; evidence?: string; returned?: string; approveDaysAgo?: number; progress?: number }
+  const finished = (id: string, owner: string, title: string, o: Past) => {
+    clock = -24 * o.start
+    directive(id, owner, [], title, o.due, "Trung bình")
+    act(id, "accept", owner)
+    act(id, "progress", owner, { progress: 80, evidence: o.evidence })
+    act(id, "submit", owner)
+    if (o.returned) {
+      act(id, "return", "lanhdao", { note: o.returned })
+      act(id, "progress", owner, { progress: 95, evidence: o.evidence })
+      act(id, "submit", owner)
+    }
+    if (o.approveDaysAgo !== undefined) clock = -24 * o.approveDaysAgo
+    act(id, "approve", "lanhdao")
+  }
+  const ongoing = (id: string, owner: string, title: string, o: Past) => {
+    clock = -24 * o.start
+    directive(id, owner, [], title, o.due, "Trung bình")
+    act(id, "accept", owner)
+    act(id, "progress", owner, { progress: o.progress ?? 50, evidence: o.evidence })
+  }
+
+  finished("CD-SEED-8", "matdat", "Nghiệm thu khối lượng đo từ khu vực A đợt 1", { start: 20, due: -8, evidence: "Biên bản nghiệm thu 12/10" })
+  finished("CD-SEED-9", "truongdonvi", "Kiểm tra an toàn lao động các tổ đo hiện trường", { start: 18, due: -9, evidence: "Báo cáo kiểm tra ATLĐ", returned: "Thiếu danh sách tổ đo tuyến 2" })
+
+  finished("CD-SEED-10", "bien", "Báo cáo kết quả khảo sát tuyến B2", { start: 21, due: -10, evidence: "Báo cáo tuyến B2 v2" })
+  finished("CD-SEED-11", "bien", "Bảo dưỡng định kỳ tàu khảo sát", { start: 20, due: -16, approveDaysAgo: 12 })
+  ongoing("CD-SEED-12", "bien", "Xử lý số liệu địa chấn nông tuyến B3", { start: 16, due: -2, progress: 60, evidence: "Đã xử lý 3/5 băng" })
+
+  finished("CD-SEED-13", "hangkhong", "Lập kế hoạch bay đo quý IV", { start: 22, due: -12, evidence: "Kế hoạch bay đo Q4" })
+  finished("CD-SEED-14", "hangkhong", "Hiệu chỉnh thiết bị đo phổ gamma máy bay", { start: 19, due: -8, evidence: "Chứng nhận hiệu chỉnh" })
+  ongoing("CD-SEED-15", "hangkhong", "Biên tập bản đồ trường từ hàng không tờ F-48", { start: 10, due: 9, progress: 55, evidence: "Bản đồ nháp 60%" })
+
+  finished("CD-SEED-16", "trungtam", "Kiểm định máy đo trọng lực CG-5", { start: 21, due: -11, evidence: "Giấy kiểm định CG-5" })
+  finished("CD-SEED-17", "trungtam", "Sửa chữa máy đo điện từ EM-04", { start: 19, due: -7, evidence: "Phiếu sửa chữa", returned: "Chưa chạy thử sau sửa chữa" })
+  ongoing("CD-SEED-18", "trungtam", "Xây dựng quy trình hiệu chuẩn nội bộ máy từ", { start: 15, due: -3, progress: 30 })
+
+  finished("CD-SEED-19", "kythuat", "Thẩm định phương án kỹ thuật VLDC-2027-003", { start: 20, due: -9, evidence: "Tờ trình thẩm định" })
+  finished("CD-SEED-20", "kythuat", "Rà soát tiêu chuẩn đo sâu điện đứng", { start: 18, due: -8, evidence: "Bảng đối chiếu TCVN" })
+  ongoing("CD-SEED-21", "kythuat", "Kiểm tra chất lượng tài liệu nguyên thủy tuyến T1–T4", { start: 9, due: 6, progress: 70, evidence: "Đã kiểm tra 3/4 tuyến" })
+
+  finished("CD-SEED-22", "kehoach", "Tổng hợp báo cáo giải ngân tháng 9", { start: 21, due: -12, evidence: "Báo cáo giải ngân T9" })
+  finished("CD-SEED-23", "ketoan", "Đối chiếu tạm ứng công tác hiện trường quý III", { start: 20, due: -15, approveDaysAgo: 11, evidence: "Bảng đối chiếu tạm ứng" })
+  ongoing("CD-SEED-24", "kehoach", "Lập dự toán điều chỉnh NV-2027-003", { start: 8, due: 5, progress: 40, evidence: "Dự toán v1" })
+
+  finished("CD-SEED-25", "tochuc", "Hoàn thiện hồ sơ nâng lương quý IV", { start: 20, due: -10, evidence: "Danh sách nâng lương" })
+  finished("CD-SEED-26", "tochuc", "Cập nhật hồ sơ chứng chỉ hành nghề cán bộ kỹ thuật", { start: 18, due: -9, evidence: "Danh mục chứng chỉ", returned: "Còn thiếu 6 chứng chỉ GIS" })
+  ongoing("CD-SEED-27", "tochuc", "Tổ chức tập huấn an toàn bức xạ", { start: 7, due: 8, progress: 20 })
+
+  clock = -72
   directive("CD-SEED-1", "matdat", ["kehoach"], "Đẩy nhanh tiến độ khảo sát VLDC-2027-001, bù 12 ngày chậm", 6)
   act("CD-SEED-1", "accept", "matdat")
   delegate("CD-SEED-1", "matdat", "TASK-SEED-1", "chunhiem", "Lập phương án tăng ca và điều phối tổ đo tuyến 3", 4)

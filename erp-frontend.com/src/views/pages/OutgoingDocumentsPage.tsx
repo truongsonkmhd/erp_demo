@@ -1,3 +1,4 @@
+import { useDepartmentOptions, usePeopleOptions } from "@/hooks/useOrgOptions"
 import { useEffect, useMemo, useState } from "react"
 import {
   FileUp,
@@ -104,6 +105,8 @@ function getUrgencyBadge(urgency: string) {
 }
 
 export default function OutgoingDocumentsPage() {
+  const draftingUnits = useDepartmentOptions(DRAFTING_UNITS)
+  const approvers = usePeopleOptions(APPROVERS_LIST)
   const [documents, setDocuments] = useState<OutgoingDocument[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
@@ -121,7 +124,7 @@ export default function OutgoingDocumentsPage() {
   const [createOpen, setCreateOpen] = useState(false)
 
   // Form states
-  const [approverSelected, setApproverSelected] = useState(APPROVERS_LIST[0])
+  const [approverSelected, setApproverSelected] = useState(approvers[0])
   const [submitNote, setSubmitNote] = useState("")
   const [signNote, setSignNote] = useState("")
   const [officialNumInput, setOfficialNumInput] = useState("")
@@ -348,7 +351,7 @@ export default function OutgoingDocumentsPage() {
               className="h-8 px-2 text-xs bg-amber-600 hover:bg-amber-700 text-white"
               onClick={() => {
                 setSubmitSignDoc(item)
-                setApproverSelected(item.approverName || APPROVERS_LIST[0])
+                setApproverSelected(item.approverName || approvers[0])
                 setSubmitNote("")
               }}
               title="Trình ký"
@@ -713,7 +716,7 @@ export default function OutgoingDocumentsPage() {
                 <Label className="mb-1.5 block font-semibold">Chọn Lãnh đạo ký duyệt (*)</Label>
                 <SelectField
                   label=""
-                  options={APPROVERS_LIST.map((ap) => ({ value: ap, label: ap }))}
+                  options={approvers.map((ap) => ({ value: ap, label: ap }))}
                   value={approverSelected}
                   onValueChange={setApproverSelected}
                   triggerClassName="bg-white"
@@ -899,7 +902,7 @@ export default function OutgoingDocumentsPage() {
             <div className="grid grid-cols-2 gap-3">
               <SelectField
                 label="Đơn vị soạn thảo"
-                options={DRAFTING_UNITS.map((u) => ({ value: u, label: u }))}
+                options={draftingUnits.map((u) => ({ value: u, label: u }))}
                 value={createForm.draftingUnit}
                 onValueChange={(val) => setCreateForm((prev) => ({ ...prev, draftingUnit: val }))}
                 triggerClassName="bg-white"
@@ -919,7 +922,7 @@ export default function OutgoingDocumentsPage() {
             <div className="grid grid-cols-2 gap-3">
               <SelectField
                 label="Lãnh đạo ký duyệt dự kiến"
-                options={APPROVERS_LIST.map((ap) => ({ value: ap, label: ap }))}
+                options={approvers.map((ap) => ({ value: ap, label: ap }))}
                 value={createForm.approverName}
                 onValueChange={(val) => setCreateForm((prev) => ({ ...prev, approverName: val }))}
                 triggerClassName="bg-white"

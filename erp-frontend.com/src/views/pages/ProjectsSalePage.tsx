@@ -1,3 +1,4 @@
+import { usePeopleOptions } from "@/hooks/useOrgOptions"
 import { useMemo, useRef, useState } from "react"
 import { useLocation } from "react-router-dom"
 import { Button } from "@/components/ui/button"
@@ -53,6 +54,7 @@ const DEFAULT_SALES_PEOPLE = [
 ]
 
 export default function ProjectsSalePage() {
+  const salesPeople = usePeopleOptions(DEFAULT_SALES_PEOPLE)
   const { t } = useLocale()
   const { user } = useAuth()
   const pageCode = useLocation().pathname.slice(1)
@@ -135,14 +137,14 @@ export default function ProjectsSalePage() {
     if (!can(user, `${pageCode}:update`)) return
     setAssigningProject(project)
     const currentAssigned = project.assignedStaff || project.assignee || ""
-    if (DEFAULT_SALES_PEOPLE.includes(currentAssigned)) {
+    if (salesPeople.includes(currentAssigned)) {
       setAssignedStaffInput(currentAssigned)
       setCustomStaffInput("")
     } else if (currentAssigned) {
       setAssignedStaffInput("custom")
       setCustomStaffInput(currentAssigned)
     } else {
-      setAssignedStaffInput(DEFAULT_SALES_PEOPLE[0])
+      setAssignedStaffInput(salesPeople[0])
       setCustomStaffInput("")
     }
     setTaskNoteInput("")
@@ -518,7 +520,7 @@ export default function ProjectsSalePage() {
               <div className="space-y-2">
                 <label className="text-xs font-semibold text-foreground">{t("projects.assigneeLabel")}</label>
                 <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                  {DEFAULT_SALES_PEOPLE.map((sale) => (
+                  {salesPeople.map((sale) => (
                     <label
                       key={sale}
                       className={`flex items-center gap-3 p-2.5 rounded-lg border text-xs cursor-pointer transition-all ${

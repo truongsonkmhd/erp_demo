@@ -1,4 +1,4 @@
-import type { DigitalAdoption, OrgStats, OrgUnit, ResearchProject } from "../types.ts"
+import type { DigitalAdoption, OrgStats, OrgUnit } from "../types.ts"
 
 /** Organisation and capability figures published on vatlydiachat.gov.vn. */
 export const orgUnits = (): OrgUnit[] => [
@@ -15,11 +15,6 @@ export const orgUnits = (): OrgUnit[] => [
 export const orgStats = (): OrgStats[] => [{id:'capability',total:123,doctor:2,master:26,engineerBachelor:75,technicianWorker:20,under5:15,from5to15:64,over15:44}]
 
 /** budget in billion VND. */
-export const research = (): ResearchProject[] => [
- {id:'R-2026-01',title:'Nền tảng AI hỗ trợ kiểm soát chất lượng dữ liệu địa vật lý',owner:'Phòng Kỹ thuật',lead:'Nhóm AI/Địa vật lý',stage:'Thuyết minh',gate:'Gate 2',progress:18,budget:2.8,trl:3,product:'Mô hình AI + quy trình QC',risk:'TB',applied:false},
- {id:'R-2025-04',title:'Hoàn thiện thiết bị đo phổ gamma bằng UAV',owner:'Trung tâm Công nghệ & Kiểm định',lead:'Nhóm thiết bị',stage:'Ứng dụng',gate:'Gate 7',progress:88,budget:4.5,trl:7,product:'Thiết bị + phần mềm + quy trình',risk:'Thấp',applied:true},
- {id:'R-2026-07',title:'Tích hợp dữ liệu địa vật lý biển đa nguồn phục vụ mô hình 3D',owner:'Đoàn Địa vật lý Biển',lead:'Nhóm nghiên cứu biển',stage:'Pilot',gate:'Gate 5',progress:62,budget:3.6,trl:6,product:'Dataset + mô hình 3D',risk:'TB',applied:false}
-]
 
 export const digitalAdoption = (): DigitalAdoption[] => [
  {id:'DA-01',unit:'Phòng Kỹ thuật',usage:92,interaction:88,process:86,data:91,adapt:82,effect:84,ai:64,score:86},

@@ -1,6 +1,6 @@
 import { escapeHtml as esc, formatDate, jsCall } from "../workflow/html"
 import { ROLE_TITLES } from "../workflow/rules"
-import { SKILLS, STAGES, conclusionTasks, findExperts, nextGate, type SkillKey } from "./actionsCore"
+import { SKILLS, conclusionTasks, findExperts, type SkillKey } from "./actionsCore"
 import { addDays, localToday, vnDate } from "./dates"
 import { ROLE_PROFILES, UNIT_DEFS } from "./org"
 import { vldcData } from "./registry"
@@ -178,7 +178,7 @@ export function installActions(ctx: Ctx) {
   }
 
   function addEventModal() {
-    open("Tạo lịch / sự kiện", form(field("Tiêu đề", input("e-title"), true) + field("Ngày", input("e-date", today(), "date")) + field("Giờ", input("e-time", "09:00", "time")) + scopeFields() + field("Mở nghiệp vụ", select("e-link", [["calendar", "Lịch"], ["projects", "Dự án"], ["action", "Hộp việc"], ["meetings", "Cuộc họp"]])) + field("Nội dung", textarea("e-note"), true), "saveEvent"))
+    open("Tạo lịch / sự kiện", form(field("Tiêu đề", input("e-title"), true) + field("Ngày", input("e-date", today(), "date")) + field("Giờ", input("e-time", "09:00", "time")) + scopeFields() + field("Mở nghiệp vụ", select("e-link", [["calendar", "Sự kiện"], ["projects", "Dự án"], ["action", "Hộp việc"], ["meetings", "Cuộc họp"]])) + field("Nội dung", textarea("e-note"), true), "saveEvent"))
   }
 
   function saveEvent() {
@@ -217,7 +217,7 @@ export function installActions(ctx: Ctx) {
   }
 
   function publishNoticeModal() {
-    open("Phát hành thông báo", form(field("Tiêu đề", input("n-title"), true) + field("Nội dung", textarea("n-body"), true) + field("Mức ưu tiên", select("n-priority", [["Bình thường", "Bình thường"], ["Cao", "Cao"]])) + field("Liên kết", select("n-link", [["plans", "Kế hoạch"], ["action", "Hộp việc"], ["projects", "Dự án"], ["documents", "Văn bản"], ["calendar", "Lịch"]])) + scopeFields(), "saveNotice", "Phát hành"))
+    open("Phát hành thông báo", form(field("Tiêu đề", input("n-title"), true) + field("Nội dung", textarea("n-body"), true) + field("Mức ưu tiên", select("n-priority", [["Bình thường", "Bình thường"], ["Cao", "Cao"]])) + field("Liên kết", select("n-link", [["plans", "Kế hoạch"], ["action", "Hộp việc"], ["projects", "Dự án"], ["documents", "Văn bản"], ["calendar", "Sự kiện"]])) + scopeFields(), "saveNotice", "Phát hành"))
   }
 
   function saveNotice() {
@@ -263,47 +263,6 @@ export function installActions(ctx: Ctx) {
     close()
   }
 
-  // ----- Research -----
-  function researchForm() {
-    open("Đề xuất ý tưởng KH&CN", form(field("Tên ý tưởng / đề tài", input("rs-title"), true) + field("Đơn vị đề xuất", select("rs-owner", unitOptions())) + field("Nhóm thực hiện", input("rs-lead")) + field("Kinh phí dự kiến (tỷ)", input("rs-budget", "0", "number")) + field("Sản phẩm dự kiến", input("rs-product"), true), "saveResearch", "Gửi sơ tuyển"))
-  }
-
-  function saveResearch() {
-    const title = val("rs-title")
-    if (!required([title, "tên ý tưởng"])) return
-    void vldcData.save("research", { id: newId("R"), title, owner: val("rs-owner"), lead: val("rs-lead"), stage: "Ý tưởng", gate: "Gate 0", progress: 0, budget: num("rs-budget"), trl: 1, product: val("rs-product"), risk: "TB", applied: false })
-    close()
-  }
-
-  const WORKBENCH: Record<string, { title: string; label: string }> = {
-    approve: { title: "Duyệt Stage-Gate", label: "Duyệt chuyển gate" },
-    review: { title: "Thẩm định chuyên môn", label: "Ghi kết quả thẩm định" },
-    budget: { title: "Thẩm định dự toán", label: "Cập nhật kinh phí" },
-    prototype: { title: "Prototype / TRL", label: "Nâng TRL" },
-    execute: { title: "Cập nhật thực hiện", label: "Cập nhật tiến độ" },
-    field: { title: "Nhật ký thử nghiệm hiện trường", label: "Ghi nhật ký" },
-  }
-
-  function researchWorkbench(action: string) {
-    const w = WORKBENCH[action] ?? WORKBENCH.execute
-    const extra = action === "budget" ? field("Kinh phí mới (tỷ)", input("wb-budget", "", "number")) : action === "execute" ? field("Tiến độ mới (%)", input("wb-progress", "", "number")) : field("Ghi chú", input("wb-note"))
-    open(w.title, `<div class="form-grid">${extra}</div><table style="margin-top:10px"><tr><th>Đề tài</th><th>Stage</th><th>TRL</th><th>Tiến độ</th><th>Kinh phí</th><th></th></tr>${D("research").map((r) => `<tr><td><b>${esc(r.id)}</b> ${esc(r.title)}</td><td>${esc(r.stage)} • ${esc(r.gate)}</td><td>${r.trl}</td><td>${r.progress}%</td><td>${r.budget} tỷ</td><td><button class="btn btn-light" ${jsCall("researchApply", action, r.id)}>${w.label}</button></td></tr>`).join("")}</table>`)
-  }
-
-  function researchApply(action: string, id: string) {
-    const r = D("research").find((x) => x.id === id)
-    if (!r) return
-    let next = r
-    if (action === "approve") next = nextGate(r)
-    else if (action === "budget") { if (!num("wb-budget")) return alert("Vui lòng nhập kinh phí"); next = { ...r, budget: num("wb-budget") } }
-    else if (action === "prototype") next = { ...r, trl: Math.min(9, r.trl + 1) }
-    else if (action === "execute") { const p = num("wb-progress"); next = { ...r, progress: Math.max(0, Math.min(100, p)) } }
-    // A positive review moves an idea into the proposal stage; later stages only log the review (audit).
-    else if (action === "review" && r.stage === "Ý tưởng") next = { ...r, stage: STAGES[1], gate: "Gate 1" }
-    void vldcData.save("research", next)
-    researchWorkbench(action)
-  }
-
   // ----- Import -----
   function simulateImport() {
     open("Chạy import", form(field("Nguồn dữ liệu", input("im-source", "Tệp Excel tải lên"), true) + field("Loại dữ liệu", select("im-type", ["Thiết bị", "Lưu trữ", "Kế toán", "Nhân sự"].map((x) => [x, x] as [string, string]))) + field("Số dòng", input("im-rows", "100", "number")), "saveImport", "Đưa vào hàng đợi validation"))
@@ -322,6 +281,6 @@ export function installActions(ctx: Ctx) {
     financeForm, voucherModal, saveVoucher, documentForm, saveIncomingDoc, contractForm, saveContractForm,
     addEventModal, saveEvent, eventReminder, addPlanModal, savePlan, publishNoticeModal, saveNotice,
     createMeeting, saveMeeting, createRisk, saveRisk, goalForm, saveGoal,
-    researchForm, saveResearch, researchWorkbench, researchApply, simulateImport, saveImport,
+    simulateImport, saveImport,
   })
 }

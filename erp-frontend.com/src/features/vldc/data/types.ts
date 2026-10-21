@@ -8,6 +8,8 @@ export type InboxTask = {
   id: string; type: string; title: string; source: string; sourcePage: string; owner: string; cc: string[]
   priority: string; status: string; sla: string; overdue: boolean; from: string; project: string; next: string
   history: TaskStep[]
+  /** Due date "yyyy-mm-dd"; SLA and overdue are computed from it (sla/overdue are kept for older records). */
+  due?: string
 }
 export type CommonTask = { id: string; title: string; scope: string; owner: string; due: string; status: string; link: string }
 
@@ -117,3 +119,40 @@ export type DataQualityRule = { id: string; rule: string; scope: string; violati
 export type AlertRule = { id: string; name: string; metric: "cost" | "deadline" | "calibration" | "debt"; threshold: number; level: string; enabled: boolean }
 export type ReportDef = { id: string; group: string; name: string; source: string; schedule: string; recipients: string; lastRun: string }
 export type DocTemplate = { id: string; type: string; title: string; target: "project" | "contract" | "equipment"; body: string }
+
+export type NewsKind = "Tin tức" | "Sự kiện" | "Thông báo nội bộ"
+export type NewsStatus = "Nháp" | "Đã đăng" | "Đã gỡ"
+/** Bảng tin post. audience: "ALL" or a UnitCode (data/org.ts); body is plain text, paragraphs split by blank lines. */
+export type NewsPost = {
+  id: string; kind: NewsKind; title: string; summary: string; body: string; audience: string; pinned: boolean; status: NewsStatus
+  authorRole: string; authorName: string; publishedAt?: string; updatedAt: string
+  /** Only for "Sự kiện"; date "yyyy-mm-dd". */
+  event?: { date: string; time: string; location: string }
+}
+
+export type Education = "Tiến sĩ" | "Thạc sĩ" | "Kỹ sư/Cử nhân" | "KTV/Công nhân"
+/** Public staff profile for the capability page; unit is a UnitCode, cert expiry "yyyy-mm-dd", experience in years. */
+export type StaffProfile = {
+  id: string; name: string; birthYear: number; education: Education; major: string; experience: number
+  unit: string; title: string; certs: { name: string; expiry: string }[]; onField: boolean
+}
+
+export type ReplyResult = "Hoàn thành" | "Cần thêm thời gian" | "Không thuộc thẩm quyền"
+export type AssignmentReply = { result: ReplyResult; text: string; attachments: string[]; at: string }
+export type AssignmentRecipient = { role: string; seenAt?: string; remindedAt?: string; reply?: AssignmentReply }
+/** A phiếu giao: an incoming document handed to several roles, each replying on its own. Attachments are file names / DMS names. */
+export type DocAssignment = {
+  id: string; docId: string; docNumber: string; docSummary: string; instruction: string; due: string; attachments: string[]
+  assignedBy: string; assignedByName: string; createdAt: string; closedAt?: string; recipients: AssignmentRecipient[]
+}
+
+export type TopicStatus = "Đang triển khai" | "Chờ duyệt" | "Đã triển khai"
+export type TopicReviewDecision = "Duyệt" | "Trả lại"
+export type TopicProgressLog = { at: string; by: string; byName: string; progress: number; note: string }
+/** Đề tài khoa học & đổi mới. unit is a UnitCode; budget/spent in million VND; dates "yyyy-mm-dd"; attachments are file names. */
+export type ScienceTopic = {
+  id: string; title: string; field: string; unit: string; objective: string; leadRole: string; leadName: string; members: string[]
+  start: string; end: string; budget: number; spent: number; attachments: string[]; progress: number; log: TopicProgressLog[]
+  status: TopicStatus; result?: string; impact?: string; submittedAt?: string; approvedAt?: string
+  review?: { by: string; at: string; decision: TopicReviewDecision; note: string }; createdAt: string
+}

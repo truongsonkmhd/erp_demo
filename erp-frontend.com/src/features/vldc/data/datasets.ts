@@ -9,6 +9,10 @@ import * as ct from "./seed/contracts.ts"
 import * as fl from "./seed/flows.ts"
 import * as kn from "./seed/knowledge.ts"
 import * as gv from "./seed/governance.ts"
+import * as nw from "./seed/news.ts"
+import * as st from "./seed/staff.ts"
+import * as da from "./seed/docAssignments.ts"
+import * as sc from "./seed/science.ts"
 import type { AuditEvent } from "./audit.ts"
 
 /**
@@ -29,7 +33,6 @@ export const DATASETS = {
   risks: { collection: "risks", seed: ex.risks, pages: ["risks", "command", "dashboard", "projects"] },
   orgUnits: { collection: "org_units", seed: org.orgUnits, pages: ["organization", "capability", "units"] },
   orgStats: { collection: "org_stats", seed: org.orgStats, pages: ["organization", "capability", "hr"] },
-  research: { collection: "research", seed: org.research, pages: ["research"] },
   digitalAdoption: { collection: "digital_adoption", seed: org.digitalAdoption, pages: ["digital"] },
   equipment: { collection: "equipment", seed: eq.equipment, pages: ["equipment", "equipmentcatalog", "dashboard", "risks"] },
   projects: { collection: "projects", seed: pr.projects, pages: ["projects", "finance", "dashboard"] },
@@ -57,6 +60,10 @@ export const DATASETS = {
   alertRules: { collection: "alert_rules", seed: gv.alertRules, pages: ["alerts", "dashboard"] },
   reportCatalog: { collection: "report_catalog", seed: gv.reportCatalog, pages: ["reports"] },
   docTemplates: { collection: "doc_templates", seed: gv.docTemplates, pages: ["generator"] },
+  scienceTopics: { collection: "science_topics", seed: sc.scienceTopics, pages: ["research", "action"] },
+  docAssignments: { collection: "doc_assignments", seed: da.docAssignments, pages: ["documents", "action", "dashboard"] },
+  staffProfiles: { collection: "staff_profiles", seed: st.staffProfiles, pages: ["capability", "hr"] },
+  news: { collection: "news", seed: nw.news, pages: ["news", "dashboard"] },
   auditEvents: { collection: "audit_events", seed: (): AuditEvent[] => [], pages: ["audit"] },
 } as const
 

@@ -22,7 +22,7 @@ INSERT IGNORE INTO tbl_page (code, name, url) VALUES
   ('vldc-dashboard', 'Dashboard điều hành', '/vldc/dashboard'),
   ('vldc-action', 'Action Center', '/vldc/action'),
   ('vldc-today', 'Hôm nay', '/vldc/today'),
-  ('vldc-calendar', 'Lịch công tác', '/vldc/calendar'),
+  ('vldc-calendar', 'Sự kiện', '/vldc/calendar'),
   ('vldc-plans', 'Kế hoạch', '/vldc/plans'),
   ('vldc-notifications', 'Trung tâm thông báo', '/vldc/notifications'),
   ('vldc-assistant', 'AI Knowledge Workspace', '/vldc/assistant'),
@@ -93,7 +93,7 @@ FROM (
   SELECT 'vldc-dashboard' AS code, 'Dashboard' AS title, 'LayoutDashboard' AS icon, 101 AS sort_order UNION ALL
   SELECT 'vldc-action' AS code, 'Hộp việc' AS title, 'Inbox' AS icon, 102 AS sort_order UNION ALL
   SELECT 'vldc-today' AS code, 'Hôm nay' AS title, 'Sun' AS icon, 103 AS sort_order UNION ALL
-  SELECT 'vldc-calendar' AS code, 'Lịch' AS title, 'CalendarDays' AS icon, 104 AS sort_order UNION ALL
+  SELECT 'vldc-calendar' AS code, 'Sự kiện' AS title, 'CalendarDays' AS icon, 104 AS sort_order UNION ALL
   SELECT 'vldc-plans' AS code, 'Kế hoạch' AS title, 'ListChecks' AS icon, 105 AS sort_order UNION ALL
   SELECT 'vldc-notifications' AS code, 'Thông báo' AS title, 'Bell' AS icon, 106 AS sort_order UNION ALL
   SELECT 'vldc-assistant' AS code, 'Trợ lý AI' AS title, 'Sparkles' AS icon, 107 AS sort_order
@@ -558,3 +558,47 @@ FROM tbl_role r
 JOIN tbl_permission p ON p.code = 'roles:access'
 WHERE r.code IN ('lanhdao', 'truongdonvi', 'matdat', 'bien', 'hangkhong', 'trungtam', 'chunhiem',
                  'kythuat', 'kehoach', 'tochuc', 'hientruong', 'ketoan', 'ketoantruong');
+
+-- 8. Bảng tin (same as migrations/20261022_vldc_news.sql).
+
+INSERT IGNORE INTO tbl_page (code, name, url) VALUES
+  ('vldc-news', 'Bảng tin', '/vldc/news');
+
+INSERT IGNORE INTO tbl_permission (code, label, page_id, action_id)
+SELECT CONCAT(p.code, ':', a.code), CONCAT(p.name, ' - ', a.name), p.id, a.id
+FROM tbl_page p CROSS JOIN tbl_action a
+WHERE p.code = 'vldc-news';
+
+-- First item of "Không gian làm việc" (Dashboard is 101).
+INSERT INTO tbl_menu (code, title, icon, parent_id, page_id, module, sort_order)
+SELECT 'vldc-news', 'Bảng tin', 'Newspaper', g.id, p.id, 'vldc', 100
+FROM tbl_menu g
+JOIN tbl_page p ON p.code = 'vldc-news'
+WHERE g.code = 'vldc-grp-workspace'
+ON DUPLICATE KEY UPDATE title = VALUES(title), icon = VALUES(icon), sort_order = VALUES(sort_order);
+
+-- Everyone reads; leadership, TC-HC and unit heads publish (unit heads only for their own unit – enforced in the page).
+INSERT IGNORE INTO tbl_role_permission (role_id, permission_id)
+SELECT r.id, p.id
+FROM (
+  SELECT r0.code AS role_code, 'vldc-news:access' AS perm_code
+  FROM tbl_role r0
+  WHERE r0.code IN ('lanhdao', 'truongdonvi', 'matdat', 'bien', 'hangkhong', 'trungtam', 'chunhiem',
+                    'kythuat', 'kehoach', 'tochuc', 'hientruong', 'ketoan', 'ketoantruong')
+  UNION ALL
+  SELECT r1.code, perm.code
+  FROM tbl_role r1
+  CROSS JOIN (
+    SELECT 'vldc-news:create' AS code UNION ALL
+    SELECT 'vldc-news:update' UNION ALL
+    SELECT 'vldc-news:delete'
+  ) perm
+  WHERE r1.code IN ('lanhdao', 'tochuc', 'truongdonvi', 'matdat', 'bien', 'hangkhong', 'trungtam')
+) rp
+JOIN tbl_role r ON r.code = rp.role_code
+JOIN tbl_permission p ON p.code = rp.perm_code;
+
+-- Admin holds every vldc-* permission (granted once by the init script, so new pages need it again).
+INSERT IGNORE INTO tbl_role_permission (role_id, permission_id)
+SELECT r.id, p.id FROM tbl_role r CROSS JOIN tbl_permission p
+WHERE r.code = 'admin' AND p.code LIKE 'vldc-news:%';

@@ -33,6 +33,8 @@ type Context = { role(): string; perms(): string[]; userName(): string }
 let ctx: Context = { role: () => "", perms: () => [], userName: () => "" }
 let shell: Shell = { show() {}, openModal() {}, closeModal() {} }
 
+export const workflowPerms = () => ctx.perms()
+
 export function setWorkflowContext(next: Context) {
   ctx = next
 }
@@ -368,7 +370,6 @@ function wrap(render: Record<string, () => void>, page: string, extra: () => str
 export function installWorkflow(render: Record<string, () => void>, nextShell: Shell) {
   shell = nextShell
   render.directives = renderDirectives
-  wrap(render, "action", () => inboxBlock())
   wrap(render, "notifications", noticesBlock)
   wrap(render, "payments", paymentsBlock)
   // The leader gets a purpose-built dashboard instead of the stacked legacy demo blocks.

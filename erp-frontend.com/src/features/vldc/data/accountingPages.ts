@@ -5,6 +5,7 @@ import { PAYMENT_STEPS, ROLE_TITLES, isClosed } from "../workflow/rules"
 import { workflowStore } from "../workflow/repository"
 import type { WorkItem } from "../workflow/types"
 import * as A from "./accountingMetrics"
+import { assignmentProgressHtml, assignmentSectionHtml } from "./docAssignPage"
 import { localToday, vnDate } from "./dates"
 import * as M from "./metrics"
 import { bar, kpi, kpis, metric, tr, ty } from "./pages"
@@ -255,7 +256,7 @@ function documents() {
     kpi("Trình ký", outs.filter((d) => d.status === "Chờ ký").length, `${outs.length} văn bản đi`),
     kpi("Đúng hạn", `${withDue.length ? Math.round((onTime / withDue.length) * 100) : 100}%`, "Văn bản đến có hạn xử lý"),
   )}${grid("two",
-    card("Văn bản đến", table(["Số/ký hiệu", "Trích yếu", "Người giữ", "Hạn", "Trạng thái", ""], ins.map((d) => `<tr><td><b>${esc(d.documentNumber)}</b><div class="mini">${urg(d.urgency)}</div></td><td>${esc(d.summary)}</td><td>${esc(d.assignedToUser ?? "–")}</td><td>${d.dueDate ? vnDate(d.dueDate) : "–"}</td><td>${badge(d.status, isDone(d.status) ? "b-ok" : "b-warn")}</td><td>${btn("Mở", "documentDetail", d.id)}</td></tr>`)), '<button class="btn btn-primary" onclick="documentForm()">+ Văn bản</button>'),
+    card("Văn bản đến", table(["Số/ký hiệu", "Trích yếu", "Người giữ", "Hạn", "Trạng thái", "Trả lời", ""], ins.map((d) => `<tr><td><b>${esc(d.documentNumber)}</b><div class="mini">${urg(d.urgency)}</div></td><td>${esc(d.summary)}</td><td>${esc(d.assignedToUser ?? "–")}</td><td>${d.dueDate ? vnDate(d.dueDate) : "–"}</td><td>${badge(d.status, isDone(d.status) ? "b-ok" : "b-warn")}</td><td>${assignmentProgressHtml(d.id)}</td><td>${btn("Mở", "documentDetail", d.id)}</td></tr>`)), '<button class="btn btn-primary" onclick="documentForm()">+ Văn bản</button>'),
     card("Văn bản đi", table(["Số", "Trích yếu", "Người ký", "Trạng thái", ""], outs.map((d) => `<tr><td><b>${esc(d.officialNumber || d.documentNumber)}</b></td><td>${esc(d.summary)}</td><td>${esc(d.approverName)}</td><td>${badge(d.status, d.status === "Chờ ký" ? "b-warn" : isDone(d.status) ? "b-ok" : "b-info")}</td><td>${btn("Mở", "documentDetail", d.id)}</td></tr>`))),
   )}`
 }
@@ -411,7 +412,7 @@ function modals(ctx: Ctx) {
     const info = inc
       ? `${metric("Số/ký hiệu", esc(inc.documentNumber))}${metric("Nơi gửi", esc(inc.senderUnit))}${metric("Loại / độ khẩn", `${esc(inc.documentType)} • ${esc(inc.urgency)}`)}${metric("Đơn vị xử lý", esc(inc.assignedToUnit ?? "–"))}${metric("Người giữ", esc(inc.assignedToUser ?? "–"))}${metric("Hạn", inc.dueDate ? vnDate(inc.dueDate) : "–")}${metric("Trạng thái", esc(inc.status))}`
       : `${metric("Số", esc(out!.officialNumber || out!.documentNumber))}${metric("Đơn vị soạn", esc(out!.draftingUnit))}${metric("Người ký", esc(out!.approverName))}${metric("Nơi nhận", esc(out!.recipients))}${metric("Trạng thái", esc(out!.status))}`
-    open(`Văn bản • ${doc.summary.slice(0, 60)}`, `<h3 style="margin-top:0">${esc(doc.summary)}</h3><div class="grid twoeq"><div>${info}${inc?.instruction ? `<p class="mini">${esc(inc.instruction)}</p>` : ""}</div><div><h4>Lịch sử xử lý</h4><div class="timeline">${[...doc.processHistory].reverse().map((h) => `<div><b>${esc(h.timestamp)} • ${esc(h.actor)}</b> (${esc(h.role)})<br>${esc(h.action)}${h.note ? `: ${esc(h.note)}` : ""}</div>`).join("")}</div></div></div>`)
+    open(`Văn bản • ${doc.summary.slice(0, 60)}`, `<h3 style="margin-top:0">${esc(doc.summary)}</h3><div class="grid twoeq"><div>${info}${inc?.instruction ? `<p class="mini">${esc(inc.instruction)}</p>` : ""}</div><div><h4>Lịch sử xử lý</h4><div class="timeline">${[...doc.processHistory].reverse().map((h) => `<div><b>${esc(h.timestamp)} • ${esc(h.actor)}</b> (${esc(h.role)})<br>${esc(h.action)}${h.note ? `: ${esc(h.note)}` : ""}</div>`).join("")}</div></div></div>${inc ? assignmentSectionHtml(inc.id, ctx.role()) : ""}`)
   }
 
   function bankReconcile() {

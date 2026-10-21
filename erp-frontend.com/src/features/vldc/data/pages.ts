@@ -69,22 +69,6 @@ function equipment() {
   )}<div class="card" style="margin-top:14px"><h3>Vòng đời thiết bị</h3><table><tr><th>Mã</th><th>Thiết bị</th><th>Đơn vị</th><th>Trạng thái</th><th>Utilization</th><th>Kiểm định</th><th>Chi phí sửa</th><th></th></tr>${list}</table></div>`
 }
 
-function hr() {
-  const staff = D("staffSkills")
-  const m = M.hrMetrics(D("orgStats")[0], staff, today())
-  const units = [...new Set(staff.map((s) => s.unit))]
-  return `${kpis(
-    kpi("Nhân sự", m.total, "Theo hồ sơ năng lực công khai"),
-    kpi("Đang ở hiện trường", m.onField, `Trong ${staff.length} cán bộ chủ chốt`),
-    kpi("Chứng chỉ sắp hết hạn", m.certSoon, "Trong 60 ngày"),
-    kpi("Chuyên gia GIS (≥ 4)", m.gisExperts, "Theo Skill Matrix"),
-  )}<div class="grid twoeq" style="margin-top:14px"><div class="card"><h3>Skill Matrix</h3><table><tr><th>Nhân sự</th><th>Đơn vị</th><th>Địa vật lý</th><th>GIS</th><th>Xử lý DL</th><th>QL dự án</th><th>Chứng chỉ</th></tr>${staff.map((s) => `<tr><td>${esc(s.name)}</td><td>${esc(s.unit)}</td><td>${s.geophysics}</td><td>${s.gis}</td><td>${s.data}</td><td>${s.pm}</td><td>${vnDate(s.certExpiry)}</td></tr>`).join("")}</table><button class="btn btn-primary" style="margin-top:10px" onclick="skillFind()">Tìm chuyên gia</button></div><div class="card"><h3>Workforce Planning</h3><div class="mini">Tỷ lệ cán bộ chủ chốt đang ở hiện trường</div>${units.map((u) => {
-    const inUnit = staff.filter((s) => s.unit === u)
-    const pct = Math.round((inUnit.filter((s) => s.onField).length / inUnit.length) * 100)
-    return bar(u, pct)
-  }).join("")}</div></div>`
-}
-
 function risks() {
   const rs = D("risks")
   const open = M.openRisks(rs)
@@ -147,16 +131,6 @@ function organization() {
   )}<div class="card" style="margin-top:14px"><div class="card-head"><h3>Cơ cấu tổ chức & chức năng</h3><span class="official-badge">DỮ LIỆU CÔNG KHAI</span></div><div class="org-grid">${units.map((u) => `<div class="org-card"><span class="org-chip">${esc(u.type)}</span><h4>${esc(u.name)}</h4><div class="org-meta"><span><b>Lãnh đạo:</b> ${esc(u.leader)}</span>${u.deputy ? `<span><b>Phó:</b> ${esc(u.deputy)}</span>` : ""}<span><b>Nhân sự:</b> ${esc(u.staff)}</span></div><p>${esc(u.mission)}</p><button class="btn btn-light" ${jsCall("openUnit", u.id)}>Mở không gian đơn vị</button></div>`).join("")}</div></div>`
 }
 
-function capability() {
-  const c = cap()
-  const total = c.total || 1
-  const direct = D("orgUnits").filter((u) => u.type === "Đơn vị trực thuộc")
-  const directStaff = direct.reduce((s, u) => s + u.staffCount, 0)
-  const level = (label: string, n: number) => bar(label, Math.round((n / total) * 100), String(n))
-  return `<div class="capability-grid"><div class="cap-card"><span class="official-badge">HỒ SƠ CÔNG KHAI</span><b class="big">${c.total}</b><div>Nhân lực kỹ thuật</div><div class="mini">${c.doctor} TS • ${c.master} ThS • ${c.engineerBachelor} KS/CN • ${c.technicianWorker} KTV/CN</div></div><div class="cap-card"><span class="official-badge">KINH NGHIỆM</span><b class="big">${c.over15}</b><div>Trên 15 năm</div><div class="mini">${c.from5to15} người từ 5–15 năm • ${c.under5} dưới 5 năm</div></div><div class="cap-card"><span class="official-badge">ĐƠN VỊ THI CÔNG</span><b class="big">${directStaff}</b><div>Nhân sự công khai ở ${direct.length} đơn vị</div><div class="mini">${direct.map((u) => `${esc(u.id)} ${u.staffCount}`).join(" • ")}</div></div></div>
-<div class="grid twoeq" style="margin-top:14px"><div class="card"><h3>Cơ cấu trình độ</h3>${level("Tiến sĩ", c.doctor)}${level("Thạc sĩ", c.master)}${level("Kỹ sư/Cử nhân", c.engineerBachelor)}${level("KTV/Công nhân", c.technicianWorker)}</div><div class="card"><h3>Năng lực theo đơn vị</h3>${direct.map((u) => metric(u.name, esc(u.staff))).join("")}<button class="btn btn-primary" onclick="show('hr')">Mở Skill Matrix ERP</button></div></div>`
-}
-
 function equipmentCatalog() {
   const rows = D("equipment")
   const m = M.equipmentMetrics(rows, today())
@@ -187,25 +161,12 @@ function digital() {
 }
 
 /** Research KPI tiles and funnel, computed from the portfolio (the page body stays in the engine). */
-export function researchSummary(): { tiles: string; funnel: string } {
-  const rs = D("research")
-  const stages = ["Thuyết minh", "Nghiên cứu", "Prototype", "Pilot", "Ứng dụng"]
-  return {
-    tiles: kpis(
-      kpi("Đề tài / nhiệm vụ R&D", rs.length, "Trong danh mục"),
-      kpi("Đang Pilot", rs.filter((r) => r.stage === "Pilot").length, "Thử nghiệm thực tế"),
-      kpi("Đã ứng dụng", rs.filter((r) => r.applied).length, "Có sản phẩm triển khai"),
-      kpi("Tổng kinh phí", ty(rs.reduce((s, r) => s + r.budget, 0)), `TRL trung bình ${rs.length ? Math.round(rs.reduce((s, r) => s + r.trl, 0) / rs.length) : 0}`),
-    ),
-    funnel: `<div class="research-funnel">${stages.map((st) => `<div class="funnel-step"><b>${rs.filter((r) => r.stage === st).length}</b>${st}</div>`).join("")}</div>`,
-  }
-}
 
 const NO_STATS: OrgStats = { id: "capability", total: 0, doctor: 0, master: 0, engineerBachelor: 0, technicianWorker: 0, under5: 0, from5to15: 0, over15: 0 }
 const cap = (): OrgStats => D("orgStats")[0] ?? NO_STATS
 
 const RENDERERS: Record<string, (ctx: Ctx) => string> = {
-  projects, finance, equipment, hr, risks, meetings, strategy, command, organization, capability,
+  projects, finance, equipment, risks, meetings, strategy, command, organization,
   equipmentcatalog: equipmentCatalog, units, digital,
 }
 

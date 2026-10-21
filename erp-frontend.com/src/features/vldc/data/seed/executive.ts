@@ -27,11 +27,19 @@ export const commonTasks = (): CommonTask[] => [
  {id:'GEN-005',title:'Kiểm tra hồ sơ/tài liệu cần bổ sung metadata',scope:'Theo quyền dữ liệu',owner:'Đơn vị liên quan',due:'Theo SLA',status:'Theo dõi',link:'dms'}
 ]
 
-/** Each task gets a short trail (created → received → current step), dated relative to today. */
+/** Due date from the demo SLA text: "Còn 3 ngày" → +3, "+2 ngày" (late) → −2, hours / "Hôm nay" → today. */
+export function dueFromSla(sla: string, today: string): string {
+  const days = /(\d+)\s*ngày/.exec(sla)
+  if (days) return addDays(today, sla.trim().startsWith("+") || /Vượt|Quá/.test(sla) ? -Number(days[1]) : Number(days[1]))
+  return /Vượt|Quá/.test(sla) ? addDays(today, -1) : today
+}
+
+/** Each task gets a due date and a short trail (created → received → current step), relative to today. */
 export function inboxTasks(today: string): InboxTask[] {
   const at = (days: number, hm: string) => `${addDays(today, days)}T${hm}`
   return INBOX_TASKS.map((t, i) => ({
     ...t,
+    due: dueFromSla(t.sla, today),
     history: [
       { at: at(-2 - (i % 3), `0${8 + (i % 2)}:${String(10 + i * 3).padStart(2, "0")}`), by: t.from, action: "Khởi tạo" },
       { at: at(-1 - (i % 2), `${10 + (i % 4)}:15`), by: t.owner, action: "Tiếp nhận xử lý" },

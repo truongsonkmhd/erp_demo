@@ -1,0 +1,52 @@
+# Full stack: MySQL + backend + frontend. Values come from .env next to this file (see .env.example).
+# Ports are bound to 127.0.0.1; the host nginx proxies to them.
+name: erp-demo
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: erp-demo-mysql
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --skip-character-set-client-handshake
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in .env}
+      MYSQL_DATABASE: erp-demo
+    volumes:
+      - ./environment/data/erp_db_data:/var/lib/mysql
+      - ./environment/mysql/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "127.0.0.1:${MYSQL_PORT:-3319}:3306"
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: .
+    image: erp-demo-backend:latest
+    container_name: erp-demo-backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      MYSQL_URL: jdbc:mysql://mysql:3306/erp-demo?allowPublicKeyRetrieval=true&useSSL=false
+      MYSQL_USER: root
+      MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      JWT_BASE64_SECRET: ${JWT_BASE64_SECRET:?set JWT_BASE64_SECRET in .env}
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-11124}:1122"
+
+  frontend:
+    build: ./erp-frontend.com
+    image: erp-demo-frontend:latest
+    container_name: erp-demo-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-18088}:80"

@@ -1,0 +1,12 @@
+.git
+.idea
+.agents
+.claude
+.m2-local
+.runtime
+deploy
+environment
+erp-frontend.com
+vldc-erp-react
+**/target
+.env

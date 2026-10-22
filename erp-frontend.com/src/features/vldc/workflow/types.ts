@@ -34,6 +34,8 @@ export type WorkItem = {
   subUnit?: string
   /** Project (id) the directive or payment belongs to. */
   project?: string
+  /** WBS item (id) of that project the work delivers; its progress feeds the item. */
+  wbsItem?: string
   cc: string[]
   parentId?: string
   status: WorkStatus

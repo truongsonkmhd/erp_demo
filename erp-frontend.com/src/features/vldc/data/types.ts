@@ -63,8 +63,14 @@ export type Equipment = {
   id: string; name: string; quantity: number; year: string; condition: string; group: string; unit: string
   status: string; utilization: number; inspectionDue: string; repairCost: number
 }
-/** A WBS item: weight in % of the project, dates "yyyy-mm-dd", subUnit = tổ doing it. */
-export type WbsItem = { id?: string; name: string; progress: number; status: string; weight?: number; start?: string; end?: string; subUnit?: string }
+/** A WBS item: dates "yyyy-mm-dd", subUnit = tổ doing it; weight (% of the project) and tasks are computed from its assigned work. */
+export type WbsItem = {
+  id?: string; name: string; progress: number; status: string; weight?: number; start?: string; end?: string; subUnit?: string
+  /** Computed: root work items assigned to this item (its progress then comes from them). */
+  linkedWork?: number
+  /** Computed: all work items of this item, sub-tasks included. */
+  tasks?: number
+}
 export type Milestone = { id: string; name: string; due: string; doneAt?: string }
 export type ChangeRequestKind = "Phạm vi" | "Ngân sách" | "Thời gian"
 export type ChangeRequestStatus = "Chờ duyệt" | "Đã duyệt" | "Từ chối"
@@ -92,6 +98,8 @@ export type Project = StoredProject & {
   /** Billion VND paid so far. */
   spent: number
   overdueWbs: number
+  /** Work assigned to the project: still open, past due, reported and waiting for approval. */
+  workOpen: number; workOverdue: number; workPending: number
 }
 /** Amounts in million VND; posted = hạch toán, acceptedPct = khối lượng đã nghiệm thu (%). */
 export type FinanceLine = {

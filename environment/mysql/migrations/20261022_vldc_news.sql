@@ -9,9 +9,9 @@ SELECT CONCAT(p.code, ':', a.code), CONCAT(p.name, ' - ', a.name), p.id, a.id
 FROM tbl_page p CROSS JOIN tbl_action a
 WHERE p.code = 'vldc-news';
 
--- First item of "Không gian làm việc" (Dashboard is 101).
+-- Below Công việc (102) and Giao việc (103) in "Không gian làm việc".
 INSERT INTO tbl_menu (code, title, icon, parent_id, page_id, module, sort_order)
-SELECT 'vldc-news', 'Bảng tin', 'Newspaper', g.id, p.id, 'vldc', 100
+SELECT 'vldc-news', 'Bảng tin', 'Newspaper', g.id, p.id, 'vldc', 104
 FROM tbl_menu g
 JOIN tbl_page p ON p.code = 'vldc-news'
 WHERE g.code = 'vldc-grp-workspace'

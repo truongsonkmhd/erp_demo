@@ -24,10 +24,12 @@ const vnd = (n: number) => (Math.abs(n) >= 1e9
 /** Rule-based alerts (data/alerts.ts, same as the Alerts page) plus late projects and high risks. */
 function alerts(biz: BusinessData) {
   const late = biz.projects.filter((p) => p.delayDays > 0).sort((a, b) => b.delayDays - a.delayDays)
+  const lateWork = biz.projects.filter((p) => p.workOverdue > 0)
   const high = openRisks(biz.risks).filter((r) => riskLevel(r) === "Cao")
   return [
     ...biz.alerts.map((a) => ({ dot: a.level === "Cao" ? "red" : "yellow", title: a.title, sub: a.sub, page: a.page })),
     late.length ? { dot: "red", title: `${late.length} dự án dự báo trễ`, sub: `${late[0].id} chậm ${late[0].delayDays} ngày`, page: "projects" } : null,
+    lateWork.length ? { dot: "red", title: `${lateWork.length} dự án có việc giao quá hạn`, sub: lateWork.map((p) => `${p.id}: ${p.workOverdue} việc`).join(" • "), page: "projects" } : null,
     high.length ? { dot: "red", title: `${high.length} rủi ro mức cao đang mở`, sub: high.map((r) => r.title).join(" • "), page: "risks" } : null,
   ].filter((a): a is { dot: string; title: string; sub: string; page: string } => !!a)
 }

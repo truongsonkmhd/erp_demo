@@ -32,7 +32,7 @@ export type UrgencyGroup = "overdue" | "today" | "week" | "later"
 export const GROUP_LABELS: Record<UrgencyGroup, string> = { overdue: "Quá hạn", today: "Hôm nay", week: "Trong 7 ngày", later: "Sau / chưa có hạn" }
 
 const WORK_TYPES: Record<WorkItem["type"], string> = { directive: "Chỉ đạo", task: "Việc được giao", payment: "Hồ sơ thanh toán" }
-const WORK_SOURCES: Record<WorkItem["type"], string> = { directive: "Chỉ đạo điều hành", task: "Chỉ đạo điều hành", payment: "Thanh toán liên phòng" }
+const WORK_SOURCES: Record<WorkItem["type"], string> = { directive: "Giao việc", task: "Giao việc", payment: "Thanh toán liên phòng" }
 /** Inbox task statuses that mean the role's step is finished. */
 const TASK_DONE = new Set(["Hoàn thành bước", "Đã bàn giao", "Hoàn thành", "Đã duyệt"])
 

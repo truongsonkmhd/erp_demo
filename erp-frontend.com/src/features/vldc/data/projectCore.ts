@@ -17,10 +17,33 @@ export const PROJECT_APPROVER = "lanhdao"
 /** Cost ahead of technical progress by more than this many points is flagged. */
 export const OVERRUN_GAP = 10
 
+/** A work item as projects see it; root = a directive (its progress already rolls up its sub-tasks). */
+export type WorkLink = { project?: string; wbsItem?: string; progress: number; closed: boolean; overdue: boolean; pending: boolean; root: boolean }
+
 export type ProjectContext = {
   lines: { project: string; paid: number }[]
   payments: { project?: string; amount?: number; status: string }[]
+  work?: WorkLink[]
   today: string
+}
+
+/**
+ * Weight of a WBS item = its share of the project's tasks (assigned work and sub-tasks; an item without tasks counts as one).
+ * Items with assigned root work take the average progress of that work; the others keep the entered %.
+ */
+function wbsWithWork(p: StoredProject, work: WorkLink[]): WbsItem[] {
+  const keyOf = (w: WbsItem, i: number) => w.id ?? String(i)
+  const tasksOf = (key: string) => work.filter((x) => x.project === p.id && x.wbsItem === key).length
+  const total = p.wbs.reduce((s, w, i) => s + Math.max(1, tasksOf(keyOf(w, i))), 0)
+  return p.wbs.map((w, i) => {
+    const key = keyOf(w, i)
+    const tasks = tasksOf(key)
+    const weight = Math.round((Math.max(1, tasks) / total) * 100)
+    const linked = work.filter((x) => x.root && x.project === p.id && x.wbsItem === key)
+    if (!linked.length) return { ...w, weight, tasks, linkedWork: 0 }
+    const progress = clamp(linked.reduce((s, x) => s + x.progress, 0) / linked.length)
+    return { ...w, weight, tasks, progress, linkedWork: linked.length, status: progress >= 100 ? "Hoàn thành" : progress > 0 ? "Đang thực hiện" : "Chưa bắt đầu" }
+  })
 }
 
 const DAY = 86_400_000
@@ -36,7 +59,10 @@ export function weightedProgress(wbs: WbsItem[]): number {
   return clamp(wbs.reduce((s, w) => s + (weighted ? w.weight ?? 0 : 1) * w.progress, 0) / total)
 }
 
-export function computeProject(p: StoredProject, ctx: ProjectContext): Project {
+export function computeProject(stored: StoredProject, ctx: ProjectContext): Project {
+  const work = ctx.work ?? []
+  const p = { ...stored, wbs: wbsWithWork(stored, work) }
+  const mine = work.filter((x) => x.project === p.id)
   const dated = !!(p.start && p.end)
   const technical = dated ? weightedProgress(p.wbs) : p.technical ?? weightedProgress(p.wbs)
   const linePaid = ctx.lines.filter((l) => l.project === p.id).reduce((s, l) => s + l.paid, 0) / 1000
@@ -73,6 +99,9 @@ export function computeProject(p: StoredProject, ctx: ProjectContext): Project {
     changeRequests: crs ? crs.length : p.changeRequests ?? 0,
     changeRequestsPending: crs ? crs.filter((c) => c.status === "Chờ duyệt").length : p.changeRequestsPending ?? 0,
     overdueWbs: p.wbs.filter((w) => w.end && w.end < ctx.today && w.progress < 100).length,
+    workOpen: mine.filter((x) => !x.closed).length,
+    workOverdue: mine.filter((x) => x.overdue).length,
+    workPending: mine.filter((x) => x.pending).length,
   }
 }
 
@@ -89,11 +118,17 @@ export function projectProblems(p: StoredProject, all: StoredProject[], isNew = 
   if (!(p.budget > 0)) out.push("Ngân sách phải lớn hơn 0")
   if (p.wbs.some((w) => !w.name.trim())) out.push("Hạng mục WBS cần có tên")
   if (p.wbs.some((w) => w.start && w.end && w.end < w.start)) out.push("Hạng mục WBS có ngày kết thúc trước ngày bắt đầu")
-  if (p.wbs.some((w) => w.weight)) {
-    const total = p.wbs.reduce((s, w) => s + (w.weight ?? 0), 0)
-    if (total !== 100) out.push(`Tổng trọng số hạng mục phải bằng 100% (hiện ${total}%)`)
-  }
   return out
+}
+
+/** WBS items dropped by an edit while work is still assigned to them (legacy items are keyed by their index). */
+export function wbsRemovalProblems(prev: StoredProject, next: StoredProject, work: WorkLink[]): string[] {
+  const kept = new Set(next.wbs.map((w, i) => w.id ?? String(i)))
+  return prev.wbs.flatMap((w, i) => {
+    const key = w.id ?? String(i)
+    const n = work.filter((x) => x.project === prev.id && x.wbsItem === key).length
+    return !kept.has(key) && n ? [`Không thể xóa hạng mục "${w.name}": đang có ${n} việc giao`] : []
+  })
 }
 
 export const canCreateProject = (role: string) => PROJECT_CREATORS.includes(role)

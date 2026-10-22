@@ -189,7 +189,7 @@ export function installActions(ctx: Ctx) {
   }
 
   function addEventModal() {
-    open("Tạo lịch / sự kiện", form(field("Tiêu đề", input("e-title"), true) + field("Ngày", input("e-date", today(), "date")) + field("Giờ", input("e-time", "09:00", "time")) + scopeFields() + field("Mở nghiệp vụ", select("e-link", [["calendar", "Sự kiện"], ["projects", "Dự án"], ["action", "Hộp việc"], ["meetings", "Cuộc họp"]])) + field("Nội dung", textarea("e-note"), true), "saveEvent"))
+    open("Tạo lịch / sự kiện", form(field("Tiêu đề", input("e-title"), true) + field("Ngày", input("e-date", today(), "date")) + field("Giờ", input("e-time", "09:00", "time")) + scopeFields() + field("Mở nghiệp vụ", select("e-link", [["calendar", "Sự kiện"], ["projects", "Dự án"], ["action", "Công việc"], ["meetings", "Cuộc họp"]])) + field("Nội dung", textarea("e-note"), true), "saveEvent"))
   }
 
   function saveEvent() {
@@ -228,7 +228,7 @@ export function installActions(ctx: Ctx) {
   }
 
   function publishNoticeModal() {
-    open("Phát hành thông báo", form(field("Tiêu đề", input("n-title"), true) + field("Nội dung", textarea("n-body"), true) + field("Mức ưu tiên", select("n-priority", [["Bình thường", "Bình thường"], ["Cao", "Cao"]])) + field("Liên kết", select("n-link", [["plans", "Kế hoạch"], ["action", "Hộp việc"], ["projects", "Dự án"], ["documents", "Văn bản"], ["calendar", "Sự kiện"]])) + scopeFields(), "saveNotice", "Phát hành"))
+    open("Phát hành thông báo", form(field("Tiêu đề", input("n-title"), true) + field("Nội dung", textarea("n-body"), true) + field("Mức ưu tiên", select("n-priority", [["Bình thường", "Bình thường"], ["Cao", "Cao"]])) + field("Liên kết", select("n-link", [["plans", "Kế hoạch"], ["action", "Công việc"], ["projects", "Dự án"], ["documents", "Văn bản"], ["calendar", "Sự kiện"]])) + scopeFields(), "saveNotice", "Phát hành"))
   }
 
   function saveNotice() {

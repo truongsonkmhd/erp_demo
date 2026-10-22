@@ -213,6 +213,9 @@ function applyDirectiveAction(item: WorkItem, action: WorkAction, input: ActionI
       const created = newWorkItem({
         id: child.id, type: "task", title, description: child.description, createdBy: role, owner: child.owner,
         cc, parentId: item.id, status: "Mới giao", priority: child.priority || item.priority, due,
+        // A sub-task works on the same project item and tổ as its parent.
+        ...(item.project ? { project: item.project } : {}), ...(item.wbsItem ? { wbsItem: item.wbsItem } : {}),
+        ...(item.subUnit ? { subUnit: item.subUnit } : {}),
       }, now, [child.owner, ...cc])
       const parent = withEntry(item, role, action, now, [item.createdBy], `Giao ${created.id} cho ${ROLE_TITLES[child.owner] || child.owner}`)
       return { item: parent, created }
@@ -239,7 +242,7 @@ export function applyAction(item: WorkItem, action: WorkAction, input: ActionInp
 }
 
 export function createDirective(
-  input: { id: string; title: string; owner: string; subUnit?: string; project?: string; cc: string[]; due: string; priority: WorkItem["priority"]; description?: string },
+  input: { id: string; title: string; owner: string; subUnit?: string; project?: string; wbsItem?: string; cc: string[]; due: string; priority: WorkItem["priority"]; description?: string },
   role: string,
   perms: string[],
   now: string,
@@ -253,6 +256,7 @@ export function createDirective(
     id: input.id, type: "directive", title, description: input.description, createdBy: role, owner: input.owner,
     ...(input.subUnit ? { subUnit: input.subUnit } : {}),
     ...(input.project ? { project: input.project } : {}),
+    ...(input.project && input.wbsItem ? { wbsItem: input.wbsItem } : {}),
     cc, status: "Mới giao", priority: input.priority, due,
   }, now, [input.owner, ...cc])
 }
@@ -360,7 +364,7 @@ export function ownerInbox(role: string, all: WorkItem[]): WorkItem[] {
 }
 
 /** Engine pages that show shared workflow data and must re-render on realtime changes. */
-export const WORKFLOW_PAGES = new Set(["directives", "action", "notifications", "payments", "dashboard", "command", "performance", "crossflow", "accounting", "units", "audit", "alerts", "reports"])
+export const WORKFLOW_PAGES = new Set(["directives", "action", "notifications", "payments", "dashboard", "command", "performance", "projects", "crossflow", "accounting", "units", "audit", "alerts", "reports"])
 
 /** Why the owner cannot report completion yet ("" when nothing blocks it). */
 export function blockedReason(item: WorkItem, role: string, all: WorkItem[]): string {

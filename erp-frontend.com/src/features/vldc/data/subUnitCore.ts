@@ -1,7 +1,7 @@
 import { isClosed } from "../workflow/rules.ts"
 import type { WorkItem } from "../workflow/types.ts"
 import { UNIT_DEFS, unitCodeOf, unitKey, unitName, type UnitCode } from "./org.ts"
-import type { StaffProfile, SubUnit, SubUnitKind } from "./types.ts"
+import type { StaffProfile, StoredProject, SubUnit, SubUnitKind } from "./types.ts"
 
 /** Tổ/phòng inside a unit: the federation head views, staffs and restructures them; work can target them. */
 
@@ -38,10 +38,11 @@ export function withHead(next: SubUnit, subs: SubUnit[]): SubUnit[] {
 }
 
 /** What still keeps a sub unit alive: its people and its open work. */
-export function dissolveBlockers(s: SubUnit, staff: StaffProfile[], items: WorkItem[]): string[] {
+export function dissolveBlockers(s: SubUnit, staff: StaffProfile[], items: WorkItem[], projects: Pick<StoredProject, "status" | "wbs">[] = []): string[] {
   const people = staff.filter((p) => p.subUnit === s.id).length
   const open = items.filter((x) => x.subUnit === s.id && !isClosed(x)).length
-  return [people ? `Còn ${people} nhân sự` : "", open ? `Còn ${open} việc đang mở` : ""].filter(Boolean)
+  const wbs = projects.filter((p) => p.status !== "Hoàn thành").flatMap((p) => p.wbs).filter((w) => w.subUnit === s.id && w.progress < 100).length
+  return [people ? `Còn ${people} nhân sự` : "", open ? `Còn ${open} việc đang mở` : "", wbs ? `Còn ${wbs} hạng mục dự án đang làm` : ""].filter(Boolean)
 }
 
 /** Kept with active=false so past work and history still resolve its name. */
@@ -95,4 +96,12 @@ export function resolveUnitChoice(value: string, subs: SubUnit[]): UnitChoice | 
 export function scopedUnitLabel(x: { unit?: string; subUnit?: string }, subs: SubUnit[]): string {
   const sub = x.subUnit ? subs.find((s) => s.id === x.subUnit) : undefined
   return sub ? `${sub.name} – ${x.unit ?? unitName(sub.unit as UnitCode)}` : x.unit ?? ""
+}
+
+/** Tổ a WBS item can be given to: those of the project's unit (picked as a unit code or one of its tổ); a tổ saved earlier stays. */
+export function wbsSubUnitChoices(unitValue: string, subs: SubUnit[], selected = ""): SubUnit[] {
+  const unit = resolveUnitChoice(unitValue, subs)?.unit
+  const list = unit ? subUnitsOf(unit, subs) : []
+  const kept = selected && !list.some((s) => s.id === selected) ? subs.filter((s) => s.id === selected) : []
+  return [...list, ...kept]
 }

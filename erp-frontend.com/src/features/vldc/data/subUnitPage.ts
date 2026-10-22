@@ -59,7 +59,8 @@ export function installSubUnitPage(render: Record<string, () => void>, ctx: Ctx)
 <div class="toolbar">${k ? `KPI ${scoreBadge(k)}` : ""}${manager() && u.unit !== "BLD" ? `<button class="btn btn-light" ${jsCall("subForm", u.unit, "")}>+ Thêm tổ/phòng</button>` : ""}</div></div>
 ${open ? rows || '<div class="mini" style="padding:8px 0">Chưa chia tổ/phòng.</div>' : ""}</div>`
     }).join("")
-    return `${head}<div class="mini" style="margin:12px 0 8px">Bấm vào một tổ/phòng để xem nhân sự, công việc, KPI${manager() ? ", giao việc hoặc sửa cơ cấu" : ""}.</div>${units}`
+    // Không gian đơn vị has no menu entry of its own: it opens from Phòng ban and leads back there.
+    return `<div class="toolbar" style="margin-bottom:12px"><button class="btn btn-light" onclick="show('organization')">← Phòng ban</button></div>${head}<div class="mini" style="margin:12px 0 8px">Bấm vào một tổ/phòng để xem nhân sự, công việc, KPI${manager() ? ", giao việc hoặc sửa cơ cấu" : ""}.</div>${units}`
   }
 
   function rerender() {
@@ -123,8 +124,8 @@ ${s ? "" : '<div class="mini" style="margin-top:6px">Tổ trưởng chọn trong
   function subDissolve(id: string) {
     const s = find(id)
     if (!s || !manager()) return
-    const blockers = dissolveBlockers(s, staff(), workflowStore.items())
-    if (blockers.length) return alert(`Chưa thể giải thể ${s.name}: ${blockers.join(", ")}. Hãy điều chuyển nhân sự và hoàn thành/chuyển việc trước.`)
+    const blockers = dissolveBlockers(s, staff(), workflowStore.items(), vldcData.get("projects"))
+    if (blockers.length) return alert(`Chưa thể giải thể ${s.name}: ${blockers.join(", ")}. Hãy điều chuyển nhân sự, hoàn thành/chuyển việc và giao hạng mục dự án cho tổ khác trước.`)
     if (!confirm(`Giải thể ${s.name}? Lịch sử công việc của tổ vẫn được giữ.`)) return
     void vldcData.save("subUnits", dissolveSubUnit(s, new Date().toISOString()))
     ctx.closeModal()

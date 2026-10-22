@@ -37,7 +37,26 @@ const roleTitle = (r: string) => ROLE_TITLES[r] || r
 
 // ---------- Accounting ----------
 
+/** Doanh thu & công nợ for the federation head: revenue of receivable contracts, what is still owed, by customer. */
+function revenueSection(): string {
+  const r = A.revenueSummary(D("contracts"), today())
+  const ar = A.debtSummary(D("contracts"), "thu", today())
+  const thu = D("contracts").filter((c) => c.kind === "thu").length
+  const rows = r.customers.map((c) => `<tr><td><b>${esc(c.party)}</b><div class="mini">${c.contracts} hợp đồng</div></td><td>${tr(c.value)}</td><td>${tr(c.invoiced)}</td><td>${tr(c.collected)}</td><td><b>${tr(c.outstanding)}</b></td><td>${c.agingDays ? badge(`${c.agingDays} ngày`, c.agingDays > 60 ? "b-danger" : "b-warn") : c.outstanding ? badge("Trong hạn", "b-ok") : "–"}</td></tr>`)
+  const total = `<tr><td><b>Tổng</b></td><td><b>${tr(r.contractValue)}</b></td><td><b>${tr(r.invoiced)}</b></td><td><b>${tr(r.collected)}</b></td><td><b>${tr(r.receivable)}</b></td><td></td></tr>`
+  return `<h3 style="margin:0 0 10px">Doanh thu & công nợ</h3>${kpis(
+    kpi("Tổng doanh thu hợp đồng", tr(r.contractValue), `${thu} hợp đồng thu • đã xuất hóa đơn ${tr(r.invoiced)}`),
+    kpi("Đã thu", tr(r.collected), `${r.collectedPct}% số đã xuất hóa đơn`),
+    kpi("Còn phải thu", tr(r.receivable), `${tr(ar.overdue)} quá hạn • ${tr(ar.over60)} > 60 ngày`),
+    kpi("Công nợ phải trả", tr(r.payable), `${tr(r.payableOverdue)} quá hạn`),
+  )}${grid("two",
+    card("Doanh thu – công nợ theo khách hàng", table(["Khách hàng", "Giá trị HĐ", "Đã xuất HĐ", "Đã thu", "Còn phải thu", "Tuổi nợ"], rows.length ? [...rows, total] : [])),
+    card("Tuổi nợ phải thu", `${ar.buckets.map((b) => bar(b.label, ar.total ? Math.round((b.amount / ar.total) * 100) : 0, tr(b.amount))).join("")}${metric("Chưa xuất hóa đơn", tr(r.notInvoiced))}`),
+  )}<h3 style="margin:18px 0 10px">Hoạt động kế toán</h3>`
+}
+
 function accounting(ctx: Ctx, chief = ctx.role() === "ketoantruong") {
+  const leader = ctx.role() === "lanhdao"
   const v = A.voucherSummary(D("vouchers"))
   const pays = payments().filter((p) => !isClosed(p))
   const adv = A.advanceSummary(D("advances"), today())
@@ -51,13 +70,13 @@ function accounting(ctx: Ctx, chief = ctx.role() === "ketoantruong") {
     ...ar.debts.filter((d) => d.agingDays > 60).map((d) => `<div class="alert"><span class="dot blue"></span><div><b>${esc(d.contract.id)} • Công nợ ${esc(d.contract.party)}</b><div class="mini">${tr(d.outstanding)} • quá hạn ${d.agingDays} ngày</div></div>${btn("Mở", "debtDetail", d.contract.id)}</div>`),
   ].join("") || '<div class="mini">Không có việc tồn.</div>'
   const flow = D("cashflow").map((c) => `<tr><td>${esc(c.month)}</td><td>${ty(c.inflow)}</td><td>${ty(c.outflow)}</td><td>${badge(ty(c.inflow - c.outflow), c.inflow >= c.outflow ? "b-ok" : "b-danger")}</td></tr>`)
-  return `${kpis(
+  return `${leader ? revenueSection() : ""}${kpis(
     kpi("Chứng từ chờ xử lý", v.pending, `${v.needSupplement} cần bổ sung`),
     kpi("Hồ sơ thanh toán đang mở", pays.length, `${mine.length} đang ở bước của bạn`),
     kpi("Tạm ứng chưa hoàn", tr(adv.outstanding), `${adv.overdueCount} khoản quá hạn`),
     kpi("Công nợ phải thu", tr(ar.total), `${tr(ar.over60)} > 60 ngày`),
   )}${grid("two",
-    card(`Việc ${chief ? "Kế toán trưởng" : "Kế toán viên"} cần xử lý`, todo, goto("Luồng liên phòng", "crossflow", true)),
+    card(leader ? "Việc kế toán đang tồn" : `Việc ${chief ? "Kế toán trưởng" : "Kế toán viên"} cần xử lý`, todo, goto("Luồng liên phòng", "crossflow", true)),
     card(`Kiểm soát kỳ ${esc(close.period)}`, `${bar("Khóa sổ", close.pct)}${bar("Ghép sao kê ngân hàng", cash.matchRate)}${metric("Chênh lệch ERP – sao kê", tr(cash.diff))}${metric("Hạng mục khóa sổ còn mở", close.open)}`, goto("Checklist", "closing")),
   )}${grid("twoeq",
     card("Dự báo dòng tiền", table(["Tháng", "Thu", "Chi", "Ròng"], flow)),
@@ -216,6 +235,7 @@ function ledgers() {
 function acctreports() {
   const ar = A.debtSummary(D("contracts"), "thu", today())
   const ap = A.debtSummary(D("contracts"), "chi", today())
+  const rev = A.revenueSummary(D("contracts"), today())
   const adv = A.advanceSummary(D("advances"), today())
   const cash = A.cashSummary(D("bankAccounts"), D("bankLines"))
   const f = M.financeMetrics(D("financeLines"), D("disbursement"))
@@ -223,6 +243,7 @@ function acctreports() {
   return `<div class="card"><div class="card-head"><h3>Báo cáo tài chính phục vụ lãnh đạo</h3><span class="mini">Tính từ dữ liệu kế toán hiện hành</span></div>${table(["Chỉ tiêu", "Giá trị", "Ghi chú"], [
     `<tr><td>Giải ngân so kế hoạch năm</td><td>${ty(f.paid)} / ${ty(f.plan)}</td><td>${f.disbursedPct}%</td></tr>`,
     `<tr><td>Tiền & tương đương (ERP)</td><td>${tr(cash.erp)}</td><td>Chênh sao kê ${tr(cash.diff)}</td></tr>`,
+    `<tr><td>Doanh thu hợp đồng</td><td>${tr(rev.contractValue)}</td><td>Đã xuất hóa đơn ${tr(rev.invoiced)} • đã thu ${tr(rev.collected)} (${rev.collectedPct}%)</td></tr>`,
     `<tr><td>Công nợ phải thu</td><td>${tr(ar.total)}</td><td>${tr(ar.over60)} trên 60 ngày</td></tr>`,
     `<tr><td>Công nợ phải trả</td><td>${tr(ap.total)}</td><td>${tr(ap.overdue)} quá hạn</td></tr>`,
     `<tr><td>Tạm ứng chưa hoàn</td><td>${tr(adv.outstanding)}</td><td>${adv.overdueCount} khoản quá hạn</td></tr>`,
@@ -316,7 +337,7 @@ export function unitDashboardHtml(role: string): string {
     kpi("KPI đơn vị", k?.score == null ? "–" : `${k.score}%`, "Tính từ công việc"),
   )}${grid("twoeq",
     card("Nhiệm vụ trọng tâm", projectRows(ps), goto("Mở nhiệm vụ", "projects", true)),
-    card("Việc cần xử lý", open.slice(0, 5).map((x) => `<div class="alert"><span class="dot ${x.due < today() ? "red" : "yellow"}"></span><div><b>${esc(x.id)} • ${esc(x.title)}</b><div class="mini">${statusBadge(x)} Hạn ${formatDate(x.due)}</div></div>${btn("Mở", "wfOpen", x.id)}</div>`).join("") + events.map((e) => `<div class="alert"><span class="dot blue"></span><div><b>${esc(e.date)} ${esc(e.time)} • ${esc(e.title)}</b><div class="mini">${esc(e.note)}</div></div></div>`).join("") || '<div class="mini">Không có việc tồn.</div>', goto("Mở Hộp việc", "action")),
+    card("Việc cần xử lý", open.slice(0, 5).map((x) => `<div class="alert"><span class="dot ${x.due < today() ? "red" : "yellow"}"></span><div><b>${esc(x.id)} • ${esc(x.title)}</b><div class="mini">${statusBadge(x)} Hạn ${formatDate(x.due)}</div></div>${btn("Mở", "wfOpen", x.id)}</div>`).join("") + events.map((e) => `<div class="alert"><span class="dot blue"></span><div><b>${esc(e.date)} ${esc(e.time)} • ${esc(e.title)}</b><div class="mini">${esc(e.note)}</div></div></div>`).join("") || '<div class="mini">Không có việc tồn.</div>', goto("Mở Công việc", "action")),
   )}`
 }
 

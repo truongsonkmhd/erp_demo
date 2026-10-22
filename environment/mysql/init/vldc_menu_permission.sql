@@ -20,19 +20,19 @@ CREATE TABLE IF NOT EXISTS tbl_menu (
 -- 1. Pages: one per legacy render[] page, permission code prefix "vldc-".
 INSERT IGNORE INTO tbl_page (code, name, url) VALUES
   ('vldc-dashboard', 'Dashboard điều hành', '/vldc/dashboard'),
-  ('vldc-action', 'Action Center', '/vldc/action'),
+  ('vldc-action', 'Công việc', '/vldc/action'),
   ('vldc-today', 'Hôm nay', '/vldc/today'),
   ('vldc-calendar', 'Sự kiện', '/vldc/calendar'),
   ('vldc-plans', 'Kế hoạch', '/vldc/plans'),
   ('vldc-notifications', 'Trung tâm thông báo', '/vldc/notifications'),
   ('vldc-assistant', 'AI Knowledge Workspace', '/vldc/assistant'),
   ('vldc-command', 'Executive Command Center', '/vldc/command'),
-  ('vldc-directives', 'Chỉ đạo điều hành', '/vldc/directives'),
-  ('vldc-meetings', 'Cuộc họp & Kết luận', '/vldc/meetings'),
+  ('vldc-directives', 'Giao việc', '/vldc/directives'),
+  ('vldc-meetings', 'Phòng họp', '/vldc/meetings'),
   ('vldc-performance', 'KPI & Performance Center', '/vldc/performance'),
   ('vldc-risks', 'Risk & Compliance Center', '/vldc/risks'),
   ('vldc-strategy', 'Kế hoạch chiến lược', '/vldc/strategy'),
-  ('vldc-organization', 'Cơ cấu & Chức năng', '/vldc/organization'),
+  ('vldc-organization', 'Phòng ban', '/vldc/organization'),
   ('vldc-units', 'Không gian đơn vị', '/vldc/units'),
   ('vldc-capability', 'Năng lực Liên đoàn', '/vldc/capability'),
   ('vldc-hr', 'Nhân sự', '/vldc/hr'),
@@ -91,23 +91,23 @@ INSERT INTO tbl_menu (code, title, icon, parent_id, page_id, module, sort_order)
 SELECT m.code, m.title, m.icon, g.id, p.id, 'vldc', m.sort_order
 FROM (
   SELECT 'vldc-dashboard' AS code, 'Dashboard' AS title, 'LayoutDashboard' AS icon, 101 AS sort_order UNION ALL
-  SELECT 'vldc-action' AS code, 'Hộp việc' AS title, 'Inbox' AS icon, 102 AS sort_order UNION ALL
-  SELECT 'vldc-today' AS code, 'Hôm nay' AS title, 'Sun' AS icon, 103 AS sort_order UNION ALL
-  SELECT 'vldc-calendar' AS code, 'Sự kiện' AS title, 'CalendarDays' AS icon, 104 AS sort_order UNION ALL
-  SELECT 'vldc-plans' AS code, 'Kế hoạch' AS title, 'ListChecks' AS icon, 105 AS sort_order UNION ALL
-  SELECT 'vldc-notifications' AS code, 'Thông báo' AS title, 'Bell' AS icon, 106 AS sort_order UNION ALL
-  SELECT 'vldc-assistant' AS code, 'Trợ lý AI' AS title, 'Sparkles' AS icon, 107 AS sort_order
+  SELECT 'vldc-action' AS code, 'Công việc' AS title, 'Inbox' AS icon, 102 AS sort_order UNION ALL
+  SELECT 'vldc-directives' AS code, 'Giao việc' AS title, 'Send' AS icon, 103 AS sort_order UNION ALL
+  SELECT 'vldc-today' AS code, 'Hôm nay' AS title, 'Sun' AS icon, 105 AS sort_order UNION ALL
+  SELECT 'vldc-calendar' AS code, 'Sự kiện' AS title, 'CalendarDays' AS icon, 106 AS sort_order UNION ALL
+  SELECT 'vldc-plans' AS code, 'Kế hoạch' AS title, 'ListChecks' AS icon, 107 AS sort_order UNION ALL
+  SELECT 'vldc-notifications' AS code, 'Thông báo' AS title, 'Bell' AS icon, 108 AS sort_order UNION ALL
+  SELECT 'vldc-assistant' AS code, 'Trợ lý AI' AS title, 'Sparkles' AS icon, 109 AS sort_order
 ) m
 JOIN tbl_menu g ON g.code = 'vldc-grp-workspace'
 JOIN tbl_page p ON p.code = m.code
-ON DUPLICATE KEY UPDATE title = VALUES(title), icon = VALUES(icon), sort_order = VALUES(sort_order);
+ON DUPLICATE KEY UPDATE title = VALUES(title), icon = VALUES(icon), parent_id = VALUES(parent_id), sort_order = VALUES(sort_order);
 
 INSERT INTO tbl_menu (code, title, icon, parent_id, page_id, module, sort_order)
 SELECT m.code, m.title, m.icon, g.id, p.id, 'vldc', m.sort_order
 FROM (
   SELECT 'vldc-command' AS code, 'Command Center' AS title, 'Radar' AS icon, 201 AS sort_order UNION ALL
-  SELECT 'vldc-directives' AS code, 'Chỉ đạo điều hành' AS title, 'Send' AS icon, 202 AS sort_order UNION ALL
-  SELECT 'vldc-meetings' AS code, 'Họp & Kết luận' AS title, 'Users' AS icon, 203 AS sort_order UNION ALL
+  SELECT 'vldc-meetings' AS code, 'Phòng họp' AS title, 'Users' AS icon, 203 AS sort_order UNION ALL
   SELECT 'vldc-performance' AS code, 'KPI & Hiệu suất' AS title, 'Gauge' AS icon, 204 AS sort_order UNION ALL
   SELECT 'vldc-risks' AS code, 'Rủi ro & Tuân thủ' AS title, 'ShieldAlert' AS icon, 205 AS sort_order UNION ALL
   SELECT 'vldc-strategy' AS code, 'Chiến lược' AS title, 'Flag' AS icon, 206 AS sort_order
@@ -119,7 +119,7 @@ ON DUPLICATE KEY UPDATE title = VALUES(title), icon = VALUES(icon), sort_order =
 INSERT INTO tbl_menu (code, title, icon, parent_id, page_id, module, sort_order)
 SELECT m.code, m.title, m.icon, g.id, p.id, 'vldc', m.sort_order
 FROM (
-  SELECT 'vldc-organization' AS code, 'Cơ cấu & Chức năng' AS title, 'Network' AS icon, 301 AS sort_order UNION ALL
+  SELECT 'vldc-organization' AS code, 'Phòng ban' AS title, 'Network' AS icon, 301 AS sort_order UNION ALL
   SELECT 'vldc-units' AS code, 'Không gian đơn vị' AS title, 'Building2' AS icon, 302 AS sort_order UNION ALL
   SELECT 'vldc-capability' AS code, 'Năng lực' AS title, 'Award' AS icon, 303 AS sort_order UNION ALL
   SELECT 'vldc-hr' AS code, 'Nhân sự' AS title, 'UserRound' AS icon, 304 AS sort_order UNION ALL
@@ -569,9 +569,9 @@ SELECT CONCAT(p.code, ':', a.code), CONCAT(p.name, ' - ', a.name), p.id, a.id
 FROM tbl_page p CROSS JOIN tbl_action a
 WHERE p.code = 'vldc-news';
 
--- First item of "Không gian làm việc" (Dashboard is 101).
+-- Below Công việc (102) and Giao việc (103) in "Không gian làm việc".
 INSERT INTO tbl_menu (code, title, icon, parent_id, page_id, module, sort_order)
-SELECT 'vldc-news', 'Bảng tin', 'Newspaper', g.id, p.id, 'vldc', 100
+SELECT 'vldc-news', 'Bảng tin', 'Newspaper', g.id, p.id, 'vldc', 104
 FROM tbl_menu g
 JOIN tbl_page p ON p.code = 'vldc-news'
 WHERE g.code = 'vldc-grp-workspace'

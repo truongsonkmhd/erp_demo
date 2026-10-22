@@ -738,6 +738,7 @@
 .vldc-scope .vx-pj-tiles b { font-size: 20px; }
 .vldc-scope .vx-pj-form input, .vldc-scope .vx-pj-form select { width: 100%; min-width: 90px; }
 @media (max-width: 900px) { .vldc-scope .vx-pj-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.vldc-scope .vx-pj-tiles { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 
 /* Kế toán › Thu, Chi, Công nợ */
 .vldc-scope .vx-ld-table th { text-align: center; white-space: nowrap; vertical-align: middle; }

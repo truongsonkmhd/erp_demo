@@ -130,3 +130,28 @@ export function assetSummary(assets: FixedAsset[]) {
     linked: assets.filter((a) => a.equipmentId).length,
   }
 }
+
+/** Revenue (receivable contracts) and debts for the leadership view: what was signed, invoiced, collected and is still owed. */
+export function revenueSummary(contracts: Contract[], today: string) {
+  const thu = contracts.filter((c) => c.kind === "thu")
+  const ms = thu.flatMap((c) => c.milestones)
+  const contractValue = sum(thu, (c) => c.value)
+  const invoiced = sum(ms, (m) => m.invoiced)
+  const collected = sum(ms, (m) => m.paid)
+  const parties = [...new Set(thu.map((c) => c.party))]
+  const customers = parties.map((party) => {
+    const own = thu.filter((c) => c.party === party)
+    const debts = own.map((c) => contractDebt(c, today))
+    return {
+      party, contracts: own.length, value: sum(own, (c) => c.value),
+      invoiced: sum(own.flatMap((c) => c.milestones), (m) => m.invoiced), collected: sum(own.flatMap((c) => c.milestones), (m) => m.paid),
+      outstanding: sum(debts, (d) => d.outstanding), overdue: sum(debts, (d) => d.overdue), agingDays: Math.max(0, ...debts.map((d) => d.agingDays)),
+    }
+  }).sort((a, b) => b.outstanding - a.outstanding || b.agingDays - a.agingDays)
+  const ap = debtSummary(contracts, "chi", today)
+  return {
+    contractValue, invoiced, collected, receivable: invoiced - collected, notInvoiced: contractValue - invoiced,
+    collectedPct: invoiced ? Math.round((collected / invoiced) * 100) : 0,
+    customers, payable: ap.total, payableOverdue: ap.overdue,
+  }
+}

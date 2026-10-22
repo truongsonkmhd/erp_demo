@@ -10,7 +10,7 @@ import {
 } from "./inboxCore"
 import { vldcData } from "./registry"
 
-/** Hộp việc: one urgency-ordered list of everything waiting on the role, with filter chips and search. */
+/** Công việc (inbox): one urgency-ordered list of everything waiting on the role, with filter chips and search. */
 
 type Ctx = { role(): string }
 
@@ -72,7 +72,7 @@ function pageHtml(): string {
   const scope = isLeader()
     ? `<div class="vx-inbox-scope">${(["mine", "all"] as InboxScope[]).map((s) => `<button class="${state.scope === s ? "active" : ""}" ${jsCall("inboxScope", s)}>${s === "mine" ? "Của tôi" : "Toàn Liên đoàn"}</button>`).join("")}</div>`
     : ""
-  return `<div class="card vx-inbox-head"><div class="card-head"><div><h3>Hộp việc</h3><div class="mini">Chỉ đạo, việc được giao, hồ sơ thanh toán và tác vụ nghiệp vụ • cập nhật realtime</div></div>${scope}</div>
+  return `<div class="card vx-inbox-head"><div class="card-head"><div><h3>Công việc</h3><div class="mini">Chỉ đạo, việc được giao, hồ sơ thanh toán và tác vụ nghiệp vụ • cập nhật realtime</div></div>${scope}</div>
 <div class="vx-inbox-chips">${chip("mine", "Cần tôi xử lý", c.mine, "blue")}${chip("overdue", "Quá hạn", c.overdue, "red")}${chip("today", "Đến hạn hôm nay", c.today, "yellow")}${chip("cc", "Tôi phối hợp", c.cc, "gray")}${chip("all", "Tất cả", all.length, "gray")}</div>
 <div class="vx-inbox-toolbar"><input id="inboxq" placeholder="Tìm mã, nội dung, nguồn..." value="${esc(state.query)}" oninput="inboxSearch(this.value)"><select onchange="inboxSource(this.value)"><option value="">Tất cả nguồn</option>${sources.map(([s]) => `<option${s === state.source ? " selected" : ""}>${esc(s)}</option>`).join("")}</select><select onchange="inboxSort(this.value)"><option value="due"${state.sort === "due" ? " selected" : ""}>Sắp xếp: Hạn</option><option value="priority"${state.sort === "priority" ? " selected" : ""}>Sắp xếp: Ưu tiên</option></select></div></div>
 <div class="card"><div id="inboxList">${listHtml()}</div></div>`

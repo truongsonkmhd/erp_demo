@@ -2,7 +2,7 @@ import { escapeHtml as esc, jsCall } from "../workflow/html"
 import { localToday, vnDate } from "./dates"
 import { UNIT_DEFS, unitName, type UnitCode } from "./org"
 import { subTabsHtml } from "./menuPolicy"
-import { bar, kpis } from "./pages"
+import { bar } from "./pages"
 import { vldcData } from "./registry"
 import { staffView } from "./staffView"
 import {
@@ -97,15 +97,7 @@ function hrHtml(): string {
   const today = localToday()
   const s = hrSummary(staff, today)
   const pick = (key: string, value: string) => (key ? jsCall("capPick", key, value) : jsCall("capReset"))
-  const tile = (attrs: string, label: string, value: number | string, sub: string, cls = "") =>
-    `<div class="kpi vx-cap-pick ${cls}" ${attrs}><div class="label">${label}</div><div class="value">${value}</div><div class="sub">${sub}</div></div>`
-  return `${kpis(
-    tile(pick("", ""), "Nhân sự", s.total, `${s.units.length} phòng, đơn vị`),
-    tile(pick("onField", "yes"), "Đang ở hiện trường", s.onField, `${pct(s.onField, s.total)}% nhân lực`),
-    tile(pick("cert", "expiring"), "Chứng chỉ cần gia hạn", s.certExpired + s.certExpiring, `${s.certExpired} người đã hết hạn • ${s.certExpiring} sắp hết hạn`, s.certExpired ? "vx-kpi-alert" : ""),
-    tile(jsCall("hrRetiring"), `Từ ${RETIRE_AGE} tuổi`, s.retiring.length, "Cần chuẩn bị nhân sự kế cận"),
-  )}
-<div style="margin-top:14px">${listHtml(staff, today)}</div>
+  return `<div>${listHtml(staff, today)}</div>
 <div class="grid twoeq" style="margin-top:14px"><div class="card"><div class="card-head"><div><h3>Skill Matrix – cán bộ chủ chốt</h3><div class="mini">Mức 1–5 • bấm một người để xem hồ sơ</div></div><button class="btn btn-primary" onclick="skillFind()">Tìm chuyên gia</button></div>
 <div class="vx-staff-table"><table><tr><th>Nhân sự</th>${SKILLS.map(([, l]) => `<th>${l}</th>`).join("")}<th>Chứng chỉ</th></tr>${skills.map((k) => { const [label, cls] = CERT_LABEL[certState(k.certExpiry, today)]; return `<tr class="vx-staff-row" ${jsCall("capStaff", k.id)}><td><b>${esc(k.name)}</b><div class="mini">${esc(k.unit)}</div></td>${SKILLS.map(([key]) => `<td>${dots(k[key])}</td>`).join("")}<td><span class="badge ${cls}">${label}</span><div class="mini">${esc(vnDate(k.certExpiry))}</div></td></tr>` }).join("")}</table></div></div>
 <div class="card"><div class="card-head"><h3>Chứng chỉ cần gia hạn</h3>${s.certAlerts.length > 6 ? `<button class="btn btn-light" ${pick("cert", "expiring")}>Lọc danh sách</button>` : ""}</div>${s.certAlerts.slice(0, 6).map((a) => `<div class="alert vx-cap-pick" ${jsCall("capStaff", a.person.id)}><span class="dot ${a.state === "expired" ? "red" : "yellow"}"></span><div><b>${esc(a.person.name)}</b> • ${esc(shortUnit(a.person.unit))}<div class="mini">${esc(a.cert.name)} • ${a.state === "expired" ? "đã hết hạn" : "hết hạn"} ${esc(vnDate(a.cert.expiry))}</div></div></div>`).join("") || '<div class="mini">Không có chứng chỉ cần gia hạn.</div>'}</div></div>`
@@ -162,14 +154,8 @@ export function installCapabilityPage(render: Record<string, () => void>, ctx: C
     }
   }
 
-  function hrRetiring() {
-    const today = localToday()
-    const list = hrSummary(staffView(), today).retiring
-    ctx.openModal(`Nhân sự từ ${RETIRE_AGE} tuổi`, `<div class="mini" style="margin-bottom:8px">${list.length} người • sắp xếp theo tuổi giảm dần</div>${list.map((p) => `<div class="metric vx-cap-pick" ${jsCall("capStaff", p.id)}><span><b>${esc(p.name)}</b><br><small>${esc(p.title)} • ${esc(shortUnit(p.unit))}</small></span><b>${ageOf(p, today)} tuổi</b></div>`).join("") || '<div class="mini">Không có.</div>'}`)
-  }
-
   Object.assign(window, {
-    capStaff, hrRetiring, staffTransfer,
+    capStaff, staffTransfer,
     capGoto: (key: keyof StaffFilter | "", value: string) => {
       state.filter = key ? { ...EMPTY_STAFF_FILTER, [key]: value } : { ...EMPTY_STAFF_FILTER }
       state.page = 0

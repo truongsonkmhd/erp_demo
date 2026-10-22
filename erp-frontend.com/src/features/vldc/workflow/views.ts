@@ -25,7 +25,7 @@ import { cashSummary, debtSummary } from "../data/ledgerCore"
 import { performanceHtml, unitDetailHtml } from "./kpiViews"
 import { kpiUnits, unitKpis } from "./kpi"
 import { vldcData } from "../data/registry"
-import { roleUnitCode, rolesOfUnit } from "../data/org"
+import { roleUnitCode, rolesOfUnit, unitCodeOf } from "../data/org"
 import { subUnitOptions } from "../data/subUnitPage"
 import { liveAlerts } from "../data/liveAlerts"
 
@@ -114,7 +114,7 @@ function renderDirectives() {
   const el = content()
   if (!el) return
   el.innerHTML = `${offlineBanner()}<div class="grid kpis"><div class="kpi"><div class="label">Đang mở</div><div class="value">${open.length}</div><div class="sub">Chỉ đạo & việc liên quan</div></div><div class="kpi"><div class="label">Nguy cơ trễ</div><div class="value">${atRisk.length}</div><div class="sub">≤ 2 ngày, &lt; 80%</div></div><div class="kpi"><div class="label">Chờ tôi duyệt</div><div class="value">${waiting.length}</div><div class="sub">Đã báo cáo hoàn thành</div></div><div class="kpi"><div class="label">Hoàn thành</div><div class="value">${visible.length - open.length}</div><div class="sub">Đã duyệt đóng</div></div></div>
- <div class="card" style="margin-top:14px"><div class="card-head"><div><h3>Chỉ đạo điều hành</h3><div class="mini">Giao việc theo cấp, theo dõi tiến độ cuộn lên và duyệt kết quả</div></div><div>${canReset ? '<button class="btn btn-light" onclick="wfResetDemo()">Đặt lại dữ liệu demo</button> ' : ""}${canCreate ? '<button class="btn btn-primary" onclick="wfCreateDirective()">+ Giao chỉ đạo</button>' : ""}</div></div>
+ <div class="card" style="margin-top:14px"><div class="card-head"><div><h3>Giao việc</h3><div class="mini">Giao việc theo cấp, theo dõi tiến độ cuộn lên và duyệt kết quả</div></div><div>${canReset ? '<button class="btn btn-light" onclick="wfResetDemo()">Đặt lại dữ liệu demo</button> ' : ""}${canCreate ? '<button class="btn btn-primary" onclick="wfCreateDirective()">+ Giao việc</button>' : ""}</div></div>
  <div class="directive-board">${column("Tôi cần xử lý", mine, all)}${column("Chờ tôi duyệt", waiting, all)}${column("Nguy cơ trễ", atRisk, all)}</div></div>
  <div class="card" style="margin-top:14px"><h3>Cây chỉ đạo – việc được giao</h3><table><tr><th>Mã</th><th>Nội dung</th><th>Người giao</th><th>Chủ trì</th><th>Phối hợp</th><th>Trạng thái</th><th>Tiến độ</th><th>Hạn</th><th></th></tr>${treeRows(roots, visible, all) || '<tr><td colspan="9" class="mini">Chưa có việc nào trong phạm vi của bạn.</td></tr>'}</table></div>`
 }
@@ -188,7 +188,13 @@ function wfOpen(id: string) {
   const item = store.items().find((x) => x.id === id)
   if (!item) return alert(`Không tìm thấy ${id}`)
   const sub = item.subUnit ? vldcData.get("subUnits").find((s) => s.id === item.subUnit) : undefined
-  shell.openModal(`${TYPE_LABELS[item.type]} ${item.id}`, `<h3 style="margin-top:0">${esc(item.title)}</h3>${sub ? `<div class="mini" style="margin:-6px 0 8px">Tổ / phòng thực hiện: <b>${esc(sub.name)}</b></div>` : ""}${detailHtml(item)}`)
+  const project = item.project ? projectsView().find((p) => p.id === item.project) : undefined
+  const wbs = project?.wbs.find((w, i) => (w.id ?? String(i)) === item.wbsItem)
+  const where = [
+    sub ? `Tổ / phòng thực hiện: <b>${esc(sub.name)}</b>` : "",
+    project ? `Dự án: <a href="javascript:void 0" ${jsCall("projectOpen", project.id)}><b>${esc(project.id)}</b></a>${wbs ? ` • hạng mục <b>${esc(wbs.name)}</b>` : ""}` : "",
+  ].filter(Boolean).join(" • ")
+  shell.openModal(`${TYPE_LABELS[item.type]} ${item.id}`, `<h3 style="margin-top:0">${esc(item.title)}</h3>${where ? `<div class="mini" style="margin:-6px 0 8px">${where}</div>` : ""}${detailHtml(item)}`)
 }
 
 function wfAct(id: string, action: WorkAction) {
@@ -209,16 +215,49 @@ function subOptionsHtml(owner: string, selected = ""): string {
   return `<option value="">– Cả đơn vị –</option>${subUnitOptions(roleUnitCode(owner)).map((s) => `<option value="${esc(s.id)}"${s.id === selected ? " selected" : ""}>${esc(s.name)}</option>`).join("")}`
 }
 
-/** Optional project picker shared by the directive and payment forms. */
-function projectPicker(selected = ""): string {
-  return `<div><label>Dự án</label><select id="wf-project"><option value="">– Không gắn dự án –</option>${projectsView().map((p) => `<option value="${esc(p.id)}"${p.id === selected ? " selected" : ""}>${esc(`${p.id} – ${p.name}`)}</option>`).join("")}</select></div>`
+/** WBS items of a project, for the "Hạng mục" picker of the directive form. */
+function wbsOptionsHtml(projectId: string, selected = ""): string {
+  const p = projectsView().find((x) => x.id === projectId)
+  return `<option value="">– Cả dự án –</option>${(p?.wbs ?? []).map((w, i) => {
+    const key = w.id ?? String(i)
+    return `<option value="${esc(key)}"${key === selected ? " selected" : ""}>${esc(w.name)}${w.weight ? ` (${w.weight}%)` : ""}</option>`
+  }).join("")}`
 }
 
-function wfCreateDirective(presetSub = "", presetProject = "") {
+/** Optional project picker shared by the directive and payment forms; the directive form adds its WBS item. */
+function projectPicker(selected = "", withWbs = false, selectedWbs = ""): string {
+  const wbs = withWbs ? `<div><label>Hạng mục dự án</label><select id="wf-wbs" onchange="wfWbsPicked()">${wbsOptionsHtml(selected, selectedWbs)}</select></div>` : ""
+  return `<div><label>Dự án</label><select id="wf-project"${withWbs ? ' onchange="wfProjectPicked(this.value)"' : ""}><option value="">– Không gắn dự án –</option>${projectsView().map((p) => `<option value="${esc(p.id)}"${p.id === selected ? " selected" : ""}>${esc(`${p.id} – ${p.name}`)}</option>`).join("")}</select></div>${wbs}`
+}
+
+/** Who a directive for a project (or one of its WBS items) goes to: the item's tổ, else the project's tổ, else its unit. */
+function projectTarget(projectId: string, wbsId = ""): { sub?: string; unit?: string } {
+  const p = projectsView().find((x) => x.id === projectId)
+  if (!p) return {}
+  const subId = p.wbs.find((w, i) => (w.id ?? String(i)) === wbsId)?.subUnit || p.subUnit
+  const sub = subId ? vldcData.get("subUnits").find((s) => s.id === subId) : undefined
+  return { sub: sub?.id, unit: sub?.unit ?? unitCodeOf(p.unit) }
+}
+
+const ownerOfUnit = (unit?: string) => (unit ? DELEGATES.lanhdao.find((r) => rolesOfUnit(unit as never).includes(r)) : undefined)
+
+/** Picking a project / WBS item in the directive form moves the owner and tổ to the ones doing it. */
+function applyProjectTarget(projectId: string, wbsId = "") {
+  const { sub, unit } = projectTarget(projectId, wbsId)
+  const owner = ownerOfUnit(unit)
+  const ownerEl = document.getElementById("wf-owner") as HTMLSelectElement | null
+  const subEl = document.getElementById("wf-sub") as HTMLSelectElement | null
+  if (!owner || !ownerEl || !subEl) return
+  ownerEl.value = owner
+  subEl.innerHTML = subOptionsHtml(owner, sub)
+}
+
+function wfCreateDirective(presetSub = "", presetProject = "", presetWbs = "") {
   const others = DELEGATES.lanhdao
-  const sub = presetSub ? vldcData.get("subUnits").find((s) => s.id === presetSub) : undefined
-  const owner = (sub && others.find((r) => rolesOfUnit(sub.unit as never).includes(r))) || others[0]
-  shell.openModal("Giao chỉ đạo điều hành", `<div class="form-grid"><div class="full"><label>Nội dung chỉ đạo</label><textarea id="wf-title" rows="2"></textarea></div><div><label>Đơn vị / người chủ trì</label><select id="wf-owner" onchange="wfSubOptions(this.value)">${roleOptions(others, owner)}</select></div><div><label>Tổ / phòng thực hiện</label><select id="wf-sub">${subOptionsHtml(owner, sub?.id)}</select></div>${projectPicker(presetProject)}<div><label>Hạn hoàn thành</label><input id="wf-due" type="date" min="${today()}"></div>${priorityField}<div class="full"><label>Kết quả / minh chứng yêu cầu</label><input id="wf-desc"></div><div class="full"><label>Phối hợp</label>${ccBoxes(others)}</div></div><button class="btn btn-primary" style="margin-top:10px" onclick="wfSubmitDirective()">Giao chỉ đạo</button>`)
+  const target = presetSub ? { sub: presetSub, unit: vldcData.get("subUnits").find((s) => s.id === presetSub)?.unit } : projectTarget(presetProject, presetWbs)
+  const owner = ownerOfUnit(target.unit) || others[0]
+  const sub = target.sub ? vldcData.get("subUnits").find((s) => s.id === target.sub) : undefined
+  shell.openModal("Giao việc", `<div class="form-grid"><div class="full"><label>Nội dung chỉ đạo</label><textarea id="wf-title" rows="2"></textarea></div><div><label>Đơn vị / người chủ trì</label><select id="wf-owner" onchange="wfSubOptions(this.value)">${roleOptions(others, owner)}</select></div><div><label>Tổ / phòng thực hiện</label><select id="wf-sub">${subOptionsHtml(owner, sub?.id)}</select></div>${projectPicker(presetProject, true, presetWbs)}<div><label>Hạn hoàn thành</label><input id="wf-due" type="date" min="${today()}"></div>${priorityField}<div class="full"><label>Kết quả / minh chứng yêu cầu</label><input id="wf-desc"></div><div class="full"><label>Phối hợp</label>${ccBoxes(others)}</div></div><button class="btn btn-primary" style="margin-top:10px" onclick="wfSubmitDirective()">Giao việc</button>`)
 }
 
 function wfSubmitDirective() {
@@ -229,6 +268,7 @@ function wfSubmitDirective() {
       owner: inputValue("wf-owner"),
       subUnit: inputValue("wf-sub") || undefined,
       project: inputValue("wf-project") || undefined,
+      wbsItem: inputValue("wf-wbs") || undefined,
       cc: checkedValues("wf-cc"),
       due: inputValue("wf-due"),
       priority: inputValue("wf-priority") as WorkItem["priority"],
@@ -374,7 +414,8 @@ function commandHeatmap() {
 
 function wfNotice(id: string, itemId: string) {
   markRead(ctx.role(), id)
-  store.items().some((x) => x.id === itemId) ? wfOpen(itemId) : shell.show(currentPage())
+  if (store.items().some((x) => x.id === itemId)) wfOpen(itemId)
+  else shell.show(currentPage())
 }
 
 function wrap(render: Record<string, () => void>, page: string, extra: () => string) {
@@ -426,6 +467,14 @@ export function installWorkflow(render: Record<string, () => void>, nextShell: S
     createDirective: wfCreateDirective,
     wfCreateDirectiveFor: (subId: string) => wfCreateDirective(subId),
     wfCreateDirectiveForProject: (projectId: string) => wfCreateDirective("", projectId),
+    /** Đôn đốc / giao việc for one WBS item: project, item, its tổ and unit preset. */
+    wfCreateDirectiveForWbs: (projectId: string, wbsId: string) => wfCreateDirective("", projectId, wbsId),
+    wfProjectPicked: (projectId: string) => {
+      const el = document.getElementById("wf-wbs")
+      if (el) el.innerHTML = wbsOptionsHtml(projectId)
+      applyProjectTarget(projectId)
+    },
+    wfWbsPicked: () => applyProjectTarget(inputValue("wf-project"), inputValue("wf-wbs")),
     wfSubOptions: (owner: string) => {
       const el = document.getElementById("wf-sub")
       if (el) el.innerHTML = subOptionsHtml(owner)

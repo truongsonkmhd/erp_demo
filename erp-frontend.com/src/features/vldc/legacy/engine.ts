@@ -28,6 +28,7 @@ import { installSciencePage } from "@/features/vldc/data/sciencePage";
 import { installSubUnitPage } from "@/features/vldc/data/subUnitPage";
 import { installProjectPage } from "@/features/vldc/data/projectPage";
 import { installLedgerPages } from "@/features/vldc/data/ledgerPages";
+import { installUncExport } from "@/features/vldc/data/uncPage";
 import { scopedUnitLabel } from "@/features/vldc/data/subUnitCore";
 import { calendarWeek } from "@/features/vldc/data/actionsCore";
 import { workflowStore } from "@/features/vldc/workflow/repository";
@@ -351,6 +352,7 @@ Object.assign(window, {
 // Business pages rebuilt on Firestore data (projects, finance, equipment, hr, risks, command, ...).
 installDataPages(render, { role: () => current });
 installAccountingPages(render, { role: () => current, openModal });
+installUncExport({ openModal, closeModal });
 installKnowledgePages(render, { role: () => current, openModal, closeModal });
 installActions({ role: () => current, openModal, closeModal });
 installInboxPage(render, { role: () => current });

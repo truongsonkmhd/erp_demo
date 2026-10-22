@@ -20,10 +20,14 @@ export type CashFigures = {
 }
 /** Giải ngân in plain VND figures (see data/disbursementCore.ts). */
 export type SpendFigures = { yearPlan: number; planToDate: number; spent: number; pctOfPlanToDate: number; pctOfYear: number; gap: number }
-export type BusinessData = { projects: Project[]; disbursement: Disbursement[]; risks: Risk[]; cash: CashFigures; spend: SpendFigures }
+/** Head counts from the staff profiles and the org units (Phòng ban): units = every card of the Phòng ban page. */
+export type OrgFigures = { staff: number; units: number; support: number; direct: number; subUnits: number }
+export type BusinessData = { projects: Project[]; disbursement: Disbursement[]; risks: Risk[]; cash: CashFigures; spend: SpendFigures; org: OrgFigures }
 
 /** Full amount: 4.407.500.000 đ. */
 const vnd = formatMoney
+/** Exact share with up to 2 decimals: 27,87%. */
+const pct = (part: number, whole: number) => `${(whole ? (part / whole) * 100 : 0).toLocaleString("vi-VN", { maximumFractionDigits: 2 })}%`
 
 const RATING_BADGE: Record<UnitKpi["rating"], string> = { good: "b-ok", watch: "b-warn", bad: "b-danger", none: "b-info" }
 
@@ -60,11 +64,13 @@ export function leaderDashboardHtml(all: WorkItem[], biz: BusinessData, today: s
 
   const head = `<div class="ld-head"><div><div class="eyebrow">BAN LÃNH ĐẠO • ${dateLabel.toUpperCase()}</div><h2>Tổng quan điều hành Liên đoàn</h2></div></div>`
 
-  const kpiTiles = `<div class="grid kpis">${[
+  const kpiTiles = `<div class="grid kpis ld-tiles">${[
     kpi("Doanh thu", vnd(cash.revenue), `${cash.contracts} hợp đồng ${vnd(cash.revenue - cash.thuOther)} • thu khác ${vnd(cash.thuOther)}`, "debts"),
-    kpi("Tổng thu", vnd(cash.thu), `Đã thu ${cash.revenue ? Math.round((cash.thu / cash.revenue) * 100) : 0}% doanh thu • tháng này ${vnd(cash.thuMonth)}`, "cashin"),
+    kpi("Tổng thu", vnd(cash.thu), `Đã thu ${pct(cash.thu, cash.revenue)} doanh thu • tháng này ${vnd(cash.thuMonth)}`, "cashin"),
     kpi("Tổng chi", vnd(cash.chi), `Tháng này ${vnd(cash.chiMonth)} • chênh lệch thu – chi ${vnd(cash.thu - cash.chi)}`, "cashout"),
     kpi("Còn phải thu", vnd(cash.remaining), `= Doanh thu − Tổng thu${cash.doneOwing ? ` • ${cash.doneOwing} dự án đã xong chưa thu đủ` : ""}`, "debts", cash.doneOwing ? "danger" : ""),
+    kpi("Tổng số nhân sự", String(biz.org.staff), `Hồ sơ nhân sự đang quản lý • ${biz.org.units} phòng ban`, "hr"),
+    kpi("Tổng số phòng ban", String(biz.org.units), `${biz.org.support} phòng chức năng • ${biz.org.direct} đơn vị trực thuộc • ${biz.org.subUnits} tổ/phòng`, "organization"),
   ].join("")}</div>`
 
   const kpis = unitKpis(all, today)
@@ -78,7 +84,7 @@ export function leaderDashboardHtml(all: WorkItem[], biz: BusinessData, today: s
   const spendHead = `<div class="ld-spend">
 <div><span>Kế hoạch cả năm</span><b>${vnd(sp.yearPlan)}</b><small>Tổng ngân sách dự án rơi vào năm ${today.slice(0, 4)}</small></div>
 <div><span>Kế hoạch đến hôm nay</span><b>${vnd(sp.planToDate)}</b><small>Số tiền lẽ ra đã chi đến ${esc(dateShort)}</small></div>
-<div><span>Đã chi đến hôm nay</span><b>${vnd(sp.spent)}</b><small>Đạt ${sp.pctOfPlanToDate}% kế hoạch đến nay • ${sp.pctOfYear}% kế hoạch cả năm</small></div>
+<div><span>Đã chi đến hôm nay</span><b>${vnd(sp.spent)}</b><small>Đạt ${pct(sp.spent, sp.planToDate)} kế hoạch đến nay • ${pct(sp.spent, sp.yearPlan)} kế hoạch cả năm</small></div>
 <div class="${behind ? "bad" : "good"}"><span>${behind ? "Chậm so với kế hoạch" : "Vượt kế hoạch"}</span><b>${vnd(Math.abs(sp.gap))}</b><small>${behind ? "Số tiền còn chưa chi so với dự kiến" : "Đã chi nhiều hơn dự kiến"}</small></div>
 </div>`
   const spendNote = `<div class="mini ld-note">Nét đứt: tiền dự kiến chi (ngân sách dự án chia theo ngày thực hiện) • Nét liền: tiền đã chi theo phiếu chi • Cả hai cộng dồn từ đầu năm</div>`

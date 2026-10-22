@@ -12,6 +12,7 @@ import { localToday, vnDate } from "./dates"
 import * as M from "./metrics"
 import { bar, kpi, kpis, metric, tr, ty } from "./pages"
 import { vldcData } from "./registry"
+import { UNC_TYPE, uncButton } from "./uncPage"
 import type { Contract, Project } from "./types"
 
 /**
@@ -92,7 +93,7 @@ function vouchers() {
     kpi("Chờ xử lý", v.pending, tr(v.pendingAmount)),
     kpi("Cần bổ sung", v.needSupplement, "Thiếu hồ sơ gốc"),
     kpi("Chờ duyệt / kiểm soát", v.awaitingApproval, "Kế toán trưởng, lãnh đạo"),
-  )}<div style="margin-top:14px">${card("Danh sách chứng từ", table(["Số", "Ngày", "Loại", "Đối tượng", "Dự án", "Số tiền", "Trạng thái", ""], vs.map((x) => `<tr><td><b>${esc(x.id)}</b></td><td>${vnDate(x.date)}</td><td>${esc(x.type)}</td><td>${esc(x.counterparty)}</td><td>${esc(x.projectId)}</td><td>${tr(x.amount)}</td><td>${voucherStatus(x.status)}</td><td>${btn("Mở", "voucherDetail", x.id)}</td></tr>`)), '<button class="btn btn-primary" onclick="voucherModal()">+ Lập chứng từ</button>')}</div>`
+  )}<div style="margin-top:14px">${card("Danh sách chứng từ", table(["Số", "Ngày", "Loại", "Đối tượng", "Dự án", "Số tiền", "Trạng thái", ""], vs.map((x) => `<tr><td><b>${esc(x.id)}</b></td><td>${vnDate(x.date)}</td><td>${esc(x.type)}</td><td>${esc(x.counterparty)}</td><td>${esc(x.projectId)}</td><td>${tr(x.amount)}</td><td>${voucherStatus(x.status)}</td><td>${btn("Mở", "voucherDetail", x.id)}${x.type === UNC_TYPE ? ` ${uncButton(x.id)}` : ""}</td></tr>`)), '<button class="btn btn-primary" onclick="voucherModal()">+ Lập chứng từ</button>')}</div>`
 }
 
 function stepper(p: WorkItem) {
@@ -403,7 +404,7 @@ function modals(ctx: Ctx) {
     if (!v) return notFound("Chứng từ", id)
     const wi = v.workItemId ? workflowStore.items().find((x) => x.id === v.workItemId) : undefined
     const entry = A.ledgerEntries([v])[0]
-    open(`Chứng từ • ${v.id}`, `<div class="grid twoeq"><div>${metric("Loại", esc(v.type))}${metric("Ngày", vnDate(v.date))}${metric("Đối tượng", esc(v.counterparty))}${metric("Dự án", `<a href="javascript:void 0" ${jsCall("projectDetail", v.projectId)}>${esc(v.projectId)}</a>`)}${metric("Số tiền", tr(v.amount))}${metric("Nguồn kinh phí", esc(v.fundSource))}${metric("Trạng thái", voucherStatus(v.status))}</div><div><h4>Hạch toán</h4>${metric("Nợ", `TK ${entry.debit}`)}${metric("Có", `TK ${entry.credit}`)}${v.contractId ? metric("Hợp đồng", `<a href="javascript:void 0" ${jsCall("contractDetail", v.contractId)}>${esc(v.contractId)}</a>`) : ""}${wi ? `<h4 style="margin-top:10px">Hồ sơ thanh toán ${esc(wi.id)}</h4>${stepper(wi)}${btn("Mở hồ sơ", "wfOpen", wi.id)}` : ""}${v.note ? `<p class="mini">${esc(v.note)}</p>` : ""}</div></div>`)
+    open(`Chứng từ • ${v.id}`, `<div class="grid twoeq"><div>${metric("Loại", esc(v.type))}${metric("Ngày", vnDate(v.date))}${metric("Đối tượng", esc(v.counterparty))}${metric("Dự án", `<a href="javascript:void 0" ${jsCall("projectDetail", v.projectId)}>${esc(v.projectId)}</a>`)}${metric("Số tiền", tr(v.amount))}${metric("Nguồn kinh phí", esc(v.fundSource))}${metric("Trạng thái", voucherStatus(v.status))}</div><div><h4>Hạch toán</h4>${metric("Nợ", `TK ${entry.debit}`)}${metric("Có", `TK ${entry.credit}`)}${v.contractId ? metric("Hợp đồng", `<a href="javascript:void 0" ${jsCall("contractDetail", v.contractId)}>${esc(v.contractId)}</a>`) : ""}${wi ? `<h4 style="margin-top:10px">Hồ sơ thanh toán ${esc(wi.id)}</h4>${stepper(wi)}${btn("Mở hồ sơ", "wfOpen", wi.id)}` : ""}${v.note ? `<p class="mini">${esc(v.note)}</p>` : ""}</div></div>${v.type === UNC_TYPE ? `<div style="margin-top:12px">${uncButton(v.id)}</div>` : ""}`)
   }
 
   function advanceDetail(id: string) {

@@ -21,7 +21,8 @@ import {
 import type { WorkItem } from "./types"
 import { DIRECTIVE_STATUS_FILTERS, TYPE_LABELS, directiveExportRows, filterDirectives, notYetAccepted, type DirectiveLabels, type DirectiveStatusFilter } from "./directiveList"
 import { workflowStore as store } from "./repository"
-import { leaderDashboardHtml, type CashFigures } from "./leaderDashboard"
+import { leaderDashboardHtml, type CashFigures, type OrgFigures } from "./leaderDashboard"
+import { staffView } from "../data/staffView"
 import { cashSummary, debtSummary } from "../data/ledgerCore"
 import { performanceHtml, unitDetailHtml } from "./kpiViews"
 import { kpiUnits, rolesByUnit, unitKpis, unitOfRole } from "./kpi"
@@ -504,10 +505,19 @@ export function installWorkflow(render: Record<string, () => void>, nextShell: S
     return { revenue: d.total + c.thuOther, contracts: d.count, thu: c.thu, thuOther: c.thuOther, thuMonth: c.thuMonth, chi: c.chi, chiMonth: c.chiMonth, remaining: d.remaining, doneOwing: d.doneOwing.length }
   }
 
+  /** Same counts as the Phòng ban page: staff profiles, its unit cards and the active tổ/phòng. */
+  function leaderOrg(): OrgFigures {
+    const units = vldcData.get("orgUnits")
+    return {
+      staff: staffView().length, units: units.length, support: units.filter((u) => u.type === "Bộ máy giúp việc").length,
+      direct: units.filter((u) => u.type === "Đơn vị trực thuộc").length, subUnits: vldcData.get("subUnits").filter((s) => s.active).length,
+    }
+  }
+
   render.dashboard = function () {
     const el = content()
     if (ctx.role() === "lanhdao" && el) {
-      el.innerHTML = leaderDashboardHtml(store.items(), { projects: projectsView(), disbursement: disbursementView(), spend: spendView(), risks: vldcData.get("risks"), cash: leaderCash() }, today(), offlineBanner())
+      el.innerHTML = leaderDashboardHtml(store.items(), { projects: projectsView(), disbursement: disbursementView(), spend: spendView(), org: leaderOrg(), risks: vldcData.get("risks"), cash: leaderCash() }, today(), offlineBanner())
       return
     }
     unitDashboard()

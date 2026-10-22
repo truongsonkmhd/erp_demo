@@ -796,3 +796,5 @@
 .vldc-scope .ld-charts .ld-wide .viz-svg { max-width: none; }
 .vldc-scope .ld-note { margin-top: 6px; }
 @media (max-width: 900px) { .vldc-scope .ld-spend { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.vldc-scope .leader-dash .ld-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 900px) { .vldc-scope .leader-dash .ld-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

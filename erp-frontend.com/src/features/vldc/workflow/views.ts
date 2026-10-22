@@ -439,7 +439,7 @@ export function installWorkflow(render: Record<string, () => void>, nextShell: S
     const debts = vldcData.get("debtRecords"), entries = vldcData.get("cashEntries")
     const d = debtSummary(debts)
     const c = cashSummary(debts, entries, today().slice(0, 7))
-    return { revenue: d.total, contracts: d.count, thu: c.thu, thuMonth: c.thuMonth, chi: c.chi, chiMonth: c.chiMonth, remaining: d.remaining, doneOwing: d.doneOwing.length }
+    return { revenue: d.total + c.thuOther, contracts: d.count, thu: c.thu, thuOther: c.thuOther, thuMonth: c.thuMonth, chi: c.chi, chiMonth: c.chiMonth, remaining: d.remaining, doneOwing: d.doneOwing.length }
   }
 
   render.dashboard = function () {

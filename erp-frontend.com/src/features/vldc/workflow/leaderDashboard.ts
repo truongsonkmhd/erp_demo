@@ -11,14 +11,17 @@ import { escapeHtml as esc } from "./html.ts"
 // First three validated categorical slots (blue, orange, aqua).
 const C = { blue: "#2a78d6", orange: "#eb6834", aqua: "#1baf7a" }
 
-/** Money figures (VND) from Kế toán › Thu, Chi, Công nợ; revenue is the total contract value. */
-export type CashFigures = { revenue: number; contracts: number; thu: number; thuMonth: number; chi: number; chiMonth: number; remaining: number; doneOwing: number }
+/**
+ * Money figures (VND) from Kế toán › Thu, Chi, Công nợ. revenue = contract values + thu khác (already received), so
+ * revenue − thu = remaining, the contract balance still owed.
+ */
+export type CashFigures = {
+  revenue: number; contracts: number; thu: number; thuOther: number; thuMonth: number; chi: number; chiMonth: number; remaining: number; doneOwing: number
+}
 export type BusinessData = { projects: Project[]; disbursement: Disbursement[]; risks: Risk[]; alerts: Alert[]; cash: CashFigures }
 
-/** 4.407.500.000 → "4,41 tỷ", 212.500.000 → "212,5 triệu". */
-const vnd = (n: number) => (Math.abs(n) >= 1e9
-  ? `${(n / 1e9).toLocaleString("vi-VN", { maximumFractionDigits: 2 })} tỷ`
-  : `${(n / 1e6).toLocaleString("vi-VN", { maximumFractionDigits: 1 })} triệu`)
+/** Exact amount, never rounded: 4.907.500.000 đ. */
+const vnd = (n: number) => `${Math.round(n).toLocaleString("vi-VN")} đ`
 
 /** Alerts derived from stored records: overrun/late projects, high open risks, inspections due, overdue work. */
 /** Rule-based alerts (data/alerts.ts, same as the Alerts page) plus late projects and high risks. */
@@ -49,10 +52,10 @@ export function leaderDashboardHtml(all: WorkItem[], biz: BusinessData, today: s
   const head = `<div class="ld-head"><div><div class="eyebrow">BAN LÃNH ĐẠO • ${dateLabel.toUpperCase()}</div><h2>Tổng quan điều hành Liên đoàn</h2></div></div>`
 
   const kpiTiles = `<div class="grid kpis">${[
-    kpi("Doanh thu", vnd(cash.revenue), `Giá trị ${cash.contracts} hợp đồng • đã thu ${cash.revenue ? Math.round((cash.thu / cash.revenue) * 100) : 0}%`, "debts"),
-    kpi("Tổng thu", vnd(cash.thu), `Tháng này ${vnd(cash.thuMonth)}`, "cashin"),
+    kpi("Doanh thu", vnd(cash.revenue), `${cash.contracts} hợp đồng ${vnd(cash.revenue - cash.thuOther)} • thu khác ${vnd(cash.thuOther)}`, "debts"),
+    kpi("Tổng thu", vnd(cash.thu), `Đã thu ${cash.revenue ? Math.round((cash.thu / cash.revenue) * 100) : 0}% doanh thu • tháng này ${vnd(cash.thuMonth)}`, "cashin"),
     kpi("Tổng chi", vnd(cash.chi), `Tháng này ${vnd(cash.chiMonth)} • chênh lệch thu – chi ${vnd(cash.thu - cash.chi)}`, "cashout"),
-    kpi("Còn phải thu", vnd(cash.remaining), cash.doneOwing ? `${cash.doneOwing} dự án đã xong chưa thu đủ` : "Theo bảng công nợ", "debts", cash.doneOwing ? "danger" : ""),
+    kpi("Còn phải thu", vnd(cash.remaining), `= Doanh thu − Tổng thu${cash.doneOwing ? ` • ${cash.doneOwing} dự án đã xong chưa thu đủ` : ""}`, "debts", cash.doneOwing ? "danger" : ""),
   ].join("")}</div>`
 
   const kpis = unitKpis(all, today)

@@ -738,3 +738,21 @@
 .vldc-scope .vx-pj-tiles b { font-size: 20px; }
 .vldc-scope .vx-pj-form input, .vldc-scope .vx-pj-form select { width: 100%; min-width: 90px; }
 @media (max-width: 900px) { .vldc-scope .vx-pj-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* Kế toán › Thu, Chi, Công nợ */
+.vldc-scope .vx-ld-table th { text-align: center; white-space: nowrap; vertical-align: middle; }
+.vldc-scope .vx-ld-table th.vx-ld-lan { border-bottom: 1px solid var(--line); }
+.vldc-scope .vx-ld-table th.vx-ld-sub { font-size: 11px; font-weight: 600; color: var(--muted); }
+.vldc-scope .vx-ld-num { text-align: right; white-space: nowrap; }
+.vldc-scope .vx-ld-date { white-space: nowrap; color: var(--muted); font-size: 12px; }
+.vldc-scope .vx-ld-empty { text-align: center; color: var(--muted); }
+.vldc-scope .vx-ld-total td { font-weight: 700; background: #f4f8fd; border-top: 2px solid var(--line); }
+.vldc-scope .vx-ld-plus { min-width: 34px; padding: 4px 10px; font-weight: 700; }
+.vldc-scope .vx-ld-status { padding: 0; border: 0; background: none; cursor: pointer; }
+.vldc-scope .vx-ld-amount { padding-top: 9px; font-weight: 700; }
+.vldc-scope .vx-ld-table table { min-width: 1480px; }
+.vldc-scope .vx-ld-table .badge, .vldc-scope .vx-ld-nowrap { white-space: nowrap; }
+.vldc-scope .vx-ld-name { min-width: 190px; }
+.vldc-scope .vx-ld-content { min-width: 230px; }
+.vldc-scope .vx-ld-head { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; }
+.vldc-scope .vx-ld-head select, .vldc-scope .vx-ld-head input { width: auto; }

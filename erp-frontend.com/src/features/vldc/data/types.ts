@@ -193,3 +193,19 @@ export type SubUnitKind = "Phòng" | "Tổ" | "Đội" | "Xưởng" | "Bộ ph�
 export type SubUnit = {
   id: string; unit: string; name: string; kind: SubUnitKind; duty: string; headId?: string; active: boolean; createdAt: string; dissolvedAt?: string
 }
+
+/** One payment of a project contract: amount in VND (đồng), date "yyyy-mm-dd". */
+export type DebtInstallment = { amount: number; date: string }
+/**
+ * Bảng công nợ dự án kept by the accountants: amount is the contract value in VND, installments are the payments
+ * received so far (lần 1, lần 2, …). Removed rows stay with deleted=true (collections have no delete).
+ */
+export type DebtRecord = {
+  id: string; contractNo: string; projectName: string; projectId?: string; content: string; amount: number
+  installments: DebtInstallment[]; done: boolean; createdBy: string; createdAt: string; updatedAt?: string; deleted?: boolean
+}
+/** Phiếu thu / phiếu chi entered by the accountants; amount in VND, date "yyyy-mm-dd". debtId links it to a project contract. */
+export type CashEntry = {
+  id: string; kind: "thu" | "chi"; date: string; content: string; counterparty: string; amount: number; method: string
+  debtId?: string; createdBy: string; createdAt: string; deleted?: boolean
+}

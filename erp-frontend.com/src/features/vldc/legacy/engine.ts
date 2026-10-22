@@ -27,6 +27,7 @@ import { installDocAssign } from "@/features/vldc/data/docAssignPage";
 import { installSciencePage } from "@/features/vldc/data/sciencePage";
 import { installSubUnitPage } from "@/features/vldc/data/subUnitPage";
 import { installProjectPage } from "@/features/vldc/data/projectPage";
+import { installLedgerPages } from "@/features/vldc/data/ledgerPages";
 import { scopedUnitLabel } from "@/features/vldc/data/subUnitCore";
 import { calendarWeek } from "@/features/vldc/data/actionsCore";
 import { workflowStore } from "@/features/vldc/workflow/repository";
@@ -103,6 +104,9 @@ Object.assign(pages,{
 // ===== DEMO 6.0 ACCOUNTING & CROSS-DEPARTMENT EXTENSION =====
 Object.assign(pages,{
  accounting:['Tổng quan kế toán','Dashboard kế toán viên / kế toán trưởng'],
+ cashin:['Thu','Sổ thu: phiếu thu và các lần thanh toán hợp đồng'],
+ cashout:['Chi','Sổ chi: phiếu chi chung và chi cho dự án'],
+ debts:['Công nợ','Bảng công nợ dự án: giá trị hợp đồng, các lần thanh toán, còn phải thu'],
  vouchers:['Chứng từ kế toán','Lập, kiểm tra, hạch toán và truy vết chứng từ'],
  payments:['Thanh toán','Từ đề nghị thanh toán đến hạch toán và lưu chứng từ'],
  advances:['Tạm ứng - Hoàn ứng','Theo dõi tạm ứng, hạn hoàn ứng và chứng từ'],
@@ -357,4 +361,5 @@ installDocAssign({ role: () => current, openModal, closeModal });
 installSciencePage(render, { role: () => current, openModal, closeModal });
 installSubUnitPage(render, { role: () => current, openModal, closeModal });
 installProjectPage(render, { role: () => current, openModal, closeModal });
+installLedgerPages(render, { role: () => current, openModal, closeModal });
 installWorkflow(render, { show, openModal, closeModal });

@@ -20,7 +20,8 @@ import {
 } from "./rules"
 import type { WorkItem } from "./types"
 import { workflowStore as store } from "./repository"
-import { leaderDashboardHtml } from "./leaderDashboard"
+import { leaderDashboardHtml, type CashFigures } from "./leaderDashboard"
+import { cashSummary, debtSummary } from "../data/ledgerCore"
 import { performanceHtml, unitDetailHtml } from "./kpiViews"
 import { kpiUnits, unitKpis } from "./kpi"
 import { vldcData } from "../data/registry"
@@ -393,10 +394,17 @@ export function installWorkflow(render: Record<string, () => void>, nextShell: S
   wrap(render, "payments", paymentsBlock)
   // The leader gets a purpose-built dashboard instead of the stacked legacy demo blocks.
   const unitDashboard = render.dashboard
+  function leaderCash(): CashFigures {
+    const debts = vldcData.get("debtRecords"), entries = vldcData.get("cashEntries")
+    const d = debtSummary(debts)
+    const c = cashSummary(debts, entries, today().slice(0, 7))
+    return { revenue: d.total, contracts: d.count, thu: c.thu, thuMonth: c.thuMonth, chi: c.chi, chiMonth: c.chiMonth, remaining: d.remaining, doneOwing: d.doneOwing.length }
+  }
+
   render.dashboard = function () {
     const el = content()
     if (ctx.role() === "lanhdao" && el) {
-      el.innerHTML = leaderDashboardHtml(store.items(), { projects: projectsView(), disbursement: vldcData.get("disbursement"), risks: vldcData.get("risks"), alerts: liveAlerts(vldcData.get("alertRules")) }, today(), inboxBlock(5), offlineBanner())
+      el.innerHTML = leaderDashboardHtml(store.items(), { projects: projectsView(), disbursement: vldcData.get("disbursement"), risks: vldcData.get("risks"), alerts: liveAlerts(vldcData.get("alertRules")), cash: leaderCash() }, today(), inboxBlock(5), offlineBanner())
       return
     }
     unitDashboard()

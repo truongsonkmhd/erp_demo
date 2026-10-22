@@ -1,18 +1,24 @@
 import { groupedBars, lineChart } from "./charts.ts"
 import { unitKpis } from "./kpi.ts"
-import { isAtRisk, isClosed } from "./rules.ts"
 import type { WorkItem } from "./types.ts"
 import { isOverrun, openRisks, riskLevel } from "../data/metrics.ts"
 import type { Alert } from "../data/alerts.ts"
 import type { Disbursement, Project, Risk } from "../data/types.ts"
 import { escapeHtml as esc } from "./html.ts"
 
-/** Liên đoàn trưởng dashboard: 4 KPI, 3 charts, alerts and inbox. All figures come from stored records (workflow + business collections). */
+/** Liên đoàn trưởng dashboard: 4 money KPI (Thu – Chi – Công nợ), 3 charts, alerts and inbox. All figures come from stored records (workflow + business collections). */
 
 // First three validated categorical slots (blue, orange, aqua).
 const C = { blue: "#2a78d6", orange: "#eb6834", aqua: "#1baf7a" }
 
-export type BusinessData = { projects: Project[]; disbursement: Disbursement[]; risks: Risk[]; alerts: Alert[] }
+/** Money figures (VND) from Kế toán › Thu, Chi, Công nợ; revenue is the total contract value. */
+export type CashFigures = { revenue: number; contracts: number; thu: number; thuMonth: number; chi: number; chiMonth: number; remaining: number; doneOwing: number }
+export type BusinessData = { projects: Project[]; disbursement: Disbursement[]; risks: Risk[]; alerts: Alert[]; cash: CashFigures }
+
+/** 4.407.500.000 → "4,41 tỷ", 212.500.000 → "212,5 triệu". */
+const vnd = (n: number) => (Math.abs(n) >= 1e9
+  ? `${(n / 1e9).toLocaleString("vi-VN", { maximumFractionDigits: 2 })} tỷ`
+  : `${(n / 1e6).toLocaleString("vi-VN", { maximumFractionDigits: 1 })} triệu`)
 
 /** Alerts derived from stored records: overrun/late projects, high open risks, inspections due, overdue work. */
 /** Rule-based alerts (data/alerts.ts, same as the Alerts page) plus late projects and high risks. */
@@ -33,22 +39,18 @@ const kpi = (label: string, value: string, sub: string, page: string, tone = "")
   `<div class="kpi" style="cursor:pointer" onclick="show('${page}')"><div class="label">${label}</div><div class="value${tone ? ` ${tone}` : ""}">${value}</div><div class="sub">${sub}</div></div>`
 
 export function leaderDashboardHtml(all: WorkItem[], biz: BusinessData, today: string, inboxHtml: string, banner = ""): string {
-  const open = all.filter((x) => x.type !== "payment" && !isClosed(x))
-  const risky = open.filter((x) => isAtRisk(x, all, today))
-  const waiting = all.filter((x) => x.createdBy === "lanhdao" && x.status === "Chờ duyệt").length
-  const payments = all.filter((x) => x.type === "payment" && x.owner === "lanhdao" && !isClosed(x)).length
+  const cash = biz.cash
   const months = [...biz.disbursement].sort((a, b) => a.month - b.month)
-  const lastActual = months.filter((m) => m.actual != null).at(-1)?.actual ?? 0
   const plan = months.at(-1)?.plan ?? 0
   const dateLabel = new Date(`${today}T00:00:00`).toLocaleDateString("vi-VN", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" })
 
   const head = `<div class="ld-head"><div><div class="eyebrow">BAN LÃNH ĐẠO • ${dateLabel.toUpperCase()}</div><h2>Tổng quan điều hành Liên đoàn</h2></div></div>`
 
   const kpiTiles = `<div class="grid kpis">${[
-    kpi("Chỉ đạo đang mở", String(open.length), "Toàn Liên đoàn", "directives"),
-    kpi("Nguy cơ trễ", String(risky.length), risky.length ? "Cần đôn đốc" : "Không có việc trễ", "directives", risky.length ? "danger" : ""),
-    kpi("Chờ tôi duyệt", String(waiting + payments), `${waiting} chỉ đạo • ${payments} hồ sơ thanh toán`, waiting ? "directives" : "payments"),
-    kpi("Giải ngân", `${plan ? Math.round((lastActual / plan) * 100) : 0}%`, `${lastActual} / ${plan} tỷ kế hoạch năm`, "finance"),
+    kpi("Doanh thu", vnd(cash.revenue), `Giá trị ${cash.contracts} hợp đồng • đã thu ${cash.revenue ? Math.round((cash.thu / cash.revenue) * 100) : 0}%`, "debts"),
+    kpi("Tổng thu", vnd(cash.thu), `Tháng này ${vnd(cash.thuMonth)}`, "cashin"),
+    kpi("Tổng chi", vnd(cash.chi), `Tháng này ${vnd(cash.chiMonth)} • chênh lệch thu – chi ${vnd(cash.thu - cash.chi)}`, "cashout"),
+    kpi("Còn phải thu", vnd(cash.remaining), cash.doneOwing ? `${cash.doneOwing} dự án đã xong chưa thu đủ` : "Theo bảng công nợ", "debts", cash.doneOwing ? "danger" : ""),
   ].join("")}</div>`
 
   const kpis = unitKpis(all, today)

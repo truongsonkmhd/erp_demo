@@ -14,6 +14,7 @@ import * as st from "./seed/staff.ts"
 import * as da from "./seed/docAssignments.ts"
 import * as sc from "./seed/science.ts"
 import * as su from "./seed/subUnits.ts"
+import * as lg from "./seed/ledger.ts"
 import type { AuditEvent } from "./audit.ts"
 
 /**
@@ -66,6 +67,8 @@ export const DATASETS = {
   docAssignments: { collection: "doc_assignments", seed: da.docAssignments, pages: ["documents", "action", "dashboard"] },
   staffProfiles: { collection: "staff_profiles", seed: st.staffProfiles, pages: ["capability", "hr"] },
   news: { collection: "news", seed: nw.news, pages: ["news", "dashboard"] },
+  debtRecords: { collection: "debt_records", seed: lg.debtRecords, pages: ["debts", "cashin", "cashout", "dashboard"] },
+  cashEntries: { collection: "cash_entries", seed: lg.cashEntries, pages: ["cashin", "cashout", "debts", "dashboard"] },
   auditEvents: { collection: "audit_events", seed: (): AuditEvent[] => [], pages: ["audit"] },
 } as const
 

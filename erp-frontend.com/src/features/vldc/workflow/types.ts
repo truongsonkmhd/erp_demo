@@ -30,6 +30,10 @@ export type WorkItem = {
   description?: string
   createdBy: string
   owner: string
+  /** Tổ/phòng (SubUnit id) inside the owner's unit the work is meant for. */
+  subUnit?: string
+  /** Project (id) the directive or payment belongs to. */
+  project?: string
   cc: string[]
   parentId?: string
   status: WorkStatus

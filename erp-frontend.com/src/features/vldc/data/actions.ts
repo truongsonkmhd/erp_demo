@@ -1,8 +1,10 @@
 import { escapeHtml as esc, formatDate, jsCall } from "../workflow/html"
+import { resolveUnitChoice, unitChoiceGroups } from "./subUnitCore"
+import { staffView } from "./staffView"
 import { ROLE_TITLES } from "../workflow/rules"
 import { SKILLS, conclusionTasks, findExperts, type SkillKey } from "./actionsCore"
 import { addDays, localToday, vnDate } from "./dates"
-import { ROLE_PROFILES, UNIT_DEFS } from "./org"
+import { ROLE_PROFILES } from "./org"
 import { vldcData } from "./registry"
 import type { Scope } from "./types"
 
@@ -32,10 +34,13 @@ const required = (...pairs: [string, string][]) => {
 }
 const roleName = (r: string) => ROLE_TITLES[r] || r
 const projectOptions = (): [string, string][] => D("projects").map((p) => [p.id, `${p.id} – ${p.name}`])
-const unitOptions = (): [string, string][] => UNIT_DEFS.map((u) => [u.name, u.name])
+/** Unit picker: each unit ("Cả …") followed by its active tổ/phòng; values resolve with resolveUnitChoice. */
+const unitPicker = (id: string, allLabel = "") =>
+  `<select id="${id}">${allLabel ? `<option value="">${esc(allLabel)}</option>` : ""}${unitChoiceGroups(D("subUnits")).map((g) => `<optgroup label="${esc(g.name)}">${g.options.map((o) => `<option value="${esc(o.value)}">${esc(o.label)}</option>`).join("")}</optgroup>`).join("")}</select>`
+const unitChoice = (id: string) => resolveUnitChoice(val(id), D("subUnits"))
 const roleOptions = (): [string, string][] => Object.keys(ROLE_PROFILES).map((r) => [r, roleName(r)])
 const SCOPES: [Scope, string][] = [["federation", "Toàn Liên đoàn"], ["unit", "Đơn vị / phòng"], ["project", "Dự án"], ["personal", "Cá nhân"]]
-const scopeFields = () => field("Phạm vi", select("f-scope", SCOPES)) + field("Đơn vị (phạm vi đơn vị)", select("f-unit", unitOptions())) + field("Dự án (phạm vi dự án)", select("f-project", projectOptions()))
+const scopeFields = () => field("Phạm vi", select("f-scope", SCOPES)) + field("Đơn vị / tổ-phòng (phạm vi đơn vị)", unitPicker("f-unit")) + field("Dự án (phạm vi dự án)", select("f-project", projectOptions()))
 
 export function installActions(ctx: Ctx) {
   const open = ctx.openModal
@@ -100,12 +105,16 @@ export function installActions(ctx: Ctx) {
 
   // ----- Expert finder -----
   function skillFind() {
-    open("Tìm chuyên gia", `${form(field("Kỹ năng", select("sk-skill", Object.entries(SKILLS) as [string, string][])) + field("Mức tối thiểu", select("sk-level", [["3", "≥ 3"], ["4", "≥ 4"], ["5", "5"]], "4")) + field("Đơn vị", select("sk-unit", [["", "Tất cả"], ...unitOptions()])), "runSkillFind", "Tìm")}<div id="sk-result" style="margin-top:12px"></div>`)
+    open("Tìm chuyên gia", `${form(field("Kỹ năng", select("sk-skill", Object.entries(SKILLS) as [string, string][])) + field("Mức tối thiểu", select("sk-level", [["3", "≥ 3"], ["4", "≥ 4"], ["5", "5"]], "4")) + field("Đơn vị", unitPicker("sk-unit", "Tất cả đơn vị")), "runSkillFind", "Tìm")}<div id="sk-result" style="margin-top:12px"></div>`)
   }
 
   function runSkillFind() {
     const skill = val("sk-skill") as SkillKey
-    const hits = findExperts(D("staffSkills"), skill, num("sk-level"), val("sk-unit"))
+    // A tổ narrows the Skill Matrix to the people of that tổ (from their profiles).
+    const c = unitChoice("sk-unit")
+    const people = c?.subUnit ? new Set(staffView().filter((p) => p.subUnit === c.subUnit).map((p) => p.id)) : null
+    const pool = people ? D("staffSkills").filter((s) => people.has(s.id)) : D("staffSkills")
+    const hits = findExperts(pool, skill, num("sk-level"), c && !c.subUnit ? c.unitName : "")
     const el = document.getElementById("sk-result")
     if (el) el.innerHTML = hits.length
       ? `<table><tr><th>Cán bộ</th><th>Đơn vị</th><th>${esc(SKILLS[skill])}</th><th>Hiện trường</th><th>Chứng chỉ</th></tr>${hits.map((s) => `<tr><td><b>${esc(s.name)}</b></td><td>${esc(s.unit)}</td><td>${s[skill]}/5</td><td>${s.onField ? "Đang ở hiện trường" : "Sẵn sàng"}</td><td>${vnDate(s.certExpiry)}</td></tr>`).join("")}</table>`
@@ -174,7 +183,9 @@ export function installActions(ctx: Ctx) {
   // ----- Calendar, plans, notices -----
   const scopeOf = () => {
     const scope = val("f-scope") as Scope
-    return { scope, unit: scope === "unit" ? val("f-unit") : "", project: scope === "project" ? val("f-project") : "-" }
+    // A tổ/phòng is stored with its parent unit's name, so unit-scope visibility is unchanged.
+    const c = scope === "unit" ? unitChoice("f-unit") : null
+    return { scope, unit: c?.unitName ?? "", subUnit: c?.subUnit, project: scope === "project" ? val("f-project") : "-" }
   }
 
   function addEventModal() {
@@ -185,7 +196,7 @@ export function installActions(ctx: Ctx) {
     const title = val("e-title")
     if (!required([title, "tiêu đề"])) return
     const s = scopeOf()
-    void vldcData.save("calendarEvents", { id: newId("EV"), date: vnDate(val("e-date") || today()), time: val("e-time") || "09:00", title, scope: s.scope, unit: s.unit || "Toàn Liên đoàn", project: s.project, owner: me(), link: val("e-link"), note: val("e-note") })
+    void vldcData.save("calendarEvents", { id: newId("EV"), date: vnDate(val("e-date") || today()), time: val("e-time") || "09:00", title, scope: s.scope, unit: s.unit || "Toàn Liên đoàn", ...(s.subUnit ? { subUnit: s.subUnit } : {}), project: s.project, owner: me(), link: val("e-link"), note: val("e-note") })
     close()
   }
 
@@ -212,7 +223,7 @@ export function installActions(ctx: Ctx) {
     if (!required([title, "tên kế hoạch"])) return
     const s = scopeOf()
     const items = val("p-items").split("\n").map((x) => x.trim()).filter(Boolean)
-    void vldcData.save("plans", { id: newId("PL"), level: val("p-level"), scope: s.scope, title, period: `${vnDate(val("p-from") || today())} - ${vnDate(val("p-to") || today())}`, owner: val("p-owner"), progress: 0, status: "Mới lập", parent: val("p-parent") || "-", items, ...(s.unit ? { unit: s.unit } : {}), ...(s.project !== "-" ? { project: s.project } : {}), ...(s.scope === "personal" ? { ownerRole: me() } : {}) })
+    void vldcData.save("plans", { id: newId("PL"), level: val("p-level"), scope: s.scope, title, period: `${vnDate(val("p-from") || today())} - ${vnDate(val("p-to") || today())}`, owner: val("p-owner"), progress: 0, status: "Mới lập", parent: val("p-parent") || "-", items, ...(s.unit ? { unit: s.unit } : {}), ...(s.subUnit ? { subUnit: s.subUnit } : {}), ...(s.project !== "-" ? { project: s.project } : {}), ...(s.scope === "personal" ? { ownerRole: me() } : {}) })
     close()
   }
 
@@ -224,7 +235,7 @@ export function installActions(ctx: Ctx) {
     const title = val("n-title")
     if (!required([title, "tiêu đề"], [val("n-body"), "nội dung"])) return
     const s = scopeOf()
-    void vldcData.save("notices", { id: newId("NTF"), scope: s.scope, title, body: val("n-body"), time: `${vnDate(today()).slice(0, 5)} ${new Date().toTimeString().slice(0, 5)}`, priority: val("n-priority"), readBy: [me()], link: val("n-link"), ...(s.unit ? { unit: s.unit } : {}), ...(s.project !== "-" ? { project: s.project } : {}) })
+    void vldcData.save("notices", { id: newId("NTF"), scope: s.scope, title, body: val("n-body"), time: `${vnDate(today()).slice(0, 5)} ${new Date().toTimeString().slice(0, 5)}`, priority: val("n-priority"), readBy: [me()], link: val("n-link"), ...(s.unit ? { unit: s.unit } : {}), ...(s.subUnit ? { subUnit: s.subUnit } : {}), ...(s.project !== "-" ? { project: s.project } : {}) })
     close()
   }
 
@@ -242,24 +253,26 @@ export function installActions(ctx: Ctx) {
 
   function createRisk() {
     const scale: [string, string][] = ["5", "4", "3", "2", "1"].map((x) => [x, x])
-    open("Ghi nhận rủi ro", form(field("Mô tả rủi ro", input("r-title"), true) + field("Khả năng (1–5)", select("r-prob", scale, "3")) + field("Tác động (1–5)", select("r-impact", scale, "3")) + field("Owner", select("r-owner", unitOptions())) + field("Dự án", select("r-project", [["", "Không gắn dự án"], ...projectOptions()])) + field("Biện pháp kiểm soát", textarea("r-mitigation"), true), "saveRisk"))
+    open("Ghi nhận rủi ro", form(field("Mô tả rủi ro", input("r-title"), true) + field("Khả năng (1–5)", select("r-prob", scale, "3")) + field("Tác động (1–5)", select("r-impact", scale, "3")) + field("Owner", unitPicker("r-owner")) + field("Dự án", select("r-project", [["", "Không gắn dự án"], ...projectOptions()])) + field("Biện pháp kiểm soát", textarea("r-mitigation"), true), "saveRisk"))
   }
 
   function saveRisk() {
     const title = val("r-title")
     if (!required([title, "mô tả rủi ro"])) return
-    void vldcData.save("risks", { id: newId("R"), title, owner: val("r-owner"), probability: num("r-prob"), impact: num("r-impact"), mitigation: val("r-mitigation"), open: true, ...(val("r-project") ? { project: val("r-project") } : {}) })
+    const c = unitChoice("r-owner")
+    void vldcData.save("risks", { id: newId("R"), title, owner: c?.label ?? "", ...(c?.subUnit ? { subUnit: c.subUnit } : {}), probability: num("r-prob"), impact: num("r-impact"), mitigation: val("r-mitigation"), open: true, ...(val("r-project") ? { project: val("r-project") } : {}) })
     close()
   }
 
   function goalForm() {
-    open("Thêm mục tiêu chiến lược", form(field("Mục tiêu", input("g-goal"), true) + field("Đơn vị chịu trách nhiệm", select("g-owner", unitOptions())) + field("Chỉ tiêu", input("g-target", "≥ 85%")) + field("Trọng số (%)", input("g-weight", "10", "number")), "saveGoal"))
+    open("Thêm mục tiêu chiến lược", form(field("Mục tiêu", input("g-goal"), true) + field("Đơn vị chịu trách nhiệm", unitPicker("g-owner")) + field("Chỉ tiêu", input("g-target", "≥ 85%")) + field("Trọng số (%)", input("g-weight", "10", "number")), "saveGoal"))
   }
 
   function saveGoal() {
     const goal = val("g-goal")
     if (!required([goal, "mục tiêu"])) return
-    void vldcData.save("strategicGoals", { id: newId("SG"), goal, owner: val("g-owner"), target: val("g-target"), actual: 0, weight: num("g-weight") })
+    const c = unitChoice("g-owner")
+    void vldcData.save("strategicGoals", { id: newId("SG"), goal, owner: c?.label ?? "", ...(c?.subUnit ? { subUnit: c.subUnit } : {}), target: val("g-target"), actual: 0, weight: num("g-weight") })
     close()
   }
 

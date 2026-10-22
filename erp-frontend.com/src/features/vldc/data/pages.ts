@@ -1,11 +1,14 @@
 import { escapeHtml as esc, jsCall } from "../workflow/html"
+import { projectsView } from "./projectView"
+import { staffView } from "./staffView"
+import { subUnitsOf } from "./subUnitCore"
 import { overallKpi, unitKpis } from "../workflow/kpi"
 import { isClosed } from "../workflow/rules"
 import { workflowStore } from "../workflow/repository"
 import { localToday, vnDate } from "./dates"
 import * as M from "./metrics"
 import { vldcData } from "./registry"
-import type { OrgStats, Project, Risk } from "./types"
+import type { Project, Risk } from "./types"
 
 /** Engine pages rebuilt on Firestore data: every tile is computed from the records shown below it. */
 
@@ -26,32 +29,17 @@ const riskBadge = (r: Risk) => {
   const level = M.riskLevel(r)
   return `<span class="badge ${level === "Cao" ? "b-danger" : level === "TB" ? "b-warn" : "b-ok"}">${level}</span>`
 }
-const delayBadge = (p: Project) =>
-  p.delayDays > 14 ? `<span class="badge b-danger">+${p.delayDays} ngày</span>` : p.delayDays > 0 ? `<span class="badge b-warn">+${p.delayDays} ngày</span>` : '<span class="badge b-ok">Đúng hạn</span>'
-
-function projects() {
-  const ps = D("projects")
-  const m = M.projectMetrics(ps, D("risks"))
-  const rows = ps.map((p) => `<tr><td>${esc(p.id)}</td><td>${esc(p.name)}</td><td>${esc(p.unit)}</td><td>${p.technical}%</td><td>${p.costUsed}%${M.isOverrun(p) ? ' <span class="badge b-danger">lệch</span>' : ""}</td><td>${delayBadge(p)}</td><td><button class="btn btn-light" ${jsCall("projectDetail", p.id)}>Chi tiết</button></td></tr>`).join("")
-  return `${kpis(
-    kpi("Nhiệm vụ", m.count, `${m.late} có dự báo trễ`),
-    kpi("Milestone sắp tới", m.milestones, "Trong 30 ngày"),
-    kpi("Risk đang mở", m.openRisks, `${m.highRisks} mức cao`),
-    kpi("Change Request", m.changeRequests, `${m.changeRequestsPending} chờ duyệt`),
-  )}<div class="card" style="margin-top:14px"><div class="card-head"><h3>Danh mục nhiệm vụ / dự án</h3><button class="btn btn-light" onclick="show('finance')">Tài chính dự án</button></div><table><tr><th>Mã</th><th>Tên</th><th>Đơn vị</th><th>Kỹ thuật</th><th>Tài chính</th><th>Forecast</th><th></th></tr>${rows}</table></div>`
-}
-
 function finance() {
   const lines = D("financeLines")
   const f = M.financeMetrics(lines, D("disbursement"))
-  const overruns = D("projects").filter(M.isOverrun)
+  const overruns = projectsView().filter(M.isOverrun)
   const rows = lines.map((l) => `<tr><td>${esc(l.source)}</td><td>${esc(l.project)}</td><td>${esc(l.item)}</td><td>${esc(l.unit)}</td><td>${tr(l.budget)}</td><td>${tr(l.committed)}</td><td>${tr(l.paid)}</td></tr>`).join("")
   return `${kpis(
     kpi("Kế hoạch năm", ty(f.plan), `Kế hoạch lũy kế đến nay ${ty(f.planToDate)}`),
     kpi("Cam kết chi (cost center)", tr(f.committed), `${f.committedPct}% dự toán ${tr(f.budget)}`),
     kpi("Đã giải ngân", ty(f.paid), `${f.disbursedPct}% kế hoạch năm`),
     kpi("Dự án chi vượt tiến độ", overruns.length, "Chi phí cao hơn kỹ thuật > 10%"),
-  )}<div class="grid twoeq" style="margin-top:14px"><div class="card"><h3>Cost Center</h3><table><tr><th>Nguồn</th><th>Dự án</th><th>Hạng mục</th><th>Đơn vị</th><th>Dự toán</th><th>Cam kết</th><th>Đã chi</th></tr>${rows}</table><button class="btn btn-primary" style="margin-top:10px" onclick="financeForm()">+ Đề nghị thanh toán</button></div><div class="card"><h3>Phân tích tài chính theo dự án</h3>${D("projects").map((p) => bar(`${p.id} • chi phí`, p.costUsed, `${p.costUsed}% / KT ${p.technical}%`)).join("")}${overruns.map((p) => `<div class="alert"><span class="dot red"></span><div><b>${esc(p.id)} chênh +${p.costUsed - p.technical}%</b><div class="mini">Chi phí ${p.costUsed}% • kỹ thuật ${p.technical}%</div></div></div>`).join("")}${metric("Giải ngân so kế hoạch lũy kế", `${ty(f.paid)} / ${ty(f.planToDate)}`)}</div></div>`
+  )}<div class="grid twoeq" style="margin-top:14px"><div class="card"><h3>Cost Center</h3><table><tr><th>Nguồn</th><th>Dự án</th><th>Hạng mục</th><th>Đơn vị</th><th>Dự toán</th><th>Cam kết</th><th>Đã chi</th></tr>${rows}</table><button class="btn btn-primary" style="margin-top:10px" onclick="financeForm()">+ Đề nghị thanh toán</button></div><div class="card"><h3>Phân tích tài chính theo dự án</h3>${projectsView().map((p) => bar(`${p.id} • chi phí`, p.costUsed, `${p.costUsed}% / KT ${p.technical}%`)).join("")}${overruns.map((p) => `<div class="alert"><span class="dot red"></span><div><b>${esc(p.id)} chênh +${p.costUsed - p.technical}%</b><div class="mini">Chi phí ${p.costUsed}% • kỹ thuật ${p.technical}%</div></div></div>`).join("")}${metric("Giải ngân so kế hoạch lũy kế", `${ty(f.paid)} / ${ty(f.planToDate)}`)}</div></div>`
 }
 
 function equipment() {
@@ -120,15 +108,17 @@ function command() {
 
 function organization() {
   const units = D("orgUnits")
-  const staff = cap()
+  // Head counts and tổ come from the staff profiles and the tổ list, not from the published figures.
+  const people = staffView()
+  const subs = D("subUnits")
   const support = units.filter((u) => u.type === "Bộ máy giúp việc")
   const direct = units.filter((u) => u.type === "Đơn vị trực thuộc")
   return `${kpis(
     kpi("Bộ máy giúp việc", support.length, support.map((u) => esc(u.name.replace("Phòng ", ""))).join(" • ")),
     kpi("Đơn vị trực thuộc", direct.length, direct.map((u) => esc(u.name.replace(/^(Đoàn|Trung tâm) /, ""))).join(" • ")),
-    kpi("Nguồn nhân lực công khai", staff.total, "Theo hồ sơ năng lực trên website"),
+    kpi("Nguồn nhân lực", people.length, `${subs.filter((x) => x.active).length} tổ/phòng trong các đơn vị`),
     kpi("Mô hình quản trị", `1→${support.length}→${direct.length}`, "Lãnh đạo → phòng → đơn vị"),
-  )}<div class="card" style="margin-top:14px"><div class="card-head"><h3>Cơ cấu tổ chức & chức năng</h3><span class="official-badge">DỮ LIỆU CÔNG KHAI</span></div><div class="org-grid">${units.map((u) => `<div class="org-card"><span class="org-chip">${esc(u.type)}</span><h4>${esc(u.name)}</h4><div class="org-meta"><span><b>Lãnh đạo:</b> ${esc(u.leader)}</span>${u.deputy ? `<span><b>Phó:</b> ${esc(u.deputy)}</span>` : ""}<span><b>Nhân sự:</b> ${esc(u.staff)}</span></div><p>${esc(u.mission)}</p><button class="btn btn-light" ${jsCall("openUnit", u.id)}>Mở không gian đơn vị</button></div>`).join("")}</div></div>`
+  )}<div class="card" style="margin-top:14px"><div class="card-head"><h3>Cơ cấu tổ chức & chức năng</h3><span class="official-badge">DỮ LIỆU CÔNG KHAI</span></div><div class="org-grid">${units.map((u) => `<div class="org-card"><span class="org-chip">${esc(u.type)}</span><h4>${esc(u.name)}</h4><div class="org-meta"><span><b>Lãnh đạo:</b> ${esc(u.leader)}</span>${u.deputy ? `<span><b>Phó:</b> ${esc(u.deputy)}</span>` : ""}<span><b>Nhân sự:</b> ${people.filter((p) => p.unit === u.id).length} người</span></div><p>${esc(u.mission)}</p>${(() => { const mine = subUnitsOf(u.id, subs); return mine.length ? `<div class="mini" style="margin-bottom:8px"><b>Tổ/phòng:</b> ${mine.map((x) => esc(x.name)).join(" • ")}</div>` : "" })()}<button class="btn btn-light" onclick="show('units')">Mở không gian đơn vị</button></div>`).join("")}</div></div>`
 }
 
 function equipmentCatalog() {
@@ -142,16 +132,6 @@ function equipmentCatalog() {
   )}<div class="card" style="margin-top:14px"><div class="card-head"><h3>Danh mục máy & thiết bị địa vật lý</h3><span class="official-badge">PUBLIC EQUIPMENT PROFILE</span></div><div class="equip-grid">${rows.map((e) => `<div class="equip-card"><div class="eqicon">⚙</div><h4>${esc(e.name)}</h4><div class="mini">${esc(e.id)} • ${esc(e.group)} • ${esc(e.unit)}</div>${metric("Số lượng", e.quantity)}${metric("Năm sử dụng", esc(e.year))}${metric("Kiểm định", vnDate(e.inspectionDue))}<span class="badge ${e.condition === "Mới" ? "b-ok" : "b-info"}">${esc(e.condition)}</span></div>`).join("")}</div></div>`
 }
 
-function units() {
-  const items = workflowStore.items()
-  const scores = unitKpis(items, today())
-  return `<div class="card"><div class="card-head"><h3>Không gian quản trị theo đơn vị</h3><span class="mini">Tác vụ và KPI tính từ luồng công việc</span></div><div class="org-grid">${D("orgUnits").filter((x) => x.id !== "BLD").map((x) => {
-    // orgUnits and KPI units share the tbl_department codes.
-    const k = scores.find((s) => s.unit.id === x.id)
-    return `<div class="org-card"><span class="org-chip">${esc(x.type)}</span><h4>${esc(x.name)}</h4><p>${esc(x.mission)}</p>${metric("Tác vụ mở", k ? k.open : "–")}${metric("KPI", k?.score == null ? "–" : `${k.score}%`)}<button class="btn btn-primary" ${jsCall("openUnit", x.id)}>Dashboard đơn vị</button></div>`
-  }).join("")}</div></div>`
-}
-
 function digital() {
   const rows = D("digitalAdoption")
   const avg = (pick: (x: (typeof rows)[number]) => number) => (rows.length ? Math.round(rows.reduce((s, x) => s + pick(x), 0) / rows.length) : 0)
@@ -162,12 +142,10 @@ function digital() {
 
 /** Research KPI tiles and funnel, computed from the portfolio (the page body stays in the engine). */
 
-const NO_STATS: OrgStats = { id: "capability", total: 0, doctor: 0, master: 0, engineerBachelor: 0, technicianWorker: 0, under5: 0, from5to15: 0, over15: 0 }
-const cap = (): OrgStats => D("orgStats")[0] ?? NO_STATS
 
 const RENDERERS: Record<string, (ctx: Ctx) => string> = {
-  projects, finance, equipment, risks, meetings, strategy, command, organization,
-  equipmentcatalog: equipmentCatalog, units, digital,
+  finance, equipment, risks, meetings, strategy, command, organization,
+  equipmentcatalog: equipmentCatalog, digital,
 }
 
 /** Replaces the engine's hard-coded pages with data-driven ones. */

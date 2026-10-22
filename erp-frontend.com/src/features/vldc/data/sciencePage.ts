@@ -1,13 +1,14 @@
 import { escapeHtml as esc, jsCall } from "../workflow/html"
 import { ROLE_TITLES } from "../workflow/rules"
 import { localToday, vnDate } from "./dates"
-import { UNIT_DEFS, ROLE_PROFILES, roleUnitCode, unitName, type UnitCode } from "./org"
+import { ROLE_PROFILES, roleUnitCode } from "./org"
 import { kpis } from "./pages"
 import { vldcData } from "./registry"
 import {
   REVIEWER, TOPIC_FIELDS, addProgress, canEditTopic, canReview, canSubmit, canUpdateProgress, canViewTopic, deadlineState,
   filterTopics, reviewTopic, submitTopic, topicStats, visibleTopics,
 } from "./scienceCore"
+import { resolveUnitChoice, unitChoiceGroups } from "./subUnitCore"
 import type { ScienceTopic, TopicReviewDecision } from "./types"
 
 /** KH-CN & Đổi mới: staff record their science topics and progress; accepted topics become public. */
@@ -18,7 +19,12 @@ const state = { tab: "active" as "active" | "done", field: "", query: "" }
 const content = () => document.getElementById("content")
 const title = (role: string) => ROLE_TITLES[role] || role
 const personOf = (role: string) => ROLE_PROFILES[role]?.name || title(role)
-const unitLabel = (code: string) => (UNIT_DEFS.some((u) => u.code === code) ? unitName(code as UnitCode) : code)
+/** Unit code and optional tổ of a picked value (subUnit cleared when a whole unit is picked). */
+const unitOf = (picked: string) => {
+  const c = resolveUnitChoice(picked, vldcData.get("subUnits"))
+  return { unit: c?.unit ?? picked, subUnit: c?.subUnit ?? "" }
+}
+const topicUnit = (t: ScienceTopic) => resolveUnitChoice(t.subUnit || t.unit, vldcData.get("subUnits"))?.label ?? t.unit
 const value = (id: string) => ((document.getElementById(id) as HTMLInputElement | null)?.value ?? "").trim()
 const files = (raw: string) => raw.split(/[,\n;]/).map((s) => s.trim()).filter(Boolean)
 const money = (n: number) => `${n.toLocaleString("vi-VN")} tr.đ`
@@ -37,14 +43,14 @@ function progressBar(t: ScienceTopic): string {
 function activeRow(t: ScienceTopic): string {
   const dl = DEADLINE[deadlineState(t, localToday())]
   const returned = t.review?.decision === "Trả lại" && t.status === "Đang triển khai" ? '<span class="badge b-danger">Bị trả lại</span>' : ""
-  return `<div class="vx-topic-row" ${jsCall("topicOpen", t.id)}><div>${fieldTag(t.field)}<b>${esc(t.title)}</b><div class="mini">Chủ nhiệm ${esc(t.leadName)}${t.members.length ? ` • ${t.members.length} thành viên` : ""} • ${esc(unitLabel(t.unit))}</div></div>
+  return `<div class="vx-topic-row" ${jsCall("topicOpen", t.id)}><div>${fieldTag(t.field)}<b>${esc(t.title)}</b><div class="mini">Chủ nhiệm ${esc(t.leadName)}${t.members.length ? ` • ${t.members.length} thành viên` : ""} • ${esc(topicUnit(t))}</div></div>
 <div class="vx-topic-progress"><div class="vx-plan-nums"><b>${t.progress}%</b><span class="mini">hạn ${esc(vnDate(t.end))}</span></div>${progressBar(t)}</div>
 <div class="vx-topic-badges"><span class="badge ${STATUS_CLS[t.status]}">${esc(t.status)}</span>${dl ? `<span class="badge ${dl[1]}">${dl[0]}</span>` : ""}${returned}</div></div>`
 }
 
 function doneCard(t: ScienceTopic): string {
   return `<article class="vx-news-card" ${jsCall("topicOpen", t.id)}><div class="vx-news-badges"><span class="badge b-ok">Đã triển khai</span>${fieldTag(t.field)}</div>
-<h4>${esc(t.title)}</h4><p>${esc(t.result ?? "")}</p>${t.impact ? `<div class="vx-topic-impact">✓ ${esc(t.impact)}</div>` : ""}<div class="mini">${esc(t.leadName)} • ${esc(unitLabel(t.unit))}${t.approvedAt ? ` • nghiệm thu ${esc(stamp(t.approvedAt))}` : ""}</div></article>`
+<h4>${esc(t.title)}</h4><p>${esc(t.result ?? "")}</p>${t.impact ? `<div class="vx-topic-impact">✓ ${esc(t.impact)}</div>` : ""}<div class="mini">${esc(t.leadName)} • ${esc(topicUnit(t))}${t.approvedAt ? ` • nghiệm thu ${esc(stamp(t.approvedAt))}` : ""}</div></article>`
 }
 
 export function installSciencePage(render: Record<string, () => void>, ctx: Ctx) {
@@ -118,7 +124,7 @@ ${state.tab === "active"
       ? `<div class="alert"><span class="dot red"></span><div><b>Bị trả lại ${esc(stamp(t.review.at))}</b><div class="mini">${esc(t.review.note)}</div></div></div>` : ""
     ctx.openModal(`Đề tài • ${t.id}`, `<div class="vx-news-badges"><span class="badge ${STATUS_CLS[t.status]}">${esc(t.status)}</span><span class="badge b-purple">${esc(t.field)}</span>${dl ? `<span class="badge ${dl[1]}">${dl[0]}</span>` : ""}</div>
 <h2 style="margin:8px 0">${esc(t.title)}</h2>${lastReview}<p>${esc(t.objective)}</p>
-<div class="grid twoeq"><div>${metric("Chủ nhiệm", `${esc(t.leadName)} (${esc(title(t.leadRole))})`)}${metric("Thành viên", esc(t.members.map(personOf).join(", ") || "–"))}${metric("Đơn vị", esc(unitLabel(t.unit)))}${metric("Thời gian", `${esc(vnDate(t.start))} – ${esc(vnDate(t.end))}`)}${metric("Kinh phí", `${money(t.spent)} / ${money(t.budget)}`)}${metric("Tiến độ", `${t.progress}%`)}${progressBar(t)}
+<div class="grid twoeq"><div>${metric("Chủ nhiệm", `${esc(t.leadName)} (${esc(title(t.leadRole))})`)}${metric("Thành viên", esc(t.members.map(personOf).join(", ") || "–"))}${metric("Đơn vị", esc(topicUnit(t)))}${metric("Thời gian", `${esc(vnDate(t.start))} – ${esc(vnDate(t.end))}`)}${metric("Kinh phí", `${money(t.spent)} / ${money(t.budget)}`)}${metric("Tiến độ", `${t.progress}%`)}${progressBar(t)}
 ${t.attachments.length ? `<div style="margin-top:8px">${t.attachments.map((f) => `<span class="vx-doc-file">📎 ${esc(f)}</span>`).join("")}</div>` : ""}
 ${t.result ? `<h4>Kết quả / sản phẩm</h4><p>${esc(t.result)}</p><h4>Hiệu quả áp dụng</h4><p>${esc(t.impact ?? "")}</p>` : ""}</div>
 <div><h4 style="margin-top:0">Nhật ký tiến độ</h4><div class="timeline">${[...t.log].reverse().map((l) => `<div><b>${esc(stamp(l.at))} • ${esc(l.byName)}</b> – ${l.progress}%<br>${esc(l.note)}</div>`).join("") || '<div class="mini">Chưa có cập nhật.</div>'}</div></div></div>
@@ -136,7 +142,7 @@ ${btns ? `<div class="toolbar" style="margin-top:12px">${btns}</div>` : ""}${rev
     ctx.openModal(t ? "Sửa đề tài" : "Đăng ký đề tài mới", `<div class="form-grid">
 ${input("title", "Tên đề tài *", t?.title ?? "", "text", true)}
 <div><label>Lĩnh vực</label><select id="tp-field">${TOPIC_FIELDS.map((f) => `<option${f === t?.field ? " selected" : ""}>${esc(f)}</option>`).join("")}</select></div>
-<div><label>Đơn vị chủ trì</label><select id="tp-unit">${UNIT_DEFS.map((u) => `<option value="${u.code}"${u.code === unit ? " selected" : ""}>${esc(u.name)}</option>`).join("")}</select></div>
+<div><label>Đơn vị / tổ chủ trì</label><select id="tp-unit">${unitChoiceGroups(vldcData.get("subUnits")).map((g) => `<optgroup label="${esc(g.name)}">${g.options.map((o) => `<option value="${esc(o.value)}"${o.value === (t?.subUnit ?? unit) ? " selected" : ""}>${esc(o.label)}</option>`).join("")}</optgroup>`).join("")}</select></div>
 <div class="full"><label>Mục tiêu *</label><textarea id="tp-objective" rows="2">${esc(t?.objective ?? "")}</textarea></div>
 ${input("start", "Bắt đầu *", t?.start ?? localToday(), "date")}${input("end", "Kết thúc *", t?.end ?? "", "date")}
 ${input("budget", "Kinh phí dự kiến (triệu đồng)", String(t?.budget ?? 0), "number")}${input("spent", "Đã chi (triệu đồng)", String(t?.spent ?? 0), "number")}
@@ -159,7 +165,7 @@ ${input("files", "Tài liệu kèm theo (tên file, cách nhau bằng dấu ph�
       start: "", end: "", budget: 0, spent: 0, attachments: [],
     }
     save({
-      ...base, title: titleText, field: value("tp-field"), unit: value("tp-unit"), objective, start, end, members,
+      ...base, title: titleText, field: value("tp-field"), ...unitOf(value("tp-unit")), objective, start, end, members,
       budget: Math.max(0, Number(value("tp-budget")) || 0), spent: Math.max(0, Number(value("tp-spent")) || 0), attachments: files(value("tp-files")),
     })
   }

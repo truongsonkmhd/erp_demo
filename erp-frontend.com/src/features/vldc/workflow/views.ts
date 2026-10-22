@@ -1,4 +1,5 @@
 import { escapeHtml as esc, formatDate, formatMoney, formatTime, jsCall, statusBadge } from "./html"
+import { projectsView } from "../data/projectView"
 import {
   DELEGATES,
   PAYMENT_STEPS,
@@ -23,6 +24,8 @@ import { leaderDashboardHtml } from "./leaderDashboard"
 import { performanceHtml, unitDetailHtml } from "./kpiViews"
 import { kpiUnits, unitKpis } from "./kpi"
 import { vldcData } from "../data/registry"
+import { roleUnitCode, rolesOfUnit } from "../data/org"
+import { subUnitOptions } from "../data/subUnitPage"
 import { liveAlerts } from "../data/liveAlerts"
 
 export { escapeHtml, statusBadge } from "./html"
@@ -170,8 +173,8 @@ async function run(task: () => Promise<void>, onError?: () => void) {
   }
 }
 
-function roleOptions(roles: string[]): string {
-  return roles.map((r) => `<option value="${r}">${esc(roleTitle(r))}</option>`).join("")
+function roleOptions(roles: string[], selected = ""): string {
+  return roles.map((r) => `<option value="${r}"${r === selected ? " selected" : ""}>${esc(roleTitle(r))}</option>`).join("")
 }
 
 function ccBoxes(roles: string[]): string {
@@ -183,7 +186,8 @@ const priorityField = '<div><label>Mức ưu tiên</label><select id="wf-priorit
 function wfOpen(id: string) {
   const item = store.items().find((x) => x.id === id)
   if (!item) return alert(`Không tìm thấy ${id}`)
-  shell.openModal(`${TYPE_LABELS[item.type]} ${item.id}`, `<h3 style="margin-top:0">${esc(item.title)}</h3>${detailHtml(item)}`)
+  const sub = item.subUnit ? vldcData.get("subUnits").find((s) => s.id === item.subUnit) : undefined
+  shell.openModal(`${TYPE_LABELS[item.type]} ${item.id}`, `<h3 style="margin-top:0">${esc(item.title)}</h3>${sub ? `<div class="mini" style="margin:-6px 0 8px">Tổ / phòng thực hiện: <b>${esc(sub.name)}</b></div>` : ""}${detailHtml(item)}`)
 }
 
 function wfAct(id: string, action: WorkAction) {
@@ -199,9 +203,21 @@ function wfAct(id: string, action: WorkAction) {
   })
 }
 
-function wfCreateDirective() {
+/** Options of the tổ/phòng picker for the chosen owner's unit. */
+function subOptionsHtml(owner: string, selected = ""): string {
+  return `<option value="">– Cả đơn vị –</option>${subUnitOptions(roleUnitCode(owner)).map((s) => `<option value="${esc(s.id)}"${s.id === selected ? " selected" : ""}>${esc(s.name)}</option>`).join("")}`
+}
+
+/** Optional project picker shared by the directive and payment forms. */
+function projectPicker(selected = ""): string {
+  return `<div><label>Dự án</label><select id="wf-project"><option value="">– Không gắn dự án –</option>${projectsView().map((p) => `<option value="${esc(p.id)}"${p.id === selected ? " selected" : ""}>${esc(`${p.id} – ${p.name}`)}</option>`).join("")}</select></div>`
+}
+
+function wfCreateDirective(presetSub = "", presetProject = "") {
   const others = DELEGATES.lanhdao
-  shell.openModal("Giao chỉ đạo điều hành", `<div class="form-grid"><div class="full"><label>Nội dung chỉ đạo</label><textarea id="wf-title" rows="2"></textarea></div><div><label>Đơn vị / người chủ trì</label><select id="wf-owner">${roleOptions(others)}</select></div><div><label>Hạn hoàn thành</label><input id="wf-due" type="date" min="${today()}"></div>${priorityField}<div class="full"><label>Kết quả / minh chứng yêu cầu</label><input id="wf-desc"></div><div class="full"><label>Phối hợp</label>${ccBoxes(others)}</div></div><button class="btn btn-primary" style="margin-top:10px" onclick="wfSubmitDirective()">Giao chỉ đạo</button>`)
+  const sub = presetSub ? vldcData.get("subUnits").find((s) => s.id === presetSub) : undefined
+  const owner = (sub && others.find((r) => rolesOfUnit(sub.unit as never).includes(r))) || others[0]
+  shell.openModal("Giao chỉ đạo điều hành", `<div class="form-grid"><div class="full"><label>Nội dung chỉ đạo</label><textarea id="wf-title" rows="2"></textarea></div><div><label>Đơn vị / người chủ trì</label><select id="wf-owner" onchange="wfSubOptions(this.value)">${roleOptions(others, owner)}</select></div><div><label>Tổ / phòng thực hiện</label><select id="wf-sub">${subOptionsHtml(owner, sub?.id)}</select></div>${projectPicker(presetProject)}<div><label>Hạn hoàn thành</label><input id="wf-due" type="date" min="${today()}"></div>${priorityField}<div class="full"><label>Kết quả / minh chứng yêu cầu</label><input id="wf-desc"></div><div class="full"><label>Phối hợp</label>${ccBoxes(others)}</div></div><button class="btn btn-primary" style="margin-top:10px" onclick="wfSubmitDirective()">Giao chỉ đạo</button>`)
 }
 
 function wfSubmitDirective() {
@@ -210,6 +226,8 @@ function wfSubmitDirective() {
       id: newId("CD"),
       title: inputValue("wf-title"),
       owner: inputValue("wf-owner"),
+      subUnit: inputValue("wf-sub") || undefined,
+      project: inputValue("wf-project") || undefined,
       cc: checkedValues("wf-cc"),
       due: inputValue("wf-due"),
       priority: inputValue("wf-priority") as WorkItem["priority"],
@@ -242,7 +260,7 @@ function wfSubmitDelegate(id: string) {
 function wfCreatePayment() {
   const all = store.items()
   const parents = all.filter((x) => x.type !== "payment" && !isClosed(x) && isVisible(x, ctx.role(), all))
-  shell.openModal("Lập đề nghị thanh toán", `<div class="form-grid"><div class="full"><label>Nội dung thanh toán</label><textarea id="wf-title" rows="2"></textarea></div><div><label>Số tiền (đồng)</label><input id="wf-amount" type="number" min="1" step="1000"></div><div><label>Hạn thanh toán</label><input id="wf-due" type="date" min="${today()}"></div><div class="full"><label>Gắn với chỉ đạo / việc (tuỳ chọn)</label><select id="wf-parent"><option value="">– Không –</option>${parents.map((p) => `<option value="${esc(p.id)}">${esc(p.id)} • ${esc(p.title)}</option>`).join("")}</select></div><div class="full"><label>Chứng từ kèm theo</label><input id="wf-desc"></div></div><div class="mini" style="margin-top:8px">Luồng duyệt: ${PAYMENT_STEPS.slice(1).map((s) => esc(roleTitle(s.owner))).join(" → ")}</div><button class="btn btn-primary" style="margin-top:10px" onclick="wfSubmitPayment()">Trình hồ sơ</button>`)
+  shell.openModal("Lập đề nghị thanh toán", `<div class="form-grid"><div class="full"><label>Nội dung thanh toán</label><textarea id="wf-title" rows="2"></textarea></div>${projectPicker()}<div><label>Số tiền (đồng)</label><input id="wf-amount" type="number" min="1" step="1000"></div><div><label>Hạn thanh toán</label><input id="wf-due" type="date" min="${today()}"></div><div class="full"><label>Gắn với chỉ đạo / việc (tuỳ chọn)</label><select id="wf-parent"><option value="">– Không –</option>${parents.map((p) => `<option value="${esc(p.id)}">${esc(p.id)} • ${esc(p.title)}</option>`).join("")}</select></div><div class="full"><label>Chứng từ kèm theo</label><input id="wf-desc"></div></div><div class="mini" style="margin-top:8px">Luồng duyệt: ${PAYMENT_STEPS.slice(1).map((s) => esc(roleTitle(s.owner))).join(" → ")}</div><button class="btn btn-primary" style="margin-top:10px" onclick="wfSubmitPayment()">Trình hồ sơ</button>`)
 }
 
 function wfSubmitPayment() {
@@ -254,6 +272,7 @@ function wfSubmitPayment() {
       due: inputValue("wf-due"),
       parentId: inputValue("wf-parent") || undefined,
       description: inputValue("wf-desc") || undefined,
+      project: inputValue("wf-project") || undefined,
     }, ctx.role(), ctx.perms(), new Date().toISOString())
     await store.add(item)
   })
@@ -341,7 +360,7 @@ function leaderStats(): string {
 
 function wfUnitKpi(unitId: string) {
   const unit = kpiUnits().find((u) => u.id === unitId)
-  shell.openModal(`KPI • ${unit?.name ?? unitId}`, unitDetailHtml(unitId, store.items(), today()))
+  shell.openModal(`KPI • ${unit?.name ?? unitId}`, unitDetailHtml(unitId, store.items(), today(), subUnitOptions(unitId)))
 }
 
 /** Swaps the Command Center's hard-coded unit heatmap for the computed one. */
@@ -377,7 +396,7 @@ export function installWorkflow(render: Record<string, () => void>, nextShell: S
   render.dashboard = function () {
     const el = content()
     if (ctx.role() === "lanhdao" && el) {
-      el.innerHTML = leaderDashboardHtml(store.items(), { projects: vldcData.get("projects"), disbursement: vldcData.get("disbursement"), risks: vldcData.get("risks"), alerts: liveAlerts(vldcData.get("alertRules")) }, today(), inboxBlock(5), offlineBanner())
+      el.innerHTML = leaderDashboardHtml(store.items(), { projects: projectsView(), disbursement: vldcData.get("disbursement"), risks: vldcData.get("risks"), alerts: liveAlerts(vldcData.get("alertRules")) }, today(), inboxBlock(5), offlineBanner())
       return
     }
     unitDashboard()
@@ -397,6 +416,12 @@ export function installWorkflow(render: Record<string, () => void>, nextShell: S
     wfOpen, wfAct, wfCreateDirective, wfSubmitDirective, wfDelegate, wfSubmitDelegate,
     wfCreatePayment, wfSubmitPayment, wfResetDemo, wfNotice, wfUnitKpi,
     createDirective: wfCreateDirective,
+    wfCreateDirectiveFor: (subId: string) => wfCreateDirective(subId),
+    wfCreateDirectiveForProject: (projectId: string) => wfCreateDirective("", projectId),
+    wfSubOptions: (owner: string) => {
+      const el = document.getElementById("wf-sub")
+      if (el) el.innerHTML = subOptionsHtml(owner)
+    },
     directiveDetail: wfOpen,
   })
 }

@@ -1,6 +1,7 @@
 import { escapeHtml as esc, formatDate, jsCall } from "../workflow/html"
 import { assignmentInboxRows } from "./docAssignCore"
 import { topicReviewRows } from "./scienceCore"
+import { projectCrRows } from "./projectCore"
 import { workflowStore } from "../workflow/repository"
 import { localToday } from "./dates"
 import {
@@ -19,12 +20,21 @@ const today = () => localToday()
 const isLeader = () => ctx.role() === "lanhdao"
 const content = () => document.getElementById("content")
 
+/** Work meant for one tổ/phòng shows it next to the owner ("Trưởng đơn vị › Tổ đo điện"). */
+function withSubUnit(row: InboxRow): InboxRow {
+  if (row.kind !== "work") return row
+  const id = workflowStore.items().find((x) => x.id === row.id)?.subUnit
+  const sub = id ? vldcData.get("subUnits").find((s) => s.id === id) : undefined
+  return sub ? { ...row, owner: `${row.owner} › ${sub.name}` } : row
+}
+
 function rows(): InboxRow[] {
   const scope = isLeader() ? state.scope : "mine"
   return [
-    ...inboxRows(workflowStore.items(), vldcData.get("inboxTasks"), ctx.role(), scope, today()),
+    ...inboxRows(workflowStore.items(), vldcData.get("inboxTasks"), ctx.role(), scope, today()).map(withSubUnit),
     ...assignmentInboxRows(vldcData.get("docAssignments"), ctx.role(), scope, today()),
     ...topicReviewRows(vldcData.get("scienceTopics"), ctx.role(), today()),
+    ...projectCrRows(vldcData.get("projects"), ctx.role(), today()),
   ]
 }
 

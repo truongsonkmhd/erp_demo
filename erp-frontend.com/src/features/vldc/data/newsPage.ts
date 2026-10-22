@@ -1,11 +1,11 @@
 import { escapeHtml as esc, jsCall } from "../workflow/html"
 import { localToday } from "./dates"
-import { bodyHtml, eventLine, postBadges, postCardHtml, stamp } from "./newsHtml"
+import { authorLine, bodyHtml, eventLine, postBadges, postCardHtml, stamp } from "./newsHtml"
 import {
-  NEWS_KINDS, audienceLabel, canManage, canPost, filterPosts, newsCalendarEntry, postableAudiences, sortPosts, upcomingEvents,
+  NEWS_KINDS, canManage, canPost, filterPosts, newsCalendarEntry, postableAudiences, sortPosts, upcomingEvents,
   visiblePosts,
 } from "./newsCore"
-import { ROLE_PROFILES } from "./org"
+import { ROLE_PROFILES, UNIT_DEFS } from "./org"
 import { vldcData } from "./registry"
 import type { NewsKind, NewsPost } from "./types"
 
@@ -19,8 +19,9 @@ const field = (id: string) => document.getElementById(id) as HTMLInputElement | 
 const value = (id: string) => (field(id)?.value ?? "").trim()
 
 export function installNewsPage(render: Record<string, () => void>, ctx: Ctx) {
-  const mine = () => sortPosts(visiblePosts(vldcData.get("news"), ctx.role()))
-  const canWrite = () => canPost(ctx.perms()) && postableAudiences(ctx.role()).length > 0
+  const subs = () => vldcData.get("subUnits")
+  const mine = () => sortPosts(visiblePosts(vldcData.get("news"), ctx.role(), subs()))
+  const canWrite = () => canPost(ctx.perms()) && postableAudiences(ctx.role(), subs()).length > 0
   const find = (id: string) => vldcData.get("news").find((p) => p.id === id)
   const calendarOf = (id: string) => vldcData.get("calendarEvents").find((e) => e.id === `EV-${id}`)
 
@@ -32,13 +33,13 @@ export function installNewsPage(render: Record<string, () => void>, ctx: Ctx) {
     const chip = (k: string, label: string) =>
       `<button class="vx-news-chip${state.kind === k ? " active" : ""}" ${jsCall("newsFilter", k)}>${label}</button>`
     const hero = pinned
-      ? `<div class="card vx-news-pinned" ${jsCall("newsOpen", pinned.id)}><div class="vx-news-badges">${postBadges(pinned)}</div><h3>${esc(pinned.title)}</h3>${pinned.summary ? `<p>${esc(pinned.summary)}</p>` : ""}<div class="mini">${esc(pinned.authorName)} • ${esc(audienceLabel(pinned.audience))}</div></div>`
+      ? `<div class="card vx-news-pinned" ${jsCall("newsOpen", pinned.id)}><div class="vx-news-badges">${postBadges(pinned, subs())}</div><h3>${esc(pinned.title)}</h3>${pinned.summary ? `<p>${esc(pinned.summary)}</p>` : ""}<div class="mini">Đăng bởi ${authorLine(pinned)}</div></div>`
       : '<div class="card vx-news-pinned"><h3>Bảng tin Liên đoàn</h3><p class="mini">Chưa có bài ghim.</p></div>'
     const upcoming = `<div class="card vx-news-upcoming"><h3>Sự kiện sắp tới</h3>${events.map((e) => `<div class="vx-news-up-row" ${jsCall("newsOpen", e.id)}><div class="vx-news-date"><b>${esc(e.event!.date.slice(8, 10))}</b><span>Th${Number(e.event!.date.slice(5, 7))}</span></div><div><b>${esc(e.title)}</b><div class="mini">${eventLine(e.event!)}</div></div></div>`).join("") || '<div class="mini">Không có sự kiện sắp tới.</div>'}</div>`
     return `<div class="vx-news-top">${hero}${upcoming}</div>
 <div class="card vx-news-toolbar"><div class="vx-news-chips">${chip("", "Tất cả")}${NEWS_KINDS.map((k) => chip(k, k)).join("")}</div>
 <input placeholder="Tìm bài viết..." value="${esc(state.query)}" onchange="newsSearch(this.value)">${canWrite() ? `<button class="btn btn-primary" ${jsCall("newsForm")}>+ Đăng bài</button>` : ""}</div>
-<div class="vx-news-list">${list.map(postCardHtml).join("") || '<div class="card mini">Không có bài viết phù hợp.</div>'}</div>`
+<div class="vx-news-list">${list.map((p) => postCardHtml(p, subs())).join("") || '<div class="card mini">Không có bài viết phù hợp.</div>'}</div>`
   }
 
   function rerender() {
@@ -54,19 +55,33 @@ export function installNewsPage(render: Record<string, () => void>, ctx: Ctx) {
       ? `<div class="toolbar" style="margin-top:12px"><button class="btn btn-light" ${jsCall("newsForm", p.id)}>Sửa</button>${p.status === "Đã đăng" ? `<button class="btn btn-light" ${jsCall("newsPin", p.id)}>${p.pinned ? "Bỏ ghim" : "Ghim"}</button><button class="btn btn-light" ${jsCall("newsWithdraw", p.id)}>Gỡ bài</button>` : ""}</div>`
       : ""
     const event = p.event ? `<div class="metric"><span>Thời gian • địa điểm</span><b>${eventLine(p.event)}</b></div>` : ""
-    ctx.openModal(p.kind, `<div class="vx-news-badges">${postBadges(p)}</div><h2 style="margin:8px 0">${esc(p.title)}</h2><div class="mini">${esc(p.authorName)} • ${esc(audienceLabel(p.audience))}${p.publishedAt ? ` • ${esc(stamp(p.publishedAt))}` : ""}</div>${event}<div class="vx-news-body">${p.summary ? `<p><b>${esc(p.summary)}</b></p>` : ""}${bodyHtml(p.body)}</div>${actions}`)
+    ctx.openModal(p.kind, `<div class="vx-news-badges">${postBadges(p, subs())}</div><h2 style="margin:8px 0">${esc(p.title)}</h2><div class="mini">Đăng bởi ${authorLine(p)}${p.publishedAt ? ` • ${esc(stamp(p.publishedAt))}` : ""}</div>${event}<div class="vx-news-body">${p.summary ? `<p><b>${esc(p.summary)}</b></p>` : ""}${bodyHtml(p.body)}</div>${actions}`)
+  }
+
+  /** "Toàn Liên đoàn", then one group per unit: the whole unit followed by its tổ/phòng. */
+  function audienceOptions(audiences: string[], selected: string): string {
+    const opt = (v: string, label: string) => `<option value="${esc(v)}"${v === selected ? " selected" : ""}>${esc(label)}</option>`
+    const all = audiences.includes("ALL") ? opt("ALL", "Toàn Liên đoàn") : ""
+    const groups = UNIT_DEFS.map((u) => {
+      const inUnit = audiences.filter((a) => a === u.code || subs().some((s) => s.id === a && s.unit === u.code))
+      if (!inUnit.length) return ""
+      return `<optgroup label="${esc(u.name)}">${inUnit.map((a) => opt(a, a === u.code ? `Cả ${u.name}` : subs().find((s) => s.id === a)?.name ?? a)).join("")}</optgroup>`
+    }).join("")
+    // A post may target an audience outside the editor's list (kept when editing).
+    const extra = audiences.filter((a) => a !== "ALL" && !UNIT_DEFS.some((u) => u.code === a) && !subs().some((s) => s.id === a)).map((a) => opt(a, a)).join("")
+    return all + groups + extra
   }
 
   function newsForm(id?: string) {
     const p = id ? find(id) : undefined
     if (p ? !canManage(p, ctx.role()) : !canWrite()) return
-    const audiences = postableAudiences(ctx.role())
+    const audiences = postableAudiences(ctx.role(), subs())
     if (p && !audiences.includes(p.audience)) audiences.push(p.audience)
     const kind = p?.kind ?? "Tin tức"
     const opt = (v: string, label: string, sel: boolean) => `<option value="${esc(v)}"${sel ? " selected" : ""}>${esc(label)}</option>`
     ctx.openModal(p ? "Sửa bài viết" : "Đăng bài mới", `<div class="form-grid">
 <div><label>Loại bài</label><select id="news-kind" onchange="document.getElementById('news-event').style.display=this.value==='Sự kiện'?'':'none'">${NEWS_KINDS.map((k) => opt(k, k, k === kind)).join("")}</select></div>
-<div><label>Phạm vi</label><select id="news-audience">${audiences.map((a) => opt(a, audienceLabel(a), a === p?.audience)).join("")}</select></div>
+<div><label>Phạm vi</label><select id="news-audience">${audienceOptions(audiences, p?.audience ?? "")}</select></div>
 <div class="full"><label>Tiêu đề *</label><input id="news-title" value="${esc(p?.title ?? "")}"></div>
 <div class="full"><label>Tóm tắt</label><input id="news-summary" value="${esc(p?.summary ?? "")}"></div>
 <div class="full"><label>Nội dung * (cách đoạn bằng dòng trống)</label><textarea id="news-body" rows="7">${esc(p?.body ?? "")}</textarea></div>
@@ -98,7 +113,7 @@ export function installNewsPage(render: Record<string, () => void>, ctx: Ctx) {
     void vldcData.save("news", post)
     // An existing calendar entry always follows the post; a new one only when "Thêm vào Lịch" is ticked.
     const existing = calendarOf(post.id)
-    const entry = existing || field("news-calendar")?.checked ? newsCalendarEntry(post, existing) : null
+    const entry = existing || field("news-calendar")?.checked ? newsCalendarEntry(post, existing, subs()) : null
     if (entry) void vldcData.save("calendarEvents", entry)
     ctx.closeModal()
     rerender()
@@ -110,7 +125,7 @@ export function installNewsPage(render: Record<string, () => void>, ctx: Ctx) {
     const next = { ...p, ...patch, updatedAt: new Date().toISOString() }
     void vldcData.save("news", next)
     const existing = calendarOf(id)
-    const entry = existing && newsCalendarEntry(next, existing)
+    const entry = existing && newsCalendarEntry(next, existing, subs())
     if (entry) void vldcData.save("calendarEvents", entry)
     ctx.closeModal()
     rerender()

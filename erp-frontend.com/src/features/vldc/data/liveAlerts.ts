@@ -1,4 +1,5 @@
 import { isClosed } from "../workflow/rules"
+import { projectsView } from "./projectView"
 import { workflowStore } from "../workflow/repository"
 import { evaluateAlerts, type Alert } from "./alerts"
 import { localToday } from "./dates"
@@ -9,7 +10,7 @@ import type { AlertRule } from "./types"
 export function liveAlerts(rules: AlertRule[]): Alert[] {
   const openWork = workflowStore.items().filter((x) => x.type !== "payment" && !isClosed(x)).map((x) => ({ id: x.id, title: x.title, due: x.due }))
   return evaluateAlerts(rules, {
-    projects: vldcData.get("projects"),
+    projects: projectsView(),
     equipment: vldcData.get("equipment"),
     contracts: vldcData.get("contracts"),
     inboxTasks: vldcData.get("inboxTasks"),

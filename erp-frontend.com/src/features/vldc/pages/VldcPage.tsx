@@ -1,4 +1,5 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react"
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
+import { blockedPages, menuPageFor, pruneBlockedLinks } from "@/features/vldc/data/menuPolicy"
 import { useLocation, useNavigate, useParams } from "react-router-dom"
 import toast from "react-hot-toast"
 import { useAuth } from "@/services/auth/AuthContext"
@@ -60,7 +61,9 @@ export default function VldcPage() {
   const [paletteOpen, setPaletteOpen] = useState(false)
   const known = hasPage(pageId)
   const userName = user?.fullName || user?.email || ""
-  const group = menus.groups.find((g) => g.items.some((item) => item.url === pathname))?.title
+  // A merged page (Văn bản, Năng lực…) lights up its parent menu entry.
+  const menuPath = pathname.startsWith("/vldc/") ? `/vldc/${menuPageFor(pageId)}` : pathname
+  const group = menus.groups.find((g) => g.items.some((item) => item.url === menuPath))?.title
 
   useEffect(() => {
     setVldcNavigator(navigate)
@@ -152,13 +155,29 @@ export default function VldcPage() {
     return () => window.removeEventListener("keydown", onKey)
   }, [])
 
+  // Pages hidden from this account's menu are not reachable either: no links to them, no direct URL.
+  const blocked = useMemo(() => blockedPages(user?.roleCodes ?? []), [user])
+  const shellRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (blocked.has(pageId)) navigate("/vldc/dashboard", { replace: true })
+  }, [pageId, blocked, navigate])
+  useEffect(() => {
+    const root = shellRef.current
+    if (!root || !blocked.size) return
+    pruneBlockedLinks(root, blocked)
+    // Pages and modals are HTML strings rendered later; prune whatever they add.
+    const observer = new MutationObserver(() => pruneBlockedLinks(root, blocked))
+    observer.observe(root, { childList: true, subtree: true })
+    return () => observer.disconnect()
+  }, [blocked])
+
   useLayoutEffect(() => {
-    if (!known) return
+    if (!known || blocked.has(pageId)) return
     setCurrentRole(role)
     renderPage(pageId)
     if (keepScrollRef.current) keepScrollRef.current = false
     else window.scrollTo({ top: 0 })
-  }, [pageId, role, navSeq, known])
+  }, [pageId, role, navSeq, known, blocked])
 
   const handleLogout = async () => {
     try {
@@ -172,13 +191,13 @@ export default function VldcPage() {
   const shellClass = ["vldc-scope", "vx-shell", collapsed && "is-collapsed", mobileOpen && "is-mobile-open"].filter(Boolean).join(" ")
 
   return (
-    <div className={shellClass}>
+    <div className={shellClass} ref={shellRef}>
       <VldcSidebar
         groups={menus.groups}
         loading={menus.loading}
         error={menus.error}
         onRetry={() => menus.retry()}
-        pathname={pathname}
+        pathname={menuPath}
         role={role}
         userName={userName}
         initials={initialsOf(userName)}

@@ -1,5 +1,5 @@
 import { escapeHtml as esc, formatDate, jsCall, statusBadge } from "./html.ts"
-import { CRITERIA, RATING_LABELS, itemFlags, overallKpi, unitKpi, unitKpis, unitOfRole, kpiUnits, type UnitKpi } from "./kpi.ts"
+import { CRITERIA, RATING_LABELS, itemFlags, overallKpi, subUnitKpis, unitKpi, unitKpis, unitOfRole, kpiUnits, type UnitKpi } from "./kpi.ts"
 import { ROLE_TITLES, isClosed, rolledUpProgress } from "./rules.ts"
 import type { WorkItem } from "./types.ts"
 
@@ -61,7 +61,8 @@ const itemTable = (items: WorkItem[], all: WorkItem[], today: string) =>
   `<table><tr><th>Mã</th><th>Nội dung</th><th>Chủ trì</th><th>Trạng thái</th><th>Tiến độ</th><th>Hạn</th><th>Lưu ý</th><th></th></tr>${itemRows(items, all, today)}</table>`
 
 /** Drill-down: how the score was reached, then the unit's open and finished work. */
-export function unitDetailHtml(unitId: string, all: WorkItem[], today: string): string {
+/** subs: the unit's tổ/phòng – each gets its own KPI row. */
+export function unitDetailHtml(unitId: string, all: WorkItem[], today: string, subs: { id: string; name: string }[] = []): string {
   const unit = kpiUnits().find((u) => u.id === unitId)
   if (!unit) return '<div class="mini">Không tìm thấy đơn vị.</div>'
   const k = unitKpi(unit, all, today)
@@ -79,8 +80,13 @@ export function unitDetailHtml(unitId: string, all: WorkItem[], today: string): 
   }).join("")
   const open = k.items.filter((x) => !isClosed(x))
   const done = k.items.filter(isClosed)
+  const subK = subUnitKpis(subs, all, today)
+  const untagged = k.items.filter((x) => !x.subUnit || !subs.some((s) => s.id === x.subUnit)).length
+  const subRows = subK.length
+    ? `<h4 style="margin-top:16px">Theo tổ / phòng</h4><table><tr><th>Tổ / phòng</th><th>Việc</th><th>Đang mở</th><th>Tiến độ</th><th>Đúng hạn</th><th>Điểm</th></tr>${subK.map((s) => `<tr><td><b>${esc(s.unit.name)}</b></td><td>${s.items.length}</td><td>${s.open}</td><td>${fmt(s.criteria.progress.value)}</td><td>${fmt(s.criteria.onTime.value)}</td><td>${s.score ?? "–"} ${ratingBadge(s)}</td></tr>`).join("")}</table>${untagged ? `<div class="mini">${untagged} việc giao chung cho đơn vị, chưa gắn tổ.</div>` : ""}`
+    : ""
   return `<div class="kpi-detail-head"><div class="kpi-gauge" style="--pct:${k.score ?? 0}%"><b>${k.score ?? "–"}</b></div><div><div class="mini">${unit.roles.map((r) => esc(ROLE_TITLES[r] || r)).join(" • ")}</div><div style="margin:4px 0">${ratingBadge(k)}</div><div class="mini">${k.items.length} việc • ${k.done} hoàn thành • ${k.open} đang làm</div></div></div>
 <table style="margin-top:10px"><tr><th>Tiêu chí</th><th>Trọng số</th><th>Cách ra số</th><th>Kết quả</th></tr>${rows}</table>
-<h4 style="margin-top:16px">Đang làm (${open.length})</h4>${itemTable(open, all, today)}
+${subRows}<h4 style="margin-top:16px">Đang làm (${open.length})</h4>${itemTable(open, all, today)}
 <h4 style="margin-top:16px">Đã hoàn thành (${done.length})</h4>${itemTable(done, all, today)}`
 }

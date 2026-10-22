@@ -709,3 +709,32 @@
 .vldc-scope .vx-field-3 { background: #efe9f8; color: #5b45a6; }
 .vldc-scope .vx-field-4 { background: #e4f4f7; color: #11707f; }
 .vldc-scope .vx-field-5 { background: #f9e9ec; color: #a23a50; }
+
+/* Tab con của các trang đã gộp (DMS / Văn bản / Sinh văn bản, Nhân sự / Năng lực) */
+.vldc-scope .vx-subtabs { display: flex; gap: 4px; margin-bottom: 14px; padding: 4px; border-radius: 12px; background: #fff; box-shadow: 0 8px 26px rgba(26, 62, 91, .08); width: fit-content; max-width: 100%; overflow-x: auto; }
+.vldc-scope .vx-subtab { padding: 8px 18px; border: 0; border-radius: 9px; background: transparent; color: var(--muted); font-weight: 600; cursor: pointer; white-space: nowrap; }
+.vldc-scope .vx-subtab:hover { color: var(--primary); }
+.vldc-scope .vx-subtab.active { background: var(--primary); color: #fff; }
+
+/* Không gian đơn vị – cây tổ chức */
+.vldc-scope .vx-org-unit { margin-top: 12px; }
+.vldc-scope .vx-org-unit-head { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+.vldc-scope .vx-org-row { display: grid; grid-template-columns: minmax(0, 1fr) 90px 170px 60px; gap: 12px; align-items: center; margin-left: 32px; padding: 9px 8px; border-top: 1px solid var(--line); }
+.vldc-scope .vx-org-members { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px; }
+.vldc-scope .vx-org-member { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; cursor: pointer; text-align: left; }
+.vldc-scope .vx-org-member:hover { border-color: var(--primary); }
+@media (max-width: 900px) {
+  .vldc-scope .vx-org-row { grid-template-columns: 1fr auto; margin-left: 0; }
+}
+
+/* Ô tích trong form (Ghim bài, Thêm vào trang Sự kiện): ô và chữ nằm sát nhau */
+.vldc-scope .form-grid label.vx-news-check { display: flex; align-items: center; justify-content: flex-start; gap: 8px; margin: 4px 0 0; font-size: 13px; text-align: left; }
+.vldc-scope .form-grid label.vx-news-check input[type="checkbox"] { width: auto; margin: 0; flex: 0 0 auto; }
+
+/* Nhiệm vụ / Dự án */
+.vldc-scope .vx-pj-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 10px 0; }
+.vldc-scope .vx-pj-tiles > div { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: #fbfdff; }
+.vldc-scope .vx-pj-tiles span, .vldc-scope .vx-pj-tiles small { color: var(--muted); font-size: 12px; }
+.vldc-scope .vx-pj-tiles b { font-size: 20px; }
+.vldc-scope .vx-pj-form input, .vldc-scope .vx-pj-form select { width: 100%; min-width: 90px; }
+@media (max-width: 900px) { .vldc-scope .vx-pj-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

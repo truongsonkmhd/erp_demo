@@ -239,7 +239,7 @@ export function applyAction(item: WorkItem, action: WorkAction, input: ActionInp
 }
 
 export function createDirective(
-  input: { id: string; title: string; owner: string; cc: string[]; due: string; priority: WorkItem["priority"]; description?: string },
+  input: { id: string; title: string; owner: string; subUnit?: string; project?: string; cc: string[]; due: string; priority: WorkItem["priority"]; description?: string },
   role: string,
   perms: string[],
   now: string,
@@ -251,6 +251,8 @@ export function createDirective(
   const cc = input.cc.filter((r) => r !== input.owner && r !== role)
   return newWorkItem({
     id: input.id, type: "directive", title, description: input.description, createdBy: role, owner: input.owner,
+    ...(input.subUnit ? { subUnit: input.subUnit } : {}),
+    ...(input.project ? { project: input.project } : {}),
     cc, status: "Mới giao", priority: input.priority, due,
   }, now, [input.owner, ...cc])
 }
@@ -299,7 +301,7 @@ function applyPaymentAction(item: WorkItem, action: WorkAction, input: ActionInp
 }
 
 export function createPayment(
-  input: { id: string; title: string; amount: number; due: string; parentId?: string; description?: string },
+  input: { id: string; title: string; amount: number; due: string; parentId?: string; description?: string; project?: string },
   role: string,
   perms: string[],
   now: string,
@@ -314,6 +316,7 @@ export function createPayment(
   return newWorkItem({
     id: input.id, type: "payment", title, description: input.description, createdBy: role, owner, cc,
     parentId: input.parentId, status: "Đang trình", step: 1, amount, priority: "Cao", due,
+    ...(input.project ? { project: input.project } : {}),
   }, now, [owner])
 }
 

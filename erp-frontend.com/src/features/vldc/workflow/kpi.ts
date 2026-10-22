@@ -4,7 +4,8 @@ import { UNIT_DEFS, rolesOfUnit, unitName, type UnitCode } from "../data/org.ts"
 
 /** Unit KPIs computed from the shared work items, so every page shows the same, traceable numbers. */
 
-export type Unit = { id: string; name: string; short: string; roles: string[] }
+/** match overrides the default "owned by one of the unit's roles" (used for tổ/phòng). */
+export type Unit = { id: string; name: string; short: string; roles: string[]; match?: (item: WorkItem) => boolean }
 
 /** KPI units: every department except the leadership, field units first (ids are tbl_department codes). */
 const KPI_ORDER: UnitCode[] = ["MD", "DB", "HK", "TT", "KT", "KHTC", "TCHC"]
@@ -65,7 +66,8 @@ export function ratingOf(score: number | null): UnitKpi["rating"] {
 }
 
 export function unitKpi(unit: Unit, all: WorkItem[], today: string): UnitKpi {
-  const items = all.filter((x) => x.type !== "payment" && unit.roles.includes(x.owner)).sort((a, b) => a.due.localeCompare(b.due))
+  const owns = unit.match ?? ((x: WorkItem) => unit.roles.includes(x.owner))
+  const items = all.filter((x) => x.type !== "payment" && owns(x)).sort((a, b) => a.due.localeCompare(b.due))
   const flags = items.map((x) => itemFlags(x, today))
   const submitted = items.filter((x) => x.history.some((h) => h.action === "submit"))
   const started = items.filter((x) => x.status !== "Mới giao")
@@ -85,6 +87,11 @@ export function unitKpi(unit: Unit, all: WorkItem[], today: string): UnitKpi {
 
 export function unitKpis(all: WorkItem[], today: string): UnitKpi[] {
   return kpiUnits().map((u) => unitKpi(u, all, today))
+}
+
+/** KPI of each tổ/phòng: the work tagged with it, scored like a unit. */
+export function subUnitKpis(subs: { id: string; name: string }[], all: WorkItem[], today: string): UnitKpi[] {
+  return subs.map((s) => unitKpi({ id: s.id, name: s.name, short: s.name, roles: [], match: (x) => x.subUnit === s.id }, all, today))
 }
 
 /** Liên đoàn-wide figures: averages over units that have work, plus raw overdue count. */

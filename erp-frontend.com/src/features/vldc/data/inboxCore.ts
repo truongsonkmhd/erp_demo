@@ -10,7 +10,7 @@ import type { InboxTask } from "./types.ts"
 
 export type InboxRow = {
   id: string
-  kind: "work" | "task" | "doc" | "topic"
+  kind: "work" | "task" | "doc" | "topic" | "project"
   type: string
   title: string
   source: string

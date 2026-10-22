@@ -42,7 +42,7 @@ export function leaderDashboardHtml(all: WorkItem[], biz: BusinessData, today: s
   const plan = months.at(-1)?.plan ?? 0
   const dateLabel = new Date(`${today}T00:00:00`).toLocaleDateString("vi-VN", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" })
 
-  const head = `<div class="ld-head"><div><div class="eyebrow">BAN LÃNH ĐẠO • ${dateLabel.toUpperCase()}</div><h2>Tổng quan điều hành Liên đoàn</h2></div><div class="ld-actions"><button class="btn btn-light" onclick="show('command')">Command Center</button><button class="btn btn-primary" onclick="wfCreateDirective()">+ Giao chỉ đạo</button></div></div>`
+  const head = `<div class="ld-head"><div><div class="eyebrow">BAN LÃNH ĐẠO • ${dateLabel.toUpperCase()}</div><h2>Tổng quan điều hành Liên đoàn</h2></div></div>`
 
   const kpiTiles = `<div class="grid kpis">${[
     kpi("Chỉ đạo đang mở", String(open.length), "Toàn Liên đoàn", "directives"),

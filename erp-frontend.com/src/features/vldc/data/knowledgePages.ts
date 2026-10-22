@@ -1,4 +1,6 @@
 import { escapeHtml as esc, jsCall } from "../workflow/html"
+import { projectsView } from "./projectView"
+import { subTabsHtml } from "./menuPolicy"
 import { ROLE_TITLES } from "../workflow/rules"
 import { workflowStore } from "../workflow/repository"
 import * as A from "./accountingMetrics"
@@ -40,7 +42,7 @@ const newId = (prefix: string) => `${prefix}-${Date.now().toString(36).toUpperCa
 function searchData(): SearchData {
   return {
     dmsFiles: D("dmsFiles"), incomingDocuments: D("incomingDocuments"), outgoingDocuments: D("outgoingDocuments"), staffSkills: D("staffSkills"),
-    equipment: D("equipment"), fixedAssets: D("fixedAssets"), projects: D("projects"), risks: D("risks"), contracts: D("contracts"),
+    equipment: D("equipment"), fixedAssets: D("fixedAssets"), projects: projectsView(), risks: D("risks"), contracts: D("contracts"),
     vouchers: D("vouchers"), advances: D("advances"), archiveRecords: D("archiveRecords"), geoDatasets: D("geoDatasets"),
   }
 }
@@ -76,7 +78,7 @@ let dmsProject = ""
 function dms() {
   const files = D("dmsFiles")
   const m = K.dmsMetrics(files, today())
-  const projects = D("projects")
+  const projects = projectsView()
   const pid = projects.some((p) => p.id === dmsProject) ? dmsProject : projects[0]?.id ?? ""
   const options = projects.map((p) => `<option value="${esc(p.id)}"${p.id === pid ? " selected" : ""}>${esc(p.id)} – ${esc(p.name)}</option>`).join("")
   const folders = K.folderCounts(files, pid, DMS_FOLDERS).map((f) => `<div class="folder" ${jsCall("folderOpen", pid, f.folder)}>📁 ${esc(f.folder)} <span class="mini">• ${f.count} tài liệu</span></div>`).join("")
@@ -151,7 +153,7 @@ function datahub() {
   const layers: [string, number, string][] = [
     ["Tài liệu DMS", D("dmsFiles").length, "dms"], ["Văn bản đến / đi", D("incomingDocuments").length + D("outgoingDocuments").length, "documents"],
     ["Hồ sơ lưu trữ", D("archiveRecords").length, "archive"], ["Dữ liệu địa vật lý", D("geoDatasets").length, "geodata"],
-    ["Dự án", D("projects").length, "projects"], ["Thiết bị", D("equipment").length, "equipment"], ["Hợp đồng", D("contracts").length, "contracts"],
+    ["Dự án", projectsView().length, "projects"], ["Thiết bị", D("equipment").length, "equipment"], ["Hợp đồng", D("contracts").length, "contracts"],
   ]
   const violations = rules.reduce((s, r) => s + r.violations, 0)
   return `${kpis(
@@ -171,7 +173,7 @@ function datahub() {
 function reportTable(def: ReportDef): string {
   const t = today()
   switch (def.source) {
-    case "projects": return table(["Dự án", "Đơn vị", "Kỹ thuật", "Chi phí", "Dự báo"], D("projects").map((p) => `<tr><td>${esc(p.id)}</td><td>${esc(p.unit)}</td><td>${p.technical}%</td><td>${p.costUsed}%</td><td>${p.delayDays ? `+${p.delayDays} ngày` : "Đúng hạn"}</td></tr>`))
+    case "projects": return table(["Dự án", "Đơn vị", "Kỹ thuật", "Chi phí", "Dự báo"], projectsView().map((p) => `<tr><td>${esc(p.id)}</td><td>${esc(p.unit)}</td><td>${p.technical}%</td><td>${p.costUsed}%</td><td>${p.delayDays ? `+${p.delayDays} ngày` : "Đúng hạn"}</td></tr>`))
     case "work_items": return table(["Mã", "Nội dung", "Chủ trì", "Hạn"], workflowStore.items().filter((x) => x.type !== "payment" && x.status !== "Hoàn thành" && x.due < t).map((x) => `<tr><td>${esc(x.id)}</td><td>${esc(x.title)}</td><td>${esc(ROLE_TITLES[x.owner] || x.owner)}</td><td>${vnDate(x.due)}</td></tr>`), "Không có việc quá hạn.")
     case "finance_lines": return table(["Dự án", "Hạng mục", "Dự toán", "Đã chi"], D("financeLines").map((l) => `<tr><td>${esc(l.project)}</td><td>${esc(l.item)}</td><td>${tr(l.budget)}</td><td>${tr(l.paid)}</td></tr>`))
     case "contracts": return table(["Hợp đồng", "Khách hàng", "Còn lại", "Tuổi nợ"], A.debtSummary(D("contracts"), "thu", t).debts.map((d) => `<tr><td>${esc(d.contract.id)}</td><td>${esc(d.contract.party)}</td><td>${tr(d.outstanding)}</td><td>${d.agingDays} ngày</td></tr>`))
@@ -241,7 +243,7 @@ function audit() {
 let genTemplate = ""
 let genTarget = ""
 function targetsOf(tpl: DocTemplate): { id: string; label: string; row: Record<string, unknown> }[] {
-  if (tpl.target === "project") return D("projects").map((p) => ({ id: p.id, label: `${p.id} – ${p.name}`, row: p }))
+  if (tpl.target === "project") return projectsView().map((p) => ({ id: p.id, label: `${p.id} – ${p.name}`, row: p }))
   if (tpl.target === "contract") return D("contracts").map((c) => ({ id: c.id, label: `${c.id} – ${c.party}`, row: c }))
   return D("equipment").map((e) => ({ id: e.id, label: `${e.id} – ${e.name}`, row: { ...e, inspectionDue: vnDate(e.inspectionDue) } }))
 }
@@ -273,9 +275,9 @@ function generator() {
 
 function actions(ctx: Ctx) {
   const open = ctx.openModal
-  const rerender = (page: () => string) => {
+  const rerender = (page: keyof typeof RENDERERS) => {
     const el = content()
-    if (el) el.innerHTML = page()
+    if (el) el.innerHTML = subTabsHtml(page) + RENDERERS[page]()
   }
 
   function folderOpen(projectId: string, folder: string) {
@@ -305,11 +307,11 @@ function actions(ctx: Ctx) {
 
   function dmsSelectProject(id: string) {
     dmsProject = id
-    rerender(dms)
+    rerender("dms")
   }
 
   function uploadDoc() {
-    const projects = D("projects").map((p) => `<option>${esc(p.id)}</option>`).join("")
+    const projects = projectsView().map((p) => `<option>${esc(p.id)}</option>`).join("")
     const folders = DMS_FOLDERS.map((f) => `<option>${esc(f)}</option>`).join("")
     open("Tải tài liệu (lưu metadata)", `<div class="form-grid"><div class="full"><label>Tên tài liệu</label><input id="up-name"></div><div><label>Dự án</label><select id="up-project">${projects}</select></div><div><label>Thư mục</label><select id="up-folder">${folders}</select></div><div><label>Định dạng</label><select id="up-format"><option>PDF</option><option>DOCX</option><option>XLSX</option><option>TIFF</option></select></div><div><label>Tag (phân cách dấu phẩy)</label><input id="up-tags"></div></div><button class="btn btn-primary" style="margin-top:10px" onclick="saveUpload()">Lưu</button>`)
   }
@@ -347,7 +349,7 @@ function actions(ctx: Ctx) {
   }
 
   function geoDatasetModal() {
-    const projects = D("projects").map((p) => `<option>${esc(p.id)}</option>`).join("")
+    const projects = projectsView().map((p) => `<option>${esc(p.id)}</option>`).join("")
     open("Đăng ký bộ dữ liệu địa vật lý", `<div class="form-grid"><div class="full"><label>Tên bộ dữ liệu</label><input id="geo-name"></div><div><label>Loại</label><input id="geo-type" value="Từ mặt đất"></div><div><label>Dự án</label><select id="geo-project">${projects}</select></div><div><label>Dung lượng (GB)</label><input id="geo-size" type="number" value="1"></div><div><label>Storage URI</label><input id="geo-uri" value="s3://vldc-geo/"></div></div><button class="btn btn-primary" style="margin-top:10px" onclick="saveGeoDataset()">Lưu</button>`)
   }
 
@@ -436,13 +438,13 @@ function actions(ctx: Ctx) {
 
   function auditSearch(q: string) {
     auditFilter = q
-    rerender(audit)
+    rerender("audit")
   }
 
   function genSelect(tplId: string, targetId: string) {
     genTemplate = tplId
     genTarget = targetId
-    rerender(generator)
+    rerender("generator")
   }
 
   function generateDoc() {
@@ -482,7 +484,7 @@ export function installKnowledgePages(render: Record<string, () => void>, ctx: C
   for (const [page, html] of Object.entries(RENDERERS)) {
     render[page] = function () {
       const el = content()
-      if (el) el.innerHTML = html()
+      if (el) el.innerHTML = subTabsHtml(page) + html()
     }
   }
   Object.assign(window, actions(ctx))

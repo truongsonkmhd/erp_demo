@@ -6,10 +6,10 @@ export const EDUCATION_LEVELS: Education[] = ["Tiến sĩ", "Thạc sĩ", "Kỹ 
 export type ExpBand = "under5" | "from5to15" | "over15"
 export type AgeBand = "under30" | "30to45" | "over45"
 export type StaffFilter = {
-  query: string; unit: string; education: string; age: "" | AgeBand; exp: "" | ExpBand; cert: "" | "expiring"; onField: "" | "yes" | "no"
+  query: string; unit: string; subUnit: string; education: string; age: "" | AgeBand; exp: "" | ExpBand; cert: "" | "expiring"; onField: "" | "yes" | "no"
 }
 export type StaffSort = "name" | "age" | "education" | "experience" | "unit"
-export const EMPTY_STAFF_FILTER: StaffFilter = { query: "", unit: "", education: "", age: "", exp: "", cert: "", onField: "" }
+export const EMPTY_STAFF_FILTER: StaffFilter = { query: "", unit: "", subUnit: "", education: "", age: "", exp: "", cert: "", onField: "" }
 /** A certificate counts as "expiring" within this many days. */
 export const CERT_WARN_DAYS = 60
 
@@ -39,6 +39,7 @@ export function filterStaff(staff: StaffProfile[], f: StaffFilter, today: string
   return staff.filter((p) =>
     (!q || unitKey(`${p.name} ${p.major} ${p.title} ${p.id}`).includes(q))
     && (!f.unit || p.unit === f.unit)
+    && (!f.subUnit || p.subUnit === f.subUnit)
     && (!f.education || p.education === f.education)
     && (!f.age || ageBand(ageOf(p, today)) === f.age)
     && (!f.exp || expBand(p.experience) === f.exp)

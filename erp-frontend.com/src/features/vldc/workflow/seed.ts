@@ -1,5 +1,7 @@
 import type { WorkItem } from "./types.ts"
 import { applyAction, createDirective, createPayment, type ActionInput, type WorkAction } from "./rules.ts"
+import { roleUnitCode } from "../data/org.ts"
+import { SUB_UNIT_DEFS } from "../data/seed/subUnitDefs.ts"
 
 const ALL = ["*"]
 
@@ -110,5 +112,14 @@ export function buildSeed(today: string): WorkItem[] {
   act("PAY-SEED-3", "advance", "ketoan")
   act("PAY-SEED-3", "advance", "ketoantruong")
 
-  return [...items.values()]
+  return [...items.values()].map(tagSubUnit)
+}
+
+/** Seeded directives and tasks go to one of the owner unit's tổ/phòng (stable pick by id) so tổ KPIs have data. */
+function tagSubUnit(item: WorkItem): WorkItem {
+  const unit = roleUnitCode(item.owner)
+  const subs = SUB_UNIT_DEFS.filter((d) => d[1] === unit)
+  if (item.type === "payment" || !subs.length) return item
+  const hash = [...item.id].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7)
+  return { ...item, subUnit: subs[hash % subs.length][0] }
 }

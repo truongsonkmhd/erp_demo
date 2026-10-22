@@ -1,4 +1,5 @@
 import { escapeHtml as esc, formatDate, jsCall, statusBadge } from "../workflow/html"
+import { projectsView } from "./projectView"
 import { kpiUnits, unitKpi } from "../workflow/kpi"
 import { roleUnitCode, unitCodeOf, unitName } from "./org"
 import { PAYMENT_STEPS, ROLE_TITLES, isClosed } from "../workflow/rules"
@@ -6,6 +7,7 @@ import { workflowStore } from "../workflow/repository"
 import type { WorkItem } from "../workflow/types"
 import * as A from "./accountingMetrics"
 import { assignmentProgressHtml, assignmentSectionHtml } from "./docAssignPage"
+import { subTabsHtml } from "./menuPolicy"
 import { localToday, vnDate } from "./dates"
 import * as M from "./metrics"
 import { bar, kpi, kpis, metric, tr, ty } from "./pages"
@@ -59,7 +61,7 @@ function accounting(ctx: Ctx, chief = ctx.role() === "ketoantruong") {
     card(`Kiểm soát kỳ ${esc(close.period)}`, `${bar("Khóa sổ", close.pct)}${bar("Ghép sao kê ngân hàng", cash.matchRate)}${metric("Chênh lệch ERP – sao kê", tr(cash.diff))}${metric("Hạng mục khóa sổ còn mở", close.open)}`, goto("Checklist", "closing")),
   )}${grid("twoeq",
     card("Dự báo dòng tiền", table(["Tháng", "Thu", "Chi", "Ròng"], flow)),
-    card("Chi phí so với tiến độ", table(["Dự án", "Kỹ thuật", "Chi phí", ""], D("projects").map((p) => `<tr><td>${esc(p.id)}</td><td>${p.technical}%</td><td>${p.costUsed}%</td><td>${M.isOverrun(p) ? badge("Lệch", "b-danger") : badge("Ổn", "b-ok")}</td></tr>`))),
+    card("Chi phí so với tiến độ", table(["Dự án", "Kỹ thuật", "Chi phí", ""], projectsView().map((p) => `<tr><td>${esc(p.id)}</td><td>${p.technical}%</td><td>${p.costUsed}%</td><td>${M.isOverrun(p) ? badge("Lệch", "b-danger") : badge("Ổn", "b-ok")}</td></tr>`))),
   )}`
 }
 
@@ -160,7 +162,7 @@ function acctassets() {
 
 let selectedProject = ""
 function projectacct() {
-  const projects = D("projects")
+  const projects = projectsView()
   const pid = projects.some((p) => p.id === selectedProject) ? selectedProject : projects[0]?.id ?? ""
   const lines = D("financeLines").filter((l) => l.project === pid)
   const sum = (pick: (l: (typeof lines)[number]) => number) => lines.reduce((s, l) => s + pick(l), 0)
@@ -300,7 +302,7 @@ export function unitDashboardHtml(role: string): string {
   const code = roleUnitCode(role)!
   const u = { name: unitName(code) }
   const org = D("orgUnits").find((o) => o.id === code)
-  const ps = D("projects").filter((p) => unitCodeOf(p.unit) === code)
+  const ps = projectsView().filter((p) => unitCodeOf(p.unit) === code)
   const eqs = D("equipment").filter((e) => unitCodeOf(e.unit) === code)
   const em = M.equipmentMetrics(eqs, today())
   const kpiUnit = kpiUnits().find((x) => x.id === code)
@@ -320,7 +322,7 @@ export function unitDashboardHtml(role: string): string {
 
 /** Dashboard of the remaining roles (heads, specialists): federation-wide picture computed from records. */
 export function baseDashboardHtml(): string {
-  const ps = D("projects")
+  const ps = projectsView()
   const f = M.financeMetrics(D("financeLines"), D("disbursement"))
   const ins = D("incomingDocuments")
   const ar = A.debtSummary(D("contracts"), "thu", today())
@@ -347,15 +349,6 @@ export function baseDashboardHtml(): string {
 function modals(ctx: Ctx) {
   const open = ctx.openModal
   const notFound = (what: string, id: string) => open(what, `<div class="mini">Không tìm thấy ${esc(id)}.</div>`)
-
-  function projectDetail(id?: string) {
-    const p = D("projects").find((x) => x.id === id) ?? D("projects")[0]
-    if (!p) return notFound("Dự án", id ?? "")
-    const lines = D("financeLines").filter((l) => l.project === p.id)
-    const risks = D("risks").filter((r) => r.project === p.id && r.open)
-    const events = D("calendarEvents").filter((e) => e.project === p.id)
-    open(`Hồ sơ dự án • ${p.id}`, `<h3 style="margin-top:0">${esc(p.name)}</h3><div class="grid twoeq"><div>${metric("Đơn vị", esc(p.unit))}${metric("Ngân sách", ty(p.budget))}${metric("Tiến độ kỹ thuật", `${p.technical}%`)}${metric("Chi phí đã dùng", `${p.costUsed}%`)}${metric("Dự báo", p.delayDays ? `Trễ ${p.delayDays} ngày` : "Đúng hạn")}${metric("Change Request", `${p.changeRequests} (${p.changeRequestsPending} chờ duyệt)`)}</div><div><h4>WBS</h4>${(p.wbs ?? []).map((w) => bar(`${w.name} • ${w.status}`, w.progress)).join("") || '<div class="mini">Chưa có WBS.</div>'}</div></div><h4 style="margin-top:12px">Chi phí theo hạng mục</h4>${table(["Hạng mục", "Dự toán", "Đã chi", "KL nghiệm thu"], lines.map((l) => `<tr><td>${esc(l.item)}</td><td>${tr(l.budget)}</td><td>${tr(l.paid)}</td><td>${l.acceptedPct}%</td></tr>`))}<h4 style="margin-top:12px">Rủi ro đang mở</h4>${risks.map((r) => `<div class="alert"><span class="dot ${M.riskLevel(r) === "Cao" ? "red" : "yellow"}"></span><div><b>${esc(r.id)} • ${esc(r.title)}</b><div class="mini">${esc(r.mitigation)}</div></div></div>`).join("") || '<div class="mini">Không có.</div>'}<h4 style="margin-top:12px">Lịch liên quan</h4>${events.map((e) => `<div class="mini">${esc(e.date)} ${esc(e.time)} • ${esc(e.title)}</div>`).join("") || '<div class="mini">Không có.</div>'}`)
-  }
 
   function equipmentDetail(id?: string) {
     const e = D("equipment").find((x) => x.id === id) ?? D("equipment")[0]
@@ -447,7 +440,7 @@ function modals(ctx: Ctx) {
     if (el) el.innerHTML = projectacct()
   }
 
-  return { projectDetail, equipmentDetail, contractDetail, debtDetail, debtLetter, voucherDetail, advanceDetail, assetAccountingDetail, documentDetail, bankReconcile, matchBankLine, ledgerDetail, toggleClosing, selectAcctProject }
+  return { equipmentDetail, contractDetail, debtDetail, debtLetter, voucherDetail, advanceDetail, assetAccountingDetail, documentDetail, bankReconcile, matchBankLine, ledgerDetail, toggleClosing, selectAcctProject }
 }
 
 const RENDERERS: Record<string, (ctx: Ctx) => string> = {
@@ -461,7 +454,7 @@ export function installAccountingPages(render: Record<string, (chief?: boolean) 
   for (const [page, html] of Object.entries(RENDERERS)) {
     render[page] = function () {
       const el = content()
-      if (el) el.innerHTML = html(ctx)
+      if (el) el.innerHTML = subTabsHtml(page) + html(ctx)
     }
   }
   // The engine's dashboard calls render.accounting(chief) for the two accounting roles.

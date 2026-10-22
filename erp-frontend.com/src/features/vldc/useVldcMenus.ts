@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
 import { getMyMenus, type MenuNode } from "@/services/MenuService"
 import type { CurrentUser } from "@/services/auth/AuthService"
+import { filterMenuGroups } from "./data/menuPolicy"
 
 export type VldcMenuItem = { code: string; title: string; icon?: string | null; url: string; group: string }
 export type VldcMenuGroup = { code: string; title: string; icon?: string | null; items: VldcMenuItem[] }
@@ -26,7 +27,8 @@ export function useVldcMenus(user: CurrentUser | null) {
     enabled: !!user,
     retry: 1,
     staleTime: 5 * 60 * 1000,
-    select: toGroups,
+    // Roles may hide pages they can still open from links (see menuPolicy).
+    select: (nodes: MenuNode[]) => filterMenuGroups(toGroups(nodes), user?.roleCodes ?? []),
   })
   return { groups: query.data ?? [], loading: query.isLoading, error: query.isError, retry: query.refetch }
 }

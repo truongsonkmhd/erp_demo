@@ -1,5 +1,6 @@
 import { addDays } from "../dates.ts"
 import type { Education, StaffProfile } from "../types.ts"
+import { SUB_UNIT_DEFS } from "./subUnitDefs.ts"
 
 /**
  * 123 public staff profiles, generated deterministically so the capability figures stay as published:
@@ -121,5 +122,12 @@ export function staffProfiles(today: string): StaffProfile[] {
         pick(MAJORS[field ? "FIELD" : unit]), field && rand() < 0.45, randomCerts(unit)))
     }
   }
-  return out
+  // Spread each unit's people over its tổ/phòng in turn (the leadership has none).
+  const seen: Record<string, number> = {}
+  return out.map((p) => {
+    const subs = SUB_UNIT_DEFS.filter((d) => d[1] === p.unit)
+    if (!subs.length) return p
+    const i = (seen[p.unit] = (seen[p.unit] ?? -1) + 1)
+    return { ...p, subUnit: subs[i % subs.length][0] }
+  })
 }

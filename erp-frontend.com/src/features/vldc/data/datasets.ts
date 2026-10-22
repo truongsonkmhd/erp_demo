@@ -13,6 +13,7 @@ import * as nw from "./seed/news.ts"
 import * as st from "./seed/staff.ts"
 import * as da from "./seed/docAssignments.ts"
 import * as sc from "./seed/science.ts"
+import * as su from "./seed/subUnits.ts"
 import type { AuditEvent } from "./audit.ts"
 
 /**
@@ -60,6 +61,7 @@ export const DATASETS = {
   alertRules: { collection: "alert_rules", seed: gv.alertRules, pages: ["alerts", "dashboard"] },
   reportCatalog: { collection: "report_catalog", seed: gv.reportCatalog, pages: ["reports"] },
   docTemplates: { collection: "doc_templates", seed: gv.docTemplates, pages: ["generator"] },
+  subUnits: { collection: "sub_units", seed: su.subUnits, pages: ["units", "organization", "hr", "performance", "dashboard", "news"] },
   scienceTopics: { collection: "science_topics", seed: sc.scienceTopics, pages: ["research", "action"] },
   docAssignments: { collection: "doc_assignments", seed: da.docAssignments, pages: ["documents", "action", "dashboard"] },
   staffProfiles: { collection: "staff_profiles", seed: st.staffProfiles, pages: ["capability", "hr"] },

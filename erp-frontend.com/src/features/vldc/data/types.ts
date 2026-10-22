@@ -16,15 +16,17 @@ export type CommonTask = { id: string; title: string; scope: string; owner: stri
 /** date "dd/mm/yyyy", time "HH:MM". */
 export type CalendarEvent = {
   id: string; date: string; time: string; title: string; scope: Scope; unit: string; project: string; owner: string; link: string; note: string
+  /** Tổ/phòng (SubUnit id) inside `unit` when the entry is for one tổ. */
+  subUnit?: string
 }
 export type Plan = {
   id: string; level: string; scope: Scope; title: string; period: string; owner: string; progress: number; status: string
-  parent: string; items: string[]; unit?: string; project?: string; ownerRole?: string
+  parent: string; items: string[]; unit?: string; subUnit?: string; project?: string; ownerRole?: string
 }
 /** readBy: role codes that have opened the notice. */
 export type Notice = {
   id: string; scope: Scope; title: string; body: string; time: string; priority: string; readBy: string[]; link: string
-  unit?: string; project?: string; ownerRole?: string
+  unit?: string; subUnit?: string; project?: string; ownerRole?: string
 }
 
 export type Decision = { id: string; title: string; unit: string; severity: string; due: string; source: string; open: boolean }
@@ -35,11 +37,12 @@ export type Meeting = {
   id: string; date: string; title: string; time: string; scope: string; status: string; agenda: number; docs: number
   actions: number; openConclusions: number; conclusions: Conclusion[]
 }
-export type StrategicGoal = { id: string; goal: string; owner: string; target: string; actual: number; weight: number }
+/** owner: unit name, or "Tổ … – unit" when subUnit is set. */
+export type StrategicGoal = { id: string; goal: string; owner: string; target: string; actual: number; weight: number; subUnit?: string }
 export type Initiative = { id: string; name: string; progress: number }
 /** probability/impact on a 1–5 scale. */
 export type Risk = {
-  id: string; title: string; owner: string; probability: number; impact: number; mitigation: string; open: boolean; project?: string
+  id: string; title: string; owner: string; probability: number; impact: number; mitigation: string; open: boolean; project?: string; subUnit?: string
 }
 
 export type OrgUnit = { id: string; name: string; type: string; leader: string; deputy?: string; staff: string; staffCount: number; mission: string; public: boolean }
@@ -60,11 +63,35 @@ export type Equipment = {
   id: string; name: string; quantity: number; year: string; condition: string; group: string; unit: string
   status: string; utilization: number; inspectionDue: string; repairCost: number
 }
-export type WbsItem = { name: string; progress: number; status: string }
-/** Money in billion VND; technical/costUsed in %. */
-export type Project = {
-  id: string; name: string; unit: string; technical: number; costUsed: number; budget: number; delayDays: number
-  upcomingMilestones: number; changeRequests: number; changeRequestsPending: number; wbs: WbsItem[]
+/** A WBS item: weight in % of the project, dates "yyyy-mm-dd", subUnit = tổ doing it. */
+export type WbsItem = { id?: string; name: string; progress: number; status: string; weight?: number; start?: string; end?: string; subUnit?: string }
+export type Milestone = { id: string; name: string; due: string; doneAt?: string }
+export type ChangeRequestKind = "Phạm vi" | "Ngân sách" | "Thời gian"
+export type ChangeRequestStatus = "Chờ duyệt" | "Đã duyệt" | "Từ chối"
+/** newEnd / newBudget (billion VND) apply when a Thời gian / Ngân sách request is approved. */
+export type ChangeRequest = {
+  id: string; kind: ChangeRequestKind; content: string; by: string; at: string; status: ChangeRequestStatus
+  newEnd?: string; newBudget?: number; decidedAt?: string; note?: string
+}
+export type ProjectStatus = "Chuẩn bị" | "Đang thực hiện" | "Tạm dừng" | "Nghiệm thu" | "Hoàn thành"
+export type ProjectLogEntry = { at: string; by: string; byName: string; note: string; changes: { name: string; from: number; to: number }[] }
+/**
+ * A project as stored. budget in billion VND; unit is the unit name. Records created before projects were
+ * editable have no dates and carry their figures (technical, costUsed, …) directly.
+ */
+export type StoredProject = {
+  id: string; name: string; unit: string; subUnit?: string; leadRole?: string; budget: number; start?: string; end?: string
+  status?: ProjectStatus; wbs: WbsItem[]; milestones?: Milestone[]; crs?: ChangeRequest[]; log?: ProjectLogEntry[]
+  technical?: number; costUsed?: number; delayDays?: number; upcomingMilestones?: number; changeRequests?: number; changeRequestsPending?: number
+}
+/** A project with its figures computed from WBS, finance lines, payments and dates (see projectCore). */
+export type Project = StoredProject & {
+  technical: number; costUsed: number; delayDays: number; upcomingMilestones: number; changeRequests: number; changeRequestsPending: number
+  /** % of the schedule elapsed today; null without dates. */
+  plannedPct: number | null
+  /** Billion VND paid so far. */
+  spent: number
+  overdueWbs: number
 }
 /** Amounts in million VND; posted = hạch toán, acceptedPct = khối lượng đã nghiệm thu (%). */
 export type FinanceLine = {
@@ -135,6 +162,8 @@ export type Education = "Tiến sĩ" | "Thạc sĩ" | "Kỹ sư/Cử nhân" | "K
 export type StaffProfile = {
   id: string; name: string; birthYear: number; education: Education; major: string; experience: number
   unit: string; title: string; certs: { name: string; expiry: string }[]; onField: boolean
+  /** SubUnit id inside the unit. */
+  subUnit?: string
 }
 
 export type ReplyResult = "Hoàn thành" | "Cần thêm thời gian" | "Không thuộc thẩm quyền"
@@ -155,4 +184,12 @@ export type ScienceTopic = {
   start: string; end: string; budget: number; spent: number; attachments: string[]; progress: number; log: TopicProgressLog[]
   status: TopicStatus; result?: string; impact?: string; submittedAt?: string; approvedAt?: string
   review?: { by: string; at: string; decision: TopicReviewDecision; note: string }; createdAt: string
+  /** Tổ/phòng (SubUnit id) inside `unit` running the topic; "" = the whole unit. */
+  subUnit?: string
+}
+
+export type SubUnitKind = "Phòng" | "Tổ" | "Đội" | "Xưởng" | "Bộ phận"
+/** Tổ/phòng inside a unit (unit is a UnitCode); headId is a StaffProfile id. Dissolved ones stay with active=false. */
+export type SubUnit = {
+  id: string; unit: string; name: string; kind: SubUnitKind; duty: string; headId?: string; active: boolean; createdAt: string; dissolvedAt?: string
 }

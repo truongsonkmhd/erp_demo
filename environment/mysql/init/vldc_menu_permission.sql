@@ -22,7 +22,7 @@ INSERT IGNORE INTO tbl_page (code, name, url) VALUES
   ('vldc-dashboard', 'Dashboard điều hành', '/vldc/dashboard'),
   ('vldc-action', 'Công việc', '/vldc/action'),
   ('vldc-today', 'Hôm nay', '/vldc/today'),
-  ('vldc-calendar', 'Sự kiện', '/vldc/calendar'),
+  ('vldc-calendar', 'Lịch làm việc', '/vldc/calendar'),
   ('vldc-plans', 'Kế hoạch', '/vldc/plans'),
   ('vldc-notifications', 'Trung tâm thông báo', '/vldc/notifications'),
   ('vldc-assistant', 'AI Knowledge Workspace', '/vldc/assistant'),
@@ -40,7 +40,7 @@ INSERT IGNORE INTO tbl_page (code, name, url) VALUES
   ('vldc-projects', 'Nhiệm vụ / Dự án', '/vldc/projects'),
   ('vldc-research', 'Khoa học – Công nghệ – Đổi mới sáng tạo', '/vldc/research'),
   ('vldc-finance', 'Kế hoạch - Tài chính', '/vldc/finance'),
-  ('vldc-contracts', 'Hợp đồng CLM', '/vldc/contracts'),
+  ('vldc-contracts', 'Hợp đồng', '/vldc/contracts'),
   ('vldc-equipment', 'Thiết bị', '/vldc/equipment'),
   ('vldc-dms', 'DMS - Quản trị tài liệu', '/vldc/dms'),
   ('vldc-documents', 'Văn bản', '/vldc/documents'),
@@ -94,7 +94,7 @@ FROM (
   SELECT 'vldc-action' AS code, 'Công việc' AS title, 'Inbox' AS icon, 102 AS sort_order UNION ALL
   SELECT 'vldc-directives' AS code, 'Giao việc' AS title, 'Send' AS icon, 103 AS sort_order UNION ALL
   SELECT 'vldc-today' AS code, 'Hôm nay' AS title, 'Sun' AS icon, 105 AS sort_order UNION ALL
-  SELECT 'vldc-calendar' AS code, 'Sự kiện' AS title, 'CalendarDays' AS icon, 106 AS sort_order UNION ALL
+  SELECT 'vldc-calendar' AS code, 'Lịch làm việc' AS title, 'CalendarDays' AS icon, 106 AS sort_order UNION ALL
   SELECT 'vldc-plans' AS code, 'Kế hoạch' AS title, 'ListChecks' AS icon, 107 AS sort_order UNION ALL
   SELECT 'vldc-notifications' AS code, 'Thông báo' AS title, 'Bell' AS icon, 108 AS sort_order UNION ALL
   SELECT 'vldc-assistant' AS code, 'Trợ lý AI' AS title, 'Sparkles' AS icon, 109 AS sort_order
@@ -135,7 +135,7 @@ FROM (
   SELECT 'vldc-projects' AS code, 'Nhiệm vụ / Dự án' AS title, 'FolderKanban' AS icon, 401 AS sort_order UNION ALL
   SELECT 'vldc-research' AS code, 'KH-CN & Đổi mới' AS title, 'FlaskConical' AS icon, 402 AS sort_order UNION ALL
   SELECT 'vldc-finance' AS code, 'Kế hoạch – Tài chính' AS title, 'Wallet' AS icon, 403 AS sort_order UNION ALL
-  SELECT 'vldc-contracts' AS code, 'Hợp đồng CLM' AS title, 'FileSignature' AS icon, 404 AS sort_order UNION ALL
+  SELECT 'vldc-contracts' AS code, 'Hợp đồng' AS title, 'FileSignature' AS icon, 404 AS sort_order UNION ALL
   SELECT 'vldc-equipment' AS code, 'Thiết bị' AS title, 'Wrench' AS icon, 405 AS sort_order UNION ALL
   SELECT 'vldc-dms' AS code, 'DMS – Tài liệu' AS title, 'FolderOpen' AS icon, 406 AS sort_order UNION ALL
   SELECT 'vldc-documents' AS code, 'Văn bản' AS title, 'FileText' AS icon, 407 AS sort_order UNION ALL

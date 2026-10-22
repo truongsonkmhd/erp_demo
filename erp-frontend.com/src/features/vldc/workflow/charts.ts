@@ -14,9 +14,11 @@ export function legend(items: { name: string; color: string; value?: string }[])
 }
 
 /** Horizontal grouped bars on a 0–max scale; one row per category, one thin bar per series. */
-export function groupedBars(categories: string[], series: Series[], opts: { max?: number; unit?: string; flag?: (row: number) => string } = {}): string {
+/** width widens the plot for full-width cards (default 458). */
+export function groupedBars(categories: string[], series: Series[], opts: { max?: number; unit?: string; flag?: (row: number) => string; width?: number } = {}): string {
   const max = opts.max ?? 100, unit = opts.unit ?? "%"
-  const labelW = 118, plotW = 300, valueW = 40, bar = 8, gap = 2
+  const labelW = 118, valueW = 40, bar = 8, gap = 2
+  const plotW = (opts.width ?? 458) - labelW - valueW
   const rowH = series.length * (bar + gap) + 14
   const width = labelW + plotW + valueW, height = categories.length * rowH + 18
   const x = (v: number) => (Math.max(0, Math.min(v, max)) / max) * plotW
@@ -40,16 +42,19 @@ export function groupedBars(categories: string[], series: Series[], opts: { max?
 }
 
 /** Line chart over shared x labels; null values end a series early (e.g. actuals up to this month). */
-export function lineChart(labels: string[], series: Series[], opts: { unit?: string; max?: number } = {}): string {
+/** format writes a value in full (e.g. money); the axis then gets a wider margin for it. */
+/** width / height set the drawing size for full-width cards (defaults 460 × 150). */
+export function lineChart(labels: string[], series: Series[], opts: { unit?: string; max?: number; format?: (v: number) => string; width?: number; height?: number } = {}): string {
   const unit = opts.unit ?? ""
+  const show = opts.format ?? ((v: number) => `${v}${unit}`)
   const max = opts.max ?? Math.max(...series.flatMap((s) => s.values.filter((v): v is number => v != null)), 1)
-  const left = 34, right = 10, top = 10, plotH = 150, width = 460, height = top + plotH + 22
+  const left = opts.format ? 104 : 34, right = 10, top = 10, plotH = opts.height ?? 150, width = opts.width ?? 460, height = top + plotH + 22
   const plotW = width - left - right
   const px = (i: number) => left + (labels.length === 1 ? 0 : (i / (labels.length - 1)) * plotW)
   const py = (v: number) => top + plotH - (v / max) * plotH
   const ticks = [0, 0.25, 0.5, 0.75, 1].map((t) => {
     const v = Math.round(max * t)
-    return `<line x1="${left}" x2="${width - right}" y1="${round(py(v))}" y2="${round(py(v))}" stroke="${AXIS}"/><text x="${left - 5}" y="${round(py(v)) + 3}" text-anchor="end" class="viz-small">${v}</text>`
+    return `<line x1="${left}" x2="${width - right}" y1="${round(py(v))}" y2="${round(py(v))}" stroke="${AXIS}"/><text x="${left - 5}" y="${round(py(v)) + 3}" text-anchor="end" class="viz-small">${opts.format ? esc(opts.format(v)) : v}</text>`
   }).join("")
   const xLabels = labels.map((l, i) => `<text x="${round(px(i))}" y="${height - 6}" text-anchor="middle" class="viz-small">${esc(l)}</text>`).join("")
   const lines = series.map((s) => {
@@ -57,8 +62,8 @@ export function lineChart(labels: string[], series: Series[], opts: { unit?: str
     const path = pts.map((p, i) => `${i ? "L" : "M"} ${round(p.x)} ${round(p.y)}`).join(" ")
     const last = pts[pts.length - 1]
     // Invisible 9px hit targets give every point a hover tooltip larger than the mark.
-    const hits = pts.map((p) => `<circle cx="${round(p.x)}" cy="${round(p.y)}" r="9" fill="transparent" class="viz-hit"><title>${esc(p.label)} • ${esc(s.name)}: ${p.v}${unit}</title></circle>`).join("")
-    const end = last ? `<circle cx="${round(last.x)}" cy="${round(last.y)}" r="4" fill="${s.color}" stroke="${SURFACE}" stroke-width="2"/><text x="${round(last.x) - 6}" y="${round(last.y) + 14}" text-anchor="end" class="viz-val">${last.v}${unit}</text>` : ""
+    const hits = pts.map((p) => `<circle cx="${round(p.x)}" cy="${round(p.y)}" r="9" fill="transparent" class="viz-hit"><title>${esc(p.label)} • ${esc(s.name)}: ${esc(show(p.v))}</title></circle>`).join("")
+    const end = last ? `<circle cx="${round(last.x)}" cy="${round(last.y)}" r="4" fill="${s.color}" stroke="${SURFACE}" stroke-width="2"/><text x="${round(last.x) - 8}" y="${round(last.y < top + 20 ? last.y + 16 : last.y - 8)}" text-anchor="end" class="viz-val">${esc(show(last.v))}</text>` : ""
     return `<path d="${path}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round"${s.dashed ? ' stroke-dasharray="5 4"' : ""}/>${end}${hits}`
   }).join("")
   return `<svg viewBox="0 0 ${width} ${height}" class="viz-svg" role="img">${ticks}${lines}${xLabels}</svg>${legend(series)}`

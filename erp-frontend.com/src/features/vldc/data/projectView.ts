@@ -1,6 +1,7 @@
 import { workflowStore } from "../workflow/repository"
 import { isClosed, rolledUpProgress } from "../workflow/rules"
 import { localToday } from "./dates"
+import { disbursementSeries, disbursementSummary } from "./disbursementCore"
 import { computeProject, type WorkLink } from "./projectCore"
 import { vldcData } from "./registry"
 import type { Project } from "./types"
@@ -25,3 +26,7 @@ export function projectsView(): Project[] {
   }
   return vldcData.get("projects").map((p) => computeProject(p, ctx))
 }
+
+/** Giải ngân of the year from project budgets and the ledger's phiếu chi (replaces the static disbursement rows). */
+export const disbursementView = () => disbursementSeries(vldcData.get("projects"), vldcData.get("cashEntries"), localToday())
+export const spendView = () => disbursementSummary(vldcData.get("projects"), vldcData.get("cashEntries"), localToday())

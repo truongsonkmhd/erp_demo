@@ -1,11 +1,11 @@
-import { escapeHtml as esc, jsCall } from "../workflow/html"
+import { escapeHtml as esc, formatMillion, jsCall } from "../workflow/html"
 import { ROLE_TITLES } from "../workflow/rules"
 import { localToday, vnDate } from "./dates"
 import { ROLE_PROFILES, roleUnitCode } from "./org"
 import { kpis } from "./pages"
 import { vldcData } from "./registry"
 import {
-  REVIEWER, TOPIC_FIELDS, addProgress, canEditTopic, canReview, canSubmit, canUpdateProgress, canViewTopic, deadlineState,
+  REVIEWER, TOPIC_FIELDS, addProgress, canCreateTopic, canEditTopic, canReview, canSubmit, canUpdateProgress, canViewTopic, deadlineState,
   filterTopics, reviewTopic, submitTopic, topicStats, visibleTopics,
 } from "./scienceCore"
 import { resolveUnitChoice, unitChoiceGroups } from "./subUnitCore"
@@ -27,7 +27,7 @@ const unitOf = (picked: string) => {
 const topicUnit = (t: ScienceTopic) => resolveUnitChoice(t.subUnit || t.unit, vldcData.get("subUnits"))?.label ?? t.unit
 const value = (id: string) => ((document.getElementById(id) as HTMLInputElement | null)?.value ?? "").trim()
 const files = (raw: string) => raw.split(/[,\n;]/).map((s) => s.trim()).filter(Boolean)
-const money = (n: number) => `${n.toLocaleString("vi-VN")} tr.đ`
+const money = formatMillion
 const stamp = (iso?: string) => (iso ? vnDate(iso.slice(0, 10)) : "")
 const STATUS_CLS: Record<string, string> = { "Đang triển khai": "b-info", "Chờ duyệt": "b-warn", "Đã triển khai": "b-ok" }
 const DEADLINE: Record<string, [string, string] | null> = { overdue: ["Quá hạn", "b-danger"], soon: ["Sắp đến hạn", "b-warn"], ok: null }
@@ -80,7 +80,7 @@ export function installSciencePage(render: Record<string, () => void>, ctx: Ctx)
 ${pending.length ? `<div class="card" style="margin-top:14px;border-left:4px solid var(--warn)"><h3>Đề tài chờ duyệt nghiệm thu</h3>${pending.map((t) => `<div class="metric vx-cap-pick" ${jsCall("topicOpen", t.id)}><span><b>${esc(t.title)}</b><br><small>${esc(t.leadName)} • trình ${esc(stamp(t.submittedAt))}</small></span><b><span class="btn btn-primary">Xem & duyệt</span></b></div>`).join("")}</div>` : ""}
 <div class="card vx-news-toolbar" style="margin-top:14px"><div class="vx-news-chips">${tab("active", "Đang triển khai", active.length)}${tab("done", "Đã triển khai", done.length)}</div>
 <select onchange="topicField(this.value)"><option value="">Mọi lĩnh vực</option>${TOPIC_FIELDS.map((f) => `<option${f === state.field ? " selected" : ""}>${esc(f)}</option>`).join("")}</select>
-<input placeholder="Tìm đề tài, chủ nhiệm, kết quả..." value="${esc(state.query)}" onchange="topicSearch(this.value)"><button class="btn btn-primary" ${jsCall("topicForm")}>+ Đề tài mới</button></div>
+<input placeholder="Tìm đề tài, chủ nhiệm, kết quả..." value="${esc(state.query)}" onchange="topicSearch(this.value)">${canCreateTopic(role) ? `<button class="btn btn-primary" ${jsCall("topicForm")}>+ Đề tài mới</button>` : ""}</div>
 ${state.tab === "active"
     ? `<div class="card"><div class="mini" style="margin-bottom:8px">Đề tài đang triển khai chỉ chủ nhiệm, thành viên và Liên đoàn trưởng xem được.</div>${active.map(activeRow).join("") || '<div class="mini">Bạn chưa tham gia đề tài nào đang triển khai. Bấm "+ Đề tài mới" để đăng ký đề tài.</div>'}</div>`
     : `<div class="vx-news-list">${done.map(doneCard).join("") || '<div class="card mini">Chưa có đề tài đã triển khai phù hợp.</div>'}</div>`}`
@@ -134,7 +134,7 @@ ${btns ? `<div class="toolbar" style="margin-top:12px">${btns}</div>` : ""}${rev
   function topicForm(id?: string) {
     const role = ctx.role()
     const t = id ? find(id) : undefined
-    if (t && !canEditTopic(t, role)) return
+    if (t ? !canEditTopic(t, role) : !canCreateTopic(role)) return
     const unit = t?.unit ?? roleUnitCode(role) ?? "KT"
     const roles = Object.keys(ROLE_TITLES).filter((r) => r !== (t?.leadRole ?? role) && r !== "admin")
     const input = (key: string, label: string, val: string, type = "text", full = false) =>
@@ -154,7 +154,7 @@ ${input("files", "Tài liệu kèm theo (tên file, cách nhau bằng dấu ph�
   function topicSave(id: string) {
     const role = ctx.role()
     const prev = id ? find(id) : undefined
-    if (prev && !canEditTopic(prev, role)) return
+    if (prev ? !canEditTopic(prev, role) : !canCreateTopic(role)) return
     const titleText = value("tp-title"), objective = value("tp-objective"), start = value("tp-start"), end = value("tp-end")
     if (!titleText || !objective || !start || !end) return alert("Vui lòng nhập tên đề tài, mục tiêu và thời gian")
     if (end < start) return alert("Ngày kết thúc phải sau ngày bắt đầu")

@@ -17,7 +17,7 @@ const HIDDEN_FOR_ALL = ["crossflow", "handoff", "today", "plans", "finance"]
 const HIDDEN_PAGES: Record<string, string[]> = {
   lanhdao: [
     // Điều hành
-    "command", "performance", "risks",
+    "command", "performance", "risks", "strategy",
     // Tổ chức: Năng lực is a tab of Nhân sự; the public catalogue duplicates Thiết bị
     "capability", "equipmentcatalog",
     // Nghiệp vụ cốt lõi: Văn bản, Sinh văn bản and Thiết bị are not for the head (văn bản giao xử lý reach Công việc)

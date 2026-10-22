@@ -13,12 +13,12 @@ export const ratingBadge = (k: UnitKpi) => `<span class="badge ${RATING_BADGE[k.
 
 function unitRow(k: UnitKpi): string {
   const c = k.criteria
-  return `<div class="kpi-unit-row" ${jsCall("wfUnitKpi", k.unit.id)} title="Xem công việc của ${esc(k.unit.name)}"><div class="kpi-gauge" style="--pct:${k.score ?? 0}%"><b>${k.score ?? "–"}</b></div><div><b>${esc(k.unit.name)}</b><div class="mini">Tiến độ ${fmt(c.progress.value)} • Chất lượng ${fmt(c.quality.value)} • Đúng hạn ${fmt(c.onTime.value)} • Minh chứng ${fmt(c.evidence.value)}</div><div class="progress" style="margin-top:7px"><i style="width:${k.score ?? 0}%"></i></div><div class="mini" style="margin-top:5px">${k.items.length} việc • ${k.done} hoàn thành • ${k.open} đang làm</div></div><div class="kpi-unit-side">${ratingBadge(k)}<span class="mini">Xem chi tiết ›</span></div></div>`
+  return `<div class="kpi-unit-row" ${jsCall("wfUnitKpi", k.unit.id)} title="Xem công việc của ${esc(k.unit.name)}"><div class="kpi-gauge" style="--pct:${k.score ?? 0}%"><b>${k.score ?? "–"}</b></div><div><b>${esc(k.unit.name)}</b><div class="mini">Tiến độ ${fmt(c.progress.value)} • Chất lượng ${fmt(c.quality.value)} • Đúng hạn ${fmt(c.onTime.value)} • Minh chứng ${fmt(c.evidence.value)}</div><div class="progress" style="margin-top:7px"><i style="width:${k.score ?? 0}%"></i></div><div class="mini" style="margin-top:5px">${k.completed}/${k.assigned} việc Liên đoàn trưởng giao đã hoàn thành • ${k.open} việc đang làm</div></div><div class="kpi-unit-side">${ratingBadge(k)}<span class="mini">Xem chi tiết ›</span></div></div>`
 }
 
 function criteriaCard(): string {
-  const rows = CRITERIA.map((c) => `<div class="metric${c.key === "cost" ? " kpi-muted" : ""}"><span>${c.label}<div class="mini">${c.rule}</div></span><b>${c.weight}%</b></div>`).join("")
-  return `<div class="card"><h3>Cấu trúc KPI & cách tính</h3>${rows}<div class="alert" style="margin-top:10px"><span class="dot blue"></span><div><b>Cách ra điểm</b><div class="mini">Mỗi công việc được tính cho đơn vị của người chủ trì. Điểm = trung bình có trọng số các tiêu chí có dữ liệu (chi phí chưa kết nối nên 4 tiêu chí còn lại quy đổi trên tổng 85%). Xếp loại: ≥ 85 Tốt • 70–84 Theo dõi • &lt; 70 Cần can thiệp.</div></div></div></div>`
+  const rows = CRITERIA.filter((c) => c.key !== "cost").map((c) => `<div class="metric"><span>${c.label}<div class="mini">${c.rule}</div></span><b>tham khảo</b></div>`).join("")
+  return `<div class="card"><h3>Cách tính KPI</h3><div class="alert"><span class="dot blue"></span><div><b>KPI = việc hoàn thành ÷ việc được giao</b><div class="mini">Tổng số việc Liên đoàn trưởng giao cho đơn vị là 100%; mỗi việc được duyệt hoàn thành cộng phần tương ứng. Việc con do đơn vị tự chia không tính riêng. Xếp loại: ≥ 85% Tốt • 70–84% Theo dõi • &lt; 70% Cần can thiệp.</div></div></div><h4 style="margin-top:12px">Chỉ số tham khảo (không tính vào KPI)</h4>${rows}</div>`
 }
 
 function heatmap(kpis: UnitKpi[]): string {
@@ -74,19 +74,19 @@ export function unitDetailHtml(unitId: string, all: WorkItem[], today: string, s
     evidence: c.evidence.of ? `${c.evidence.hit}/${c.evidence.of} việc đã triển khai có minh chứng` : "Chưa có việc triển khai",
     cost: "Chưa kết nối dữ liệu tài chính",
   }
-  const rows = CRITERIA.map((cr) => {
-    const v = cr.key === "cost" ? null : c[cr.key].value
-    return `<tr${cr.key === "cost" ? ' class="kpi-muted"' : ""}><td><b>${cr.label}</b></td><td>${cr.weight}%</td><td class="mini">${explain[cr.key]}</td><td><span class="score ${scoreClass(v)}" style="display:inline-block;min-width:52px;padding:3px 6px;border-radius:8px">${fmt(v)}</span></td></tr>`
+  const rows = CRITERIA.filter((cr) => cr.key !== "cost").map((cr) => {
+    const v = c[cr.key as Exclude<typeof cr.key, "cost">].value
+    return `<tr><td><b>${cr.label}</b></td><td class="mini">${explain[cr.key]}</td><td><span class="score ${scoreClass(v)}" style="display:inline-block;min-width:52px;padding:3px 6px;border-radius:8px">${fmt(v)}</span></td></tr>`
   }).join("")
   const open = k.items.filter((x) => !isClosed(x))
   const done = k.items.filter(isClosed)
   const subK = subUnitKpis(subs, all, today)
   const untagged = k.items.filter((x) => !x.subUnit || !subs.some((s) => s.id === x.subUnit)).length
   const subRows = subK.length
-    ? `<h4 style="margin-top:16px">Theo tổ / phòng</h4><table><tr><th>Tổ / phòng</th><th>Việc</th><th>Đang mở</th><th>Tiến độ</th><th>Đúng hạn</th><th>Điểm</th></tr>${subK.map((s) => `<tr><td><b>${esc(s.unit.name)}</b></td><td>${s.items.length}</td><td>${s.open}</td><td>${fmt(s.criteria.progress.value)}</td><td>${fmt(s.criteria.onTime.value)}</td><td>${s.score ?? "–"} ${ratingBadge(s)}</td></tr>`).join("")}</table>${untagged ? `<div class="mini">${untagged} việc giao chung cho đơn vị, chưa gắn tổ.</div>` : ""}`
+    ? `<h4 style="margin-top:16px">Theo tổ / phòng</h4><table><tr><th>Tổ / phòng</th><th>Việc</th><th>Đang mở</th><th>Hoàn thành / được giao</th><th>KPI</th></tr>${subK.map((s) => `<tr><td><b>${esc(s.unit.name)}</b></td><td>${s.items.length}</td><td>${s.open}</td><td>${s.completed} / ${s.assigned}</td><td>${fmt(s.score)} ${ratingBadge(s)}</td></tr>`).join("")}</table>${untagged ? `<div class="mini">${untagged} việc giao chung cho đơn vị, chưa gắn tổ.</div>` : ""}`
     : ""
-  return `<div class="kpi-detail-head"><div class="kpi-gauge" style="--pct:${k.score ?? 0}%"><b>${k.score ?? "–"}</b></div><div><div class="mini">${unit.roles.map((r) => esc(ROLE_TITLES[r] || r)).join(" • ")}</div><div style="margin:4px 0">${ratingBadge(k)}</div><div class="mini">${k.items.length} việc • ${k.done} hoàn thành • ${k.open} đang làm</div></div></div>
-<table style="margin-top:10px"><tr><th>Tiêu chí</th><th>Trọng số</th><th>Cách ra số</th><th>Kết quả</th></tr>${rows}</table>
+  return `<div class="kpi-detail-head"><div class="kpi-gauge" style="--pct:${k.score ?? 0}%"><b>${k.score ?? "–"}</b></div><div><div class="mini">${unit.roles.map((r) => esc(ROLE_TITLES[r] || r)).join(" • ")}</div><div style="margin:4px 0">${ratingBadge(k)}</div><div><b>KPI ${k.score == null ? "–" : `${k.score}%`}</b> = ${k.completed} việc hoàn thành ÷ ${k.assigned} việc Liên đoàn trưởng giao</div><div class="mini">${k.items.length} việc (gồm việc con) • ${k.done} hoàn thành • ${k.open} đang làm</div></div></div>
+<h4 style="margin-top:12px">Chỉ số tham khảo (không tính vào KPI)</h4><table><tr><th>Chỉ số</th><th>Cách ra số</th><th>Kết quả</th></tr>${rows}</table>
 ${subRows}<h4 style="margin-top:16px">Đang làm (${open.length})</h4>${itemTable(open, all, today)}
 <h4 style="margin-top:16px">Đã hoàn thành (${done.length})</h4>${itemTable(done, all, today)}`
 }

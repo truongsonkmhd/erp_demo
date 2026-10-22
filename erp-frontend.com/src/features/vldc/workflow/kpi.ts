@@ -19,9 +19,16 @@ export function kpiUnits(): Unit[] {
 
 export const unitOfRole = (role: string): Unit | undefined => kpiUnits().find((u) => u.roles.includes(role))
 
+/** Roles grouped by the unit their work counts for (KPI order, input order inside a unit); roles of no unit go last under "Khác". */
+export function rolesByUnit(roles: string[]): { unit: string; name: string; roles: string[] }[] {
+  const groups = kpiUnits().map((u) => ({ unit: u.id as string, name: u.name, roles: roles.filter((r) => u.roles.includes(r)) }))
+  const other = roles.filter((r) => !unitOfRole(r))
+  return [...groups, { unit: "", name: "Khác", roles: other }].filter((g) => g.roles.length)
+}
+
 export type CriterionKey = "progress" | "quality" | "onTime" | "evidence" | "cost"
 
-/** Weights from the published KPI structure; "cost" has no data source yet and is left out of the score. */
+/** Supporting indicators shown next to the KPI (not part of the score, which is the completion rate). */
 export const CRITERIA: { key: CriterionKey; label: string; weight: number; rule: string }[] = [
   { key: "progress", label: "Tiến độ", weight: 30, rule: "Trung bình % hoàn thành các việc (việc đã duyệt = 100%)" },
   { key: "quality", label: "Chất lượng / Nghiệm thu", weight: 25, rule: "Tỷ lệ việc đã báo cáo hoàn thành mà không bị trả lại" },
@@ -38,6 +45,9 @@ export type ItemFlags = { overdue: boolean; returned: boolean; noEvidence: boole
 export type UnitKpi = {
   unit: Unit
   items: WorkItem[]
+  /** Work the federation head gave the unit (its directives) and how many of them are completed (approved). */
+  assigned: number
+  completed: number
   done: number
   open: number
   criteria: Record<Exclude<CriterionKey, "cost">, Criterion>
@@ -65,6 +75,10 @@ export function ratingOf(score: number | null): UnitKpi["rating"] {
   return score == null ? "none" : score >= 85 ? "good" : score >= 70 ? "watch" : "bad"
 }
 
+/** Who gives the work KPI is measured on. */
+export const KPI_GIVER = "lanhdao"
+
+/** KPI = completed ÷ all work the federation head gave the unit × 100 (approved = completed; sub-tasks are the unit's own split). */
 export function unitKpi(unit: Unit, all: WorkItem[], today: string): UnitKpi {
   const owns = unit.match ?? ((x: WorkItem) => unit.roles.includes(x.owner))
   const items = all.filter((x) => x.type !== "payment" && owns(x)).sort((a, b) => a.due.localeCompare(b.due))
@@ -78,11 +92,11 @@ export function unitKpi(unit: Unit, all: WorkItem[], today: string): UnitKpi {
     onTime: pct(flags.filter((f) => !f.overdue && !f.late).length, items.length),
     evidence: pct(started.filter((x) => x.evidence?.trim()).length, started.length),
   }
-  const scored = CRITERIA.filter((c) => c.key !== "cost" && criteria[c.key as keyof typeof criteria].value != null)
-  const weight = scored.reduce((s, c) => s + c.weight, 0)
-  const score = weight ? Math.round(scored.reduce((s, c) => s + c.weight * (criteria[c.key as keyof typeof criteria].value as number), 0) / weight) : null
+  const given = items.filter((x) => x.type === "directive" && x.createdBy === KPI_GIVER)
+  const completed = given.filter(isClosed).length
+  const score = given.length ? Math.round((completed / given.length) * 100) : null
   const done = items.filter(isClosed).length
-  return { unit, items, done, open: items.length - done, criteria, score, rating: ratingOf(score) }
+  return { unit, items, assigned: given.length, completed, done, open: items.length - done, criteria, score, rating: ratingOf(score) }
 }
 
 export function unitKpis(all: WorkItem[], today: string): UnitKpi[] {

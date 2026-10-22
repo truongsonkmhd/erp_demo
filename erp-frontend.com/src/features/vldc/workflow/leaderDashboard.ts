@@ -1,12 +1,12 @@
 import { groupedBars, lineChart } from "./charts.ts"
-import { unitKpis } from "./kpi.ts"
+import { KPI_GIVER, RATING_LABELS, itemFlags, unitKpis, type UnitKpi } from "./kpi.ts"
+import { isClosed } from "./rules.ts"
+import { escapeHtml as esc, formatBillion, formatMoney, jsCall } from "./html.ts"
 import type { WorkItem } from "./types.ts"
-import { isOverrun, openRisks, riskLevel } from "../data/metrics.ts"
-import type { Alert } from "../data/alerts.ts"
+import { isOverrun } from "../data/metrics.ts"
 import type { Disbursement, Project, Risk } from "../data/types.ts"
-import { escapeHtml as esc } from "./html.ts"
 
-/** Liên đoàn trưởng dashboard: 4 money KPI (Thu – Chi – Công nợ), 3 charts, alerts and inbox. All figures come from stored records (workflow + business collections). */
+/** Liên đoàn trưởng dashboard: 4 money KPI (Thu – Chi – Công nợ) and 3 charts. All figures come from stored records (workflow + business collections). */
 
 // First three validated categorical slots (blue, orange, aqua).
 const C = { blue: "#2a78d6", orange: "#eb6834", aqua: "#1baf7a" }
@@ -18,23 +18,31 @@ const C = { blue: "#2a78d6", orange: "#eb6834", aqua: "#1baf7a" }
 export type CashFigures = {
   revenue: number; contracts: number; thu: number; thuOther: number; thuMonth: number; chi: number; chiMonth: number; remaining: number; doneOwing: number
 }
-export type BusinessData = { projects: Project[]; disbursement: Disbursement[]; risks: Risk[]; alerts: Alert[]; cash: CashFigures }
+/** Giải ngân in plain VND figures (see data/disbursementCore.ts). */
+export type SpendFigures = { yearPlan: number; planToDate: number; spent: number; pctOfPlanToDate: number; pctOfYear: number; gap: number }
+export type BusinessData = { projects: Project[]; disbursement: Disbursement[]; risks: Risk[]; cash: CashFigures; spend: SpendFigures }
 
-/** Exact amount, never rounded: 4.907.500.000 đ. */
-const vnd = (n: number) => `${Math.round(n).toLocaleString("vi-VN")} đ`
+/** Full amount: 4.407.500.000 đ. */
+const vnd = formatMoney
 
-/** Alerts derived from stored records: overrun/late projects, high open risks, inspections due, overdue work. */
-/** Rule-based alerts (data/alerts.ts, same as the Alerts page) plus late projects and high risks. */
-function alerts(biz: BusinessData) {
-  const late = biz.projects.filter((p) => p.delayDays > 0).sort((a, b) => b.delayDays - a.delayDays)
-  const lateWork = biz.projects.filter((p) => p.workOverdue > 0)
-  const high = openRisks(biz.risks).filter((r) => riskLevel(r) === "Cao")
-  return [
-    ...biz.alerts.map((a) => ({ dot: a.level === "Cao" ? "red" : "yellow", title: a.title, sub: a.sub, page: a.page })),
-    late.length ? { dot: "red", title: `${late.length} dự án dự báo trễ`, sub: `${late[0].id} chậm ${late[0].delayDays} ngày`, page: "projects" } : null,
-    lateWork.length ? { dot: "red", title: `${lateWork.length} dự án có việc giao quá hạn`, sub: lateWork.map((p) => `${p.id}: ${p.workOverdue} việc`).join(" • "), page: "projects" } : null,
-    high.length ? { dot: "red", title: `${high.length} rủi ro mức cao đang mở`, sub: high.map((r) => r.title).join(" • "), page: "risks" } : null,
-  ].filter((a): a is { dot: string; title: string; sub: string; page: string } => !!a)
+const RATING_BADGE: Record<UnitKpi["rating"], string> = { good: "b-ok", watch: "b-warn", bad: "b-danger", none: "b-info" }
+
+/** Units ranked by KPI = completed ÷ work given by the head, with the counts behind it. */
+function kpiScorecard(kpis: UnitKpi[], today: string): string {
+  const ranked = [...kpis].sort((a, b) => (b.score ?? -1) - (a.score ?? -1))
+  const given = (k: UnitKpi) => k.items.filter((x) => x.type === "directive" && x.createdBy === KPI_GIVER)
+  const rows = ranked.map((k) => {
+    const g = given(k)
+    const open = g.filter((x) => !isClosed(x))
+    const waiting = open.filter((x) => x.status === "Chờ duyệt").length
+    const overdue = open.filter((x) => itemFlags(x, today).overdue).length
+    const count = (n: number, cls = "") => (n ? `<b${cls ? ` style="color:var(--${cls})"` : ""}>${n}</b>` : '<span class="mini">0</span>')
+    return `<tr class="ld-kpi-row" ${jsCall("wfUnitKpi", k.unit.id)}><td><b>${esc(k.unit.name)}</b></td>
+<td><div class="ld-kpi-val ${k.rating}"><span class="ld-kpi-score ${k.rating}">${k.score == null ? "–" : `${k.score}%`}</span><span class="badge ${RATING_BADGE[k.rating]}">${RATING_LABELS[k.rating]}</span></div><div class="ld-kpi-bar ${k.rating}"><i style="width:${k.score ?? 0}%"></i></div></td>
+<td><b>${k.completed} / ${k.assigned}</b> <span class="mini">việc</span></td><td>${count(waiting, "warning")}</td><td>${count(open.length - waiting)}</td><td>${count(overdue, "danger")}</td></tr>`
+  }).join("")
+  return `<div class="ld-kpi"><table><tr><th>Đơn vị</th><th>KPI (%)</th><th>Hoàn thành / được giao</th><th>Chờ duyệt</th><th>Đang làm</th><th>Quá hạn</th></tr>${rows}</table>
+<div class="mini" style="margin-top:8px">KPI = số việc Liên đoàn trưởng giao đã hoàn thành (đã duyệt) ÷ tổng số việc Liên đoàn trưởng giao cho đơn vị × 100%. Việc con do đơn vị tự chia không tính riêng. Xếp loại: ≥ 85% Tốt • 70–84% Theo dõi • &lt; 70% Cần can thiệp.</div></div>`
 }
 
 const card = (title: string, sub: string, body: string, link?: [string, string]) =>
@@ -43,11 +51,12 @@ const card = (title: string, sub: string, body: string, link?: [string, string])
 const kpi = (label: string, value: string, sub: string, page: string, tone = "") =>
   `<div class="kpi" style="cursor:pointer" onclick="show('${page}')"><div class="label">${label}</div><div class="value${tone ? ` ${tone}` : ""}">${value}</div><div class="sub">${sub}</div></div>`
 
-export function leaderDashboardHtml(all: WorkItem[], biz: BusinessData, today: string, inboxHtml: string, banner = ""): string {
+export function leaderDashboardHtml(all: WorkItem[], biz: BusinessData, today: string, banner = ""): string {
   const cash = biz.cash
   const months = [...biz.disbursement].sort((a, b) => a.month - b.month)
   const plan = months.at(-1)?.plan ?? 0
   const dateLabel = new Date(`${today}T00:00:00`).toLocaleDateString("vi-VN", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" })
+  const dateShort = today.split("-").reverse().join("/")
 
   const head = `<div class="ld-head"><div><div class="eyebrow">BAN LÃNH ĐẠO • ${dateLabel.toUpperCase()}</div><h2>Tổng quan điều hành Liên đoàn</h2></div></div>`
 
@@ -59,30 +68,32 @@ export function leaderDashboardHtml(all: WorkItem[], biz: BusinessData, today: s
   ].join("")}</div>`
 
   const kpis = unitKpis(all, today)
-  const unitChart = groupedBars(kpis.map((k) => k.unit.short), [
-    { name: "Tiến độ", color: C.blue, values: kpis.map((k) => k.criteria.progress.value) },
-    { name: "Đúng hạn", color: C.orange, values: kpis.map((k) => k.criteria.onTime.value) },
-    { name: "Chất lượng", color: C.aqua, values: kpis.map((k) => k.criteria.quality.value) },
-  ])
+  const unitCard = kpiScorecard(kpis, today)
   const disbursement = lineChart(months.map((m) => `T${m.month}`), [
-    { name: "Kế hoạch lũy kế", color: C.blue, values: months.map((m) => m.plan), dashed: true },
-    { name: "Thực hiện lũy kế", color: C.orange, values: months.map((m) => m.actual) },
-  ], { unit: " tỷ", max: plan || undefined })
+    { name: "Kế hoạch (theo ngân sách dự án)", color: C.blue, values: months.map((m) => m.plan), dashed: true },
+    { name: "Đã chi thực tế (phiếu chi)", color: C.orange, values: months.map((m) => m.actual) },
+  ], { max: plan || undefined, format: formatBillion, width: 960, height: 200 })
+  const sp = biz.spend
+  const behind = sp.gap > 0
+  const spendHead = `<div class="ld-spend">
+<div><span>Kế hoạch cả năm</span><b>${vnd(sp.yearPlan)}</b><small>Tổng ngân sách dự án rơi vào năm ${today.slice(0, 4)}</small></div>
+<div><span>Kế hoạch đến hôm nay</span><b>${vnd(sp.planToDate)}</b><small>Số tiền lẽ ra đã chi đến ${esc(dateShort)}</small></div>
+<div><span>Đã chi đến hôm nay</span><b>${vnd(sp.spent)}</b><small>Đạt ${sp.pctOfPlanToDate}% kế hoạch đến nay • ${sp.pctOfYear}% kế hoạch cả năm</small></div>
+<div class="${behind ? "bad" : "good"}"><span>${behind ? "Chậm so với kế hoạch" : "Vượt kế hoạch"}</span><b>${vnd(Math.abs(sp.gap))}</b><small>${behind ? "Số tiền còn chưa chi so với dự kiến" : "Đã chi nhiều hơn dự kiến"}</small></div>
+</div>`
+  const spendNote = `<div class="mini ld-note">Nét đứt: tiền dự kiến chi (ngân sách dự án chia theo ngày thực hiện) • Nét liền: tiền đã chi theo phiếu chi • Cả hai cộng dồn từ đầu năm</div>`
   const projects = biz.projects
   const costProgress = groupedBars(projects.map((p) => p.id), [
     { name: "Tiến độ kỹ thuật", color: C.blue, values: projects.map((p) => p.technical) },
     { name: "Chi phí đã dùng", color: C.orange, values: projects.map((p) => p.costUsed) },
-  ], { flag: (i) => (isOverrun(projects[i]) ? "⚠ lệch" : "") })
+  ], { flag: (i) => (isOverrun(projects[i]) ? "⚠ lệch" : ""), width: 960 })
 
-  const alertList = alerts(biz).map((a) => `<div class="alert" style="cursor:pointer" onclick="show('${a.page}')"><span class="dot ${a.dot}"></span><div><b>${esc(a.title)}</b><div class="mini">${esc(a.sub)}</div></div></div>`).join("") || '<div class="mini">Không có cảnh báo.</div>'
 
 
   return `${banner}<div class="leader-dash">${head}${kpiTiles}
 <div class="ld-charts">
-${card(`Giải ngân năm ${today.slice(0, 4)}`, "Lũy kế kế hoạch và thực hiện (tỷ đồng)", disbursement, ["finance", "Tài chính"])}
-${card("Tiến độ và chi phí theo dự án", "Chi phí vượt tiến độ quá 10% được gắn cờ", costProgress, ["projects", "Dự án"])}
-${card("KPI theo đơn vị", "Tính từ công việc thực tế • tiến độ, đúng hạn, chất lượng (%)", unitChart, ["performance", "Phân tích KPI"])}
-${card("Cảnh báo cần chú ý", "Theo quy tắc cảnh báo + dự án trễ, rủi ro cao", alertList, ["alerts", "Quy tắc"])}
-</div>
-${inboxHtml}</div>`
+<div class="ld-wide ld-spend-card">${card(`Giải ngân năm ${today.slice(0, 4)}`, "So sánh số tiền dự kiến chi với số tiền đã chi thật", `${spendHead}${disbursement}${spendNote}`)}</div>
+<div class="ld-wide">${card("Tiến độ và chi phí theo dự án", "Chi phí vượt tiến độ quá 10% được gắn cờ", costProgress, ["projects", "Dự án"])}</div>
+<div class="ld-wide">${card("KPI theo đơn vị", "Tỷ lệ việc Liên đoàn trưởng giao đã hoàn thành • bấm một dòng để xem các việc", unitCard)}</div>
+</div></div>`
 }

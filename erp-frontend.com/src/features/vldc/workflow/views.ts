@@ -1,5 +1,5 @@
 import { escapeHtml as esc, formatDate, formatMoney, formatTime, jsCall, statusBadge } from "./html"
-import { projectsView } from "../data/projectView"
+import { disbursementView, projectsView, spendView } from "../data/projectView"
 import {
   DELEGATES,
   PAYMENT_STEPS,
@@ -19,15 +19,15 @@ import {
   type WorkAction,
 } from "./rules"
 import type { WorkItem } from "./types"
+import { DIRECTIVE_STATUS_FILTERS, TYPE_LABELS, directiveExportRows, filterDirectives, notYetAccepted, type DirectiveLabels, type DirectiveStatusFilter } from "./directiveList"
 import { workflowStore as store } from "./repository"
 import { leaderDashboardHtml, type CashFigures } from "./leaderDashboard"
 import { cashSummary, debtSummary } from "../data/ledgerCore"
 import { performanceHtml, unitDetailHtml } from "./kpiViews"
-import { kpiUnits, unitKpis } from "./kpi"
+import { kpiUnits, rolesByUnit, unitKpis, unitOfRole } from "./kpi"
 import { vldcData } from "../data/registry"
-import { roleUnitCode, rolesOfUnit, unitCodeOf } from "../data/org"
+import { ROLE_PROFILES, roleUnitCode, rolesOfUnit, unitCodeOf } from "../data/org"
 import { subUnitOptions } from "../data/subUnitPage"
-import { liveAlerts } from "../data/liveAlerts"
 
 export { escapeHtml, statusBadge } from "./html"
 
@@ -55,7 +55,6 @@ const ACTION_LABELS: Record<WorkAction, string> = {
   resubmit: "Trình lại",
 }
 
-const TYPE_LABELS: Record<WorkItem["type"], string> = { directive: "Chỉ đạo", task: "Việc được giao", payment: "Hồ sơ thanh toán" }
 
 const today = () => new Date().toLocaleDateString("sv-SE")
 const newId = (prefix: string) => `${prefix}-${Date.now().toString(36).toUpperCase()}`
@@ -99,24 +98,76 @@ function treeRows(roots: WorkItem[], visible: WorkItem[], all: WorkItem[], depth
   }).join("")
 }
 
+/** Search and status filter of the Giao việc list (kept across realtime re-renders). */
+let dirQuery = ""
+let dirStatus: DirectiveStatusFilter = ""
+
+const directiveLabels: DirectiveLabels = {
+  role: roleTitle,
+  subUnit: (id) => (id ? vldcData.get("subUnits").find((s) => s.id === id)?.name ?? "" : ""),
+  project: (id) => {
+    const p = id ? vldcData.get("projects").find((x) => x.id === id) : undefined
+    return p ? `${p.id} – ${p.name}` : id ?? ""
+  },
+}
+
+function visibleDirectives(): { visible: WorkItem[]; all: WorkItem[] } {
+  const all = store.items()
+  return { all, visible: all.filter((x) => x.type !== "payment" && isVisible(x, ctx.role(), all)) }
+}
+
+const filtered = (visible: WorkItem[], all: WorkItem[]) => filterDirectives(visible, all, dirQuery, dirStatus, today(), directiveLabels)
+
+/** The tree while nothing is searched; a flat list of the matches otherwise. */
+function directiveTableHtml(visible: WorkItem[], all: WorkItem[]): string {
+  const searching = !!(dirQuery.trim() || dirStatus)
+  const rows = searching
+    ? treeRows(filtered(visible, all).sort((a, b) => a.due.localeCompare(b.due)), [], all)
+    : treeRows(visible.filter((x) => !x.parentId || !visible.some((p) => p.id === x.parentId)).sort((a, b) => a.due.localeCompare(b.due)), visible, all)
+  const empty = searching ? "Không có việc nào khớp tìm kiếm." : "Chưa có việc nào trong phạm vi của bạn."
+  return `${searching ? `<div class="mini" style="margin-bottom:6px">${filtered(visible, all).length} / ${visible.length} việc khớp</div>` : ""}<table><tr><th>Mã</th><th>Nội dung</th><th>Người giao</th><th>Chủ trì</th><th>Phối hợp</th><th>Trạng thái</th><th>Tiến độ</th><th>Hạn</th><th></th></tr>${rows || `<tr><td colspan="9" class="mini">${empty}</td></tr>`}</table>`
+}
+
+function wfDirectiveSearch() {
+  dirQuery = inputValue("wf-dir-q")
+  dirStatus = inputValue("wf-dir-status") as DirectiveStatusFilter
+  const el = document.getElementById("wf-dir-table")
+  const { visible, all } = visibleDirectives()
+  if (el) el.innerHTML = directiveTableHtml(visible, all)
+}
+
+/** Excel file of the work shown (the search applies), by due date. */
+async function wfExportDirectives() {
+  const { visible, all } = visibleDirectives()
+  const rows = directiveExportRows(filtered(visible, all).sort((a, b) => a.due.localeCompare(b.due)), all, directiveLabels)
+  if (!rows.length) return alert("Không có việc nào để xuất.")
+  const XLSX = await import("xlsx")
+  const sheet = XLSX.utils.json_to_sheet(rows)
+  sheet["!cols"] = Object.keys(rows[0]).map((k) => ({ wch: k === "Nội dung" ? 50 : k === "Dự án" ? 34 : 18 }))
+  const book = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(book, sheet, "Giao việc")
+  XLSX.writeFile(book, `giao-viec-${today()}.xlsx`)
+}
+
 function renderDirectives() {
   const all = store.items()
   const role = ctx.role()
   const perms = ctx.perms()
   const visible = all.filter((x) => x.type !== "payment" && isVisible(x, role, all))
-  const roots = visible.filter((x) => !x.parentId || !visible.some((p) => p.id === x.parentId)).sort((a, b) => a.due.localeCompare(b.due))
   const open = visible.filter((x) => !isClosed(x))
   const atRisk = open.filter((x) => isAtRisk(x, all, today()))
   const waiting = visible.filter((x) => x.createdBy === role && x.status === "Chờ duyệt")
-  const mine = ownerInbox(role, all).filter((x) => x.type !== "payment")
+  // The head is never the owner: its first column follows the work it gave out that nobody has accepted yet.
+  const leader = role === "lanhdao"
+  const mine = leader ? notYetAccepted(role, visible) : ownerInbox(role, all).filter((x) => x.type !== "payment")
   const canCreate = role === "lanhdao" && hasPerm(perms, "vldc-directives:create")
   const canReset = role === "lanhdao" || perms.includes("*")
   const el = content()
   if (!el) return
   el.innerHTML = `${offlineBanner()}<div class="grid kpis"><div class="kpi"><div class="label">Đang mở</div><div class="value">${open.length}</div><div class="sub">Chỉ đạo & việc liên quan</div></div><div class="kpi"><div class="label">Nguy cơ trễ</div><div class="value">${atRisk.length}</div><div class="sub">≤ 2 ngày, &lt; 80%</div></div><div class="kpi"><div class="label">Chờ tôi duyệt</div><div class="value">${waiting.length}</div><div class="sub">Đã báo cáo hoàn thành</div></div><div class="kpi"><div class="label">Hoàn thành</div><div class="value">${visible.length - open.length}</div><div class="sub">Đã duyệt đóng</div></div></div>
  <div class="card" style="margin-top:14px"><div class="card-head"><div><h3>Giao việc</h3><div class="mini">Giao việc theo cấp, theo dõi tiến độ cuộn lên và duyệt kết quả</div></div><div>${canReset ? '<button class="btn btn-light" onclick="wfResetDemo()">Đặt lại dữ liệu demo</button> ' : ""}${canCreate ? '<button class="btn btn-primary" onclick="wfCreateDirective()">+ Giao việc</button>' : ""}</div></div>
- <div class="directive-board">${column("Tôi cần xử lý", mine, all)}${column("Chờ tôi duyệt", waiting, all)}${column("Nguy cơ trễ", atRisk, all)}</div></div>
- <div class="card" style="margin-top:14px"><h3>Cây chỉ đạo – việc được giao</h3><table><tr><th>Mã</th><th>Nội dung</th><th>Người giao</th><th>Chủ trì</th><th>Phối hợp</th><th>Trạng thái</th><th>Tiến độ</th><th>Hạn</th><th></th></tr>${treeRows(roots, visible, all) || '<tr><td colspan="9" class="mini">Chưa có việc nào trong phạm vi của bạn.</td></tr>'}</table></div>`
+ <div class="directive-board">${column(leader ? "Mới giao – chưa nhận" : "Tôi cần xử lý", mine, all)}${column("Chờ tôi duyệt", waiting, all)}${column("Nguy cơ trễ", atRisk, all)}</div></div>
+ <div class="card" style="margin-top:14px"><div class="card-head"><h3>Cây chỉ đạo – việc được giao</h3><div class="vx-dir-tools"><input id="wf-dir-q" placeholder="Tìm mã, nội dung, đơn vị, tổ, dự án…" value="${esc(dirQuery)}" oninput="wfDirectiveSearch()"><select id="wf-dir-status" onchange="wfDirectiveSearch()">${DIRECTIVE_STATUS_FILTERS.map(([v, l]) => `<option value="${v}"${v === dirStatus ? " selected" : ""}>${l}</option>`).join("")}</select><button class="btn btn-light" onclick="wfExportDirectives()">Xuất Excel</button></div></div><div id="wf-dir-table">${directiveTableHtml(visible, all)}</div></div>`
 }
 
 function paymentStepper(item: WorkItem): string {
@@ -174,12 +225,21 @@ async function run(task: () => Promise<void>, onError?: () => void) {
   }
 }
 
+const personOf = (r: string) => ROLE_PROFILES[r]?.name ?? ""
+
+/** Owners grouped by the unit their work counts for (KPI), "Chức danh – Họ tên" in each group. */
 function roleOptions(roles: string[], selected = ""): string {
-  return roles.map((r) => `<option value="${r}"${r === selected ? " selected" : ""}>${esc(roleTitle(r))}</option>`).join("")
+  return rolesByUnit(roles).map((g) => `<optgroup label="${esc(g.name)}">${g.roles.map((r) => `<option value="${r}"${r === selected ? " selected" : ""}>${esc(roleTitle(r))}${personOf(r) ? ` – ${esc(personOf(r))}` : ""}</option>`).join("")}</optgroup>`).join("")
+}
+
+/** "Tính vào KPI của …" under the owner picker. */
+const ownerUnitHint = (owner: string) => {
+  const unit = unitOfRole(owner)
+  return unit ? `Thuộc <b>${esc(unit.name)}</b> • việc tính vào KPI của đơn vị này` : "Không thuộc đơn vị nào trong KPI"
 }
 
 function ccBoxes(roles: string[]): string {
-  return `<div style="display:flex;flex-wrap:wrap;gap:6px 14px">${roles.map((r) => `<label class="mini" style="display:flex;gap:4px;align-items:center"><input type="checkbox" name="wf-cc" value="${r}">${esc(roleTitle(r))}</label>`).join("")}</div>`
+  return `<div class="vx-cc-groups">${rolesByUnit(roles).map((g) => `<div class="vx-cc-group"><div class="mini"><b>${esc(g.name)}</b></div>${g.roles.map((r) => `<label class="mini"><input type="checkbox" name="wf-cc" value="${r}">${esc(roleTitle(r))}</label>`).join("")}</div>`).join("")}</div>`
 }
 
 const priorityField = '<div><label>Mức ưu tiên</label><select id="wf-priority"><option>Cao</option><option>Trung bình</option><option>Thấp</option></select></div>'
@@ -250,6 +310,8 @@ function applyProjectTarget(projectId: string, wbsId = "") {
   if (!owner || !ownerEl || !subEl) return
   ownerEl.value = owner
   subEl.innerHTML = subOptionsHtml(owner, sub)
+  const hint = document.getElementById("wf-owner-unit")
+  if (hint) hint.innerHTML = ownerUnitHint(owner)
 }
 
 function wfCreateDirective(presetSub = "", presetProject = "", presetWbs = "") {
@@ -257,7 +319,7 @@ function wfCreateDirective(presetSub = "", presetProject = "", presetWbs = "") {
   const target = presetSub ? { sub: presetSub, unit: vldcData.get("subUnits").find((s) => s.id === presetSub)?.unit } : projectTarget(presetProject, presetWbs)
   const owner = ownerOfUnit(target.unit) || others[0]
   const sub = target.sub ? vldcData.get("subUnits").find((s) => s.id === target.sub) : undefined
-  shell.openModal("Giao việc", `<div class="form-grid"><div class="full"><label>Nội dung chỉ đạo</label><textarea id="wf-title" rows="2"></textarea></div><div><label>Đơn vị / người chủ trì</label><select id="wf-owner" onchange="wfSubOptions(this.value)">${roleOptions(others, owner)}</select></div><div><label>Tổ / phòng thực hiện</label><select id="wf-sub">${subOptionsHtml(owner, sub?.id)}</select></div>${projectPicker(presetProject, true, presetWbs)}<div><label>Hạn hoàn thành</label><input id="wf-due" type="date" min="${today()}"></div>${priorityField}<div class="full"><label>Kết quả / minh chứng yêu cầu</label><input id="wf-desc"></div><div class="full"><label>Phối hợp</label>${ccBoxes(others)}</div></div><button class="btn btn-primary" style="margin-top:10px" onclick="wfSubmitDirective()">Giao việc</button>`)
+  shell.openModal("Giao việc", `<div class="form-grid"><div class="full"><label>Nội dung chỉ đạo</label><textarea id="wf-title" rows="2"></textarea></div><div><label>Người chủ trì (theo đơn vị)</label><select id="wf-owner" onchange="wfSubOptions(this.value)">${roleOptions(others, owner)}</select><div class="mini" id="wf-owner-unit" style="margin-top:4px">${ownerUnitHint(owner)}</div></div><div><label>Tổ / phòng thực hiện</label><select id="wf-sub">${subOptionsHtml(owner, sub?.id)}</select></div>${projectPicker(presetProject, true, presetWbs)}<div><label>Hạn hoàn thành</label><input id="wf-due" type="date" min="${today()}"></div>${priorityField}<div class="full"><label>Kết quả / minh chứng yêu cầu</label><input id="wf-desc"></div><div class="full"><label>Phối hợp</label>${ccBoxes(others)}</div></div><button class="btn btn-primary" style="margin-top:10px" onclick="wfSubmitDirective()">Giao việc</button>`)
 }
 
 function wfSubmitDirective() {
@@ -445,7 +507,7 @@ export function installWorkflow(render: Record<string, () => void>, nextShell: S
   render.dashboard = function () {
     const el = content()
     if (ctx.role() === "lanhdao" && el) {
-      el.innerHTML = leaderDashboardHtml(store.items(), { projects: projectsView(), disbursement: vldcData.get("disbursement"), risks: vldcData.get("risks"), alerts: liveAlerts(vldcData.get("alertRules")), cash: leaderCash() }, today(), inboxBlock(5), offlineBanner())
+      el.innerHTML = leaderDashboardHtml(store.items(), { projects: projectsView(), disbursement: disbursementView(), spend: spendView(), risks: vldcData.get("risks"), cash: leaderCash() }, today(), offlineBanner())
       return
     }
     unitDashboard()
@@ -463,7 +525,7 @@ export function installWorkflow(render: Record<string, () => void>, nextShell: S
   }
   Object.assign(window, {
     wfOpen, wfAct, wfCreateDirective, wfSubmitDirective, wfDelegate, wfSubmitDelegate,
-    wfCreatePayment, wfSubmitPayment, wfResetDemo, wfNotice, wfUnitKpi,
+    wfCreatePayment, wfSubmitPayment, wfResetDemo, wfNotice, wfUnitKpi, wfDirectiveSearch, wfExportDirectives,
     createDirective: wfCreateDirective,
     wfCreateDirectiveFor: (subId: string) => wfCreateDirective(subId),
     wfCreateDirectiveForProject: (projectId: string) => wfCreateDirective("", projectId),
@@ -478,6 +540,8 @@ export function installWorkflow(render: Record<string, () => void>, nextShell: S
     wfSubOptions: (owner: string) => {
       const el = document.getElementById("wf-sub")
       if (el) el.innerHTML = subOptionsHtml(owner)
+      const hint = document.getElementById("wf-owner-unit")
+      if (hint) hint.innerHTML = ownerUnitHint(owner)
     },
     directiveDetail: wfOpen,
   })

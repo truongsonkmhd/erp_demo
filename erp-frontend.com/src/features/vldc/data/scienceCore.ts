@@ -17,8 +17,10 @@ export const SOON_DAYS = 14
 export const isMember = (t: ScienceTopic, role: string) => t.leadRole === role || t.members.includes(role)
 export const canViewTopic = (t: ScienceTopic, role: string) => t.status === "Đã triển khai" || role === REVIEWER || isMember(t, role)
 export const visibleTopics = (topics: ScienceTopic[], role: string) => topics.filter((t) => canViewTopic(t, role))
-export const canUpdateProgress = (t: ScienceTopic, role: string) => t.status === "Đang triển khai" && isMember(t, role)
-export const canEditTopic = (t: ScienceTopic, role: string) => t.status === "Đang triển khai" && t.leadRole === role
+/** The federation head views and reviews topics only. */
+export const canCreateTopic = (role: string) => role !== REVIEWER
+export const canUpdateProgress = (t: ScienceTopic, role: string) => role !== REVIEWER && t.status === "Đang triển khai" && isMember(t, role)
+export const canEditTopic = (t: ScienceTopic, role: string) => role !== REVIEWER && t.status === "Đang triển khai" && t.leadRole === role
 export const canSubmit = canEditTopic
 export const canReview = (t: ScienceTopic, role: string) => t.status === "Chờ duyệt" && role === REVIEWER
 

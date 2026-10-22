@@ -13,7 +13,7 @@ import { subUnitsOf, transferStaff } from "./subUnitCore"
 import type { StaffProfile } from "./types"
 
 /**
- * Nhân sự (KPIs, staff list, Skill Matrix, certificates) and Năng lực (capability overview), both counted from the
+ * Nhân sự (staff list) and Năng lực (capability overview), both counted from the
  * staff profiles. The staff list lives on Nhân sự; capability figures open it with a preset filter (capGoto).
  */
 
@@ -54,14 +54,12 @@ function listHtml(staff: StaffProfile[], today: string): string {
   const units = UNIT_DEFS.filter((u) => staff.some((p) => p.unit === u.code)).map((u): [string, string] => [u.code, u.short])
   const filtered = Object.values(state.filter).some(Boolean)
   return `<div class="card" id="hr-staff"><div class="card-head"><div><h3>Danh sách nhân sự</h3><div class="mini">Đang hiển thị ${rows.length}/${staff.length} người${filtered ? " theo bộ lọc" : ""}</div></div>${filtered ? `<button class="btn btn-light" ${jsCall("capReset")}>Bỏ lọc</button>` : ""}</div>
-<div class="vx-staff-filters"><input placeholder="Tìm tên, chuyên ngành, chức danh..." value="${esc(state.filter.query)}" onchange="capFilter('query',this.value)">${select("unit", "Tất cả đơn vị", units)}${select("subUnit", "Tất cả tổ/phòng", vldcData.get("subUnits").filter((s) => s.active && (!state.filter.unit || s.unit === state.filter.unit)).map((s): [string, string] => [s.id, `${s.name} – ${shortUnit(s.unit)}`]))}${select("education", "Mọi trình độ", EDUCATION_LEVELS.map((e) => [e, e]))}${select("age", "Mọi độ tuổi", AGE_OPTIONS)}${select("exp", "Mọi kinh nghiệm", EXP_OPTIONS)}${select("cert", "Mọi chứng chỉ", [["expiring", "Hết hạn / sắp hết hạn"]])}${select("onField", "Hiện trường: tất cả", [["yes", "Đang ở hiện trường"], ["no", "Tại văn phòng"]])}</div>
-<div class="vx-staff-table"><table><tr>${th("name", "Họ tên")}${th("age", "Tuổi")}${th("education", "Học vấn")}<th>Chuyên ngành</th>${th("experience", "Kinh nghiệm")}${th("unit", "Đơn vị")}<th>Chức danh</th><th>Chứng chỉ</th><th>Hiện trường</th></tr>
-${shown.map((p) => `<tr class="vx-staff-row" ${jsCall("capStaff", p.id)}><td><b>${esc(p.name)}</b><div class="mini">${esc(p.id)}</div></td><td>${ageOf(p, today)}</td><td>${esc(p.education)}</td><td>${esc(p.major)}</td><td>${p.experience} năm</td><td>${esc(shortUnit(p.unit))}${subName(p.subUnit) ? `<div class="mini">${esc(subName(p.subUnit) as string)}</div>` : ""}</td><td>${esc(p.title)}</td><td>${certBadges(p, today)}</td><td>${p.onField ? '<span class="badge b-info">Hiện trường</span>' : '<span class="mini">Văn phòng</span>'}</td></tr>`).join("") || '<tr><td colspan="9" class="mini">Không có nhân sự phù hợp.</td></tr>'}</table></div>
+<div class="vx-staff-filters"><input placeholder="Tìm tên, chuyên ngành, chức danh..." value="${esc(state.filter.query)}" onchange="capFilter('query',this.value)">${select("unit", "Tất cả đơn vị", units)}${select("subUnit", "Tất cả tổ/phòng", vldcData.get("subUnits").filter((s) => s.active && (!state.filter.unit || s.unit === state.filter.unit)).map((s): [string, string] => [s.id, `${s.name} – ${shortUnit(s.unit)}`]))}${select("education", "Tất cả trình độ", EDUCATION_LEVELS.map((e) => [e, e]))}${select("age", "Tất cả độ tuổi", AGE_OPTIONS)}${select("exp", "Tất cả kinh nghiệm", EXP_OPTIONS)}${select("cert", "Tất cả chứng chỉ", [["expiring", "Hết hạn / sắp hết hạn"]])}</div>
+<div class="vx-staff-table"><table><tr>${th("name", "Họ tên")}${th("age", "Tuổi")}${th("education", "Học vấn")}<th>Chuyên ngành</th>${th("experience", "Kinh nghiệm")}${th("unit", "Đơn vị")}<th>Chức danh</th><th>Chứng chỉ</th></tr>
+${shown.map((p) => `<tr class="vx-staff-row" ${jsCall("capStaff", p.id)}><td><b>${esc(p.name)}</b><div class="mini">${esc(p.id)}</div></td><td>${ageOf(p, today)}</td><td>${esc(p.education)}</td><td>${esc(p.major)}</td><td>${p.experience} năm</td><td>${esc(shortUnit(p.unit))}${subName(p.subUnit) ? `<div class="mini">${esc(subName(p.subUnit) as string)}</div>` : ""}</td><td>${esc(p.title)}</td><td>${certBadges(p, today)}</td></tr>`).join("") || '<tr><td colspan="8" class="mini">Không có nhân sự phù hợp.</td></tr>'}</table></div>
 ${pages > 1 ? `<div class="vx-staff-pager"><button class="btn btn-light" ${jsCall("capPage", String(state.page - 1))}${state.page === 0 ? " disabled" : ""}>‹ Trước</button><span class="mini">Trang ${state.page + 1}/${pages}</span><button class="btn btn-light" ${jsCall("capPage", String(state.page + 1))}${state.page >= pages - 1 ? " disabled" : ""}>Sau ›</button></div>` : ""}</div>`
 }
 
-const SKILLS: [keyof SkillLevels, string][] = [["geophysics", "Địa vật lý"], ["gis", "GIS"], ["data", "Xử lý DL"], ["pm", "QL dự án"]]
-type SkillLevels = { geophysics: number; gis: number; data: number; pm: number }
 const dots = (n: number) => `<span class="vx-skill" title="${n}/5">${[1, 2, 3, 4, 5].map((i) => `<i class="${i <= n ? "on" : ""}"></i>`).join("")}</span>`
 const pct = (n: number, d: number) => (d ? Math.round((n / d) * 100) : 0)
 const byUnitOrder = <T extends { unit: string }>(rows: T[]) =>
@@ -92,15 +90,7 @@ function capabilityHtml(): string {
 
 /** Nhân sự: the people themselves – KPIs filter the list in place. */
 function hrHtml(): string {
-  const staff = staffView()
-  const skills = vldcData.get("staffSkills")
-  const today = localToday()
-  const s = hrSummary(staff, today)
-  const pick = (key: string, value: string) => (key ? jsCall("capPick", key, value) : jsCall("capReset"))
-  return `<div>${listHtml(staff, today)}</div>
-<div class="grid twoeq" style="margin-top:14px"><div class="card"><div class="card-head"><div><h3>Skill Matrix – cán bộ chủ chốt</h3><div class="mini">Mức 1–5 • bấm một người để xem hồ sơ</div></div><button class="btn btn-primary" onclick="skillFind()">Tìm chuyên gia</button></div>
-<div class="vx-staff-table"><table><tr><th>Nhân sự</th>${SKILLS.map(([, l]) => `<th>${l}</th>`).join("")}<th>Chứng chỉ</th></tr>${skills.map((k) => { const [label, cls] = CERT_LABEL[certState(k.certExpiry, today)]; return `<tr class="vx-staff-row" ${jsCall("capStaff", k.id)}><td><b>${esc(k.name)}</b><div class="mini">${esc(k.unit)}</div></td>${SKILLS.map(([key]) => `<td>${dots(k[key])}</td>`).join("")}<td><span class="badge ${cls}">${label}</span><div class="mini">${esc(vnDate(k.certExpiry))}</div></td></tr>` }).join("")}</table></div></div>
-<div class="card"><div class="card-head"><h3>Chứng chỉ cần gia hạn</h3>${s.certAlerts.length > 6 ? `<button class="btn btn-light" ${pick("cert", "expiring")}>Lọc danh sách</button>` : ""}</div>${s.certAlerts.slice(0, 6).map((a) => `<div class="alert vx-cap-pick" ${jsCall("capStaff", a.person.id)}><span class="dot ${a.state === "expired" ? "red" : "yellow"}"></span><div><b>${esc(a.person.name)}</b> • ${esc(shortUnit(a.person.unit))}<div class="mini">${esc(a.cert.name)} • ${a.state === "expired" ? "đã hết hạn" : "hết hạn"} ${esc(vnDate(a.cert.expiry))}</div></div></div>`).join("") || '<div class="mini">Không có chứng chỉ cần gia hạn.</div>'}</div></div>`
+  return `<div>${listHtml(staffView(), localToday())}</div>`
 }
 
 function renderInto(html: () => string) {

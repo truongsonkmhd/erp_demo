@@ -33,9 +33,13 @@ export function formatTime(iso: string): string {
   return `${pad(date.getDate())}/${pad(date.getMonth() + 1)} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
+/** Money is always shown in full: 2.600.000.000 đ (never "2,6 tỷ"). */
 export function formatMoney(amount?: number): string {
-  return `${new Intl.NumberFormat("vi-VN").format(amount || 0)} đ`
+  return `${new Intl.NumberFormat("vi-VN").format(Math.round(amount || 0))} đ`
 }
+/** Amounts stored in million / billion VND, shown in full. */
+export const formatMillion = (million: number) => formatMoney(million * 1e6)
+export const formatBillion = (billion: number) => formatMoney(billion * 1e9)
 
 export function statusBadge(item: WorkItem): string {
   const s = item.status

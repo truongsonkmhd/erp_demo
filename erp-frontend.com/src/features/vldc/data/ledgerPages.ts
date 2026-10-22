@@ -4,7 +4,7 @@ import {
   PAY_METHODS, activeDebts, activeEntries, canEditLedger, cashSummary, debtPaid, debtPct, debtProblems, debtRemaining, debtSummary,
   entryProblems, nextId, projectBalances, receiptRows,
 } from "./ledgerCore"
-import { bar, kpi, kpis, metric, tr } from "./pages"
+import { bar, kpi, kpis, metric } from "./pages"
 import { vldcData } from "./registry"
 import type { CashEntry, DebtInstallment, DebtRecord } from "./types"
 
@@ -20,8 +20,8 @@ const value = (id: string) => ((document.getElementById(id) as HTMLInputElement 
 const cellValue = (row: Element, cls: string) => ((row.querySelector(`.${cls}`) as HTMLInputElement | null)?.value ?? "").trim()
 /** Full amount, as written on vouchers: 1.250.000.000 đ. */
 const money = (n: number) => `${Math.round(n).toLocaleString("vi-VN")} đ`
-/** Short amount for tiles: triệu / tỷ. */
-const short = (n: number) => tr(Math.round(n / 1e5) / 10)
+/** Tiles show the full amount too. */
+const short = money
 const badge = (text: string, cls: string) => `<span class="badge ${cls}">${esc(text)}</span>`
 const card = (title: string, body: string, head = "") => `<div class="card"><div class="card-head"><h3>${title}</h3>${head ? `<div class="toolbar vx-ld-head">${head}</div>` : ""}</div>${body}</div>`
 const doneBadge = (done: boolean) => (done ? badge("Đã hoàn thành", "b-ok") : badge("Đang thực hiện", "b-warn"))

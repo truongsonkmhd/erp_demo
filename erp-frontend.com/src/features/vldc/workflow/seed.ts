@@ -107,7 +107,7 @@ export function buildSeed(today: string): WorkItem[] {
   payment("PAY-SEED-2", "Chi phí đối chiếu, xác nhận công nợ HĐ-2026-031", 86_000_000, 4, "CD-SEED-3")
   act("PAY-SEED-2", "advance", "kehoach")
   act("PAY-SEED-2", "advance", "ketoan")
-  payment("PAY-SEED-3", "Thanh toán thuê máy đo từ P-12 – 680 triệu", 680_000_000, 2)
+  payment("PAY-SEED-3", "Thanh toán thuê máy đo từ P-12 – 680.000.000 đ", 680_000_000, 2)
   act("PAY-SEED-3", "advance", "kehoach")
   act("PAY-SEED-3", "advance", "ketoan")
   act("PAY-SEED-3", "advance", "ketoantruong")

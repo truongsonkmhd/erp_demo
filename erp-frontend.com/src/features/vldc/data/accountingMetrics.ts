@@ -155,3 +155,6 @@ export function revenueSummary(contracts: Contract[], today: string) {
     customers, payable: ap.total, payableOverdue: ap.overdue,
   }
 }
+
+/** Contracts are drafted by the business roles; the federation head only views them. */
+export const canCreateContract = (role: string) => role !== "lanhdao"

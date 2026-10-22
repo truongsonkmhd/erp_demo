@@ -68,7 +68,7 @@ export const DATASETS = {
   staffProfiles: { collection: "staff_profiles", seed: st.staffProfiles, pages: ["capability", "hr"] },
   news: { collection: "news", seed: nw.news, pages: ["news", "dashboard"] },
   debtRecords: { collection: "debt_records", seed: lg.debtRecords, pages: ["debts", "cashin", "cashout", "dashboard"] },
-  cashEntries: { collection: "cash_entries", seed: lg.cashEntries, pages: ["cashin", "cashout", "debts", "dashboard"] },
+  cashEntries: { collection: "cash_entries", seed: lg.cashEntries, pages: ["cashin", "cashout", "debts", "dashboard", "finance", "acctreports"] },
   auditEvents: { collection: "audit_events", seed: (): AuditEvent[] => [], pages: ["audit"] },
 } as const
 

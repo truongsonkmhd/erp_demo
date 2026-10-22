@@ -1,5 +1,5 @@
 import { escapeHtml as esc, formatDate, jsCall, statusBadge } from "../workflow/html"
-import { projectsView } from "./projectView"
+import { disbursementView, projectsView } from "./projectView"
 import { kpiUnits, unitKpi } from "../workflow/kpi"
 import { roleUnitCode, unitCodeOf, unitName } from "./org"
 import { PAYMENT_STEPS, ROLE_TITLES, isClosed } from "../workflow/rules"
@@ -238,7 +238,7 @@ function acctreports() {
   const rev = A.revenueSummary(D("contracts"), today())
   const adv = A.advanceSummary(D("advances"), today())
   const cash = A.cashSummary(D("bankAccounts"), D("bankLines"))
-  const f = M.financeMetrics(D("financeLines"), D("disbursement"))
+  const f = M.financeMetrics(D("financeLines"), disbursementView())
   const next = D("cashflow")[0]
   return `<div class="card"><div class="card-head"><h3>Báo cáo tài chính phục vụ lãnh đạo</h3><span class="mini">Tính từ dữ liệu kế toán hiện hành</span></div>${table(["Chỉ tiêu", "Giá trị", "Ghi chú"], [
     `<tr><td>Giải ngân so kế hoạch năm</td><td>${ty(f.paid)} / ${ty(f.plan)}</td><td>${f.disbursedPct}%</td></tr>`,
@@ -253,16 +253,17 @@ function acctreports() {
 
 // ---------- Contracts & documents ----------
 
-function contractsPage() {
+function contractsPage(ctx: Ctx) {
+  const role = ctx.role()
   const cs = D("contracts")
   const ar = A.debtSummary(cs, "thu", today())
-  const paidPct = (c: Contract) => (c.value ? Math.round((c.milestones.reduce((s, m) => s + m.paid, 0) / c.value) * 100) : 0)
+  const paidOf = (c: Contract) => c.milestones.reduce((s, m) => s + m.paid, 0)
   return `${kpis(
     kpi("Hợp đồng đang quản lý", cs.length, tr(cs.reduce((s, c) => s + c.value, 0))),
-    kpi("Hợp đồng thu / chi", `${cs.filter((c) => c.kind === "thu").length} / ${cs.filter((c) => c.kind === "chi").length}`, "Dịch vụ / mua sắm"),
+    kpi("Khách hàng / nhà cung cấp", `${cs.filter((c) => c.kind === "thu").length} / ${cs.filter((c) => c.kind === "chi").length}`, "Số hợp đồng theo loại"),
     kpi("Phải thu còn lại", tr(ar.total), `${tr(ar.over60)} > 60 ngày`),
     kpi("Rủi ro cao", cs.filter((c) => c.risk === "Cao").length, "Cần theo dõi"),
-  )}<div style="margin-top:14px">${card("Danh mục hợp đồng (CLM)", table(["Mã", "Đối tác / nội dung", "Loại", "Giá trị", "Đã thanh toán", "Giai đoạn", "Nghĩa vụ tiếp theo", "Rủi ro", ""], cs.map((c) => `<tr><td><b>${esc(c.id)}</b></td><td>${esc(c.party)}<div class="mini">${esc(c.name)}</div></td><td>${c.kind === "thu" ? "Thu" : "Chi"}</td><td>${tr(c.value)}</td><td style="min-width:100px"><div class="progress"><i style="width:${paidPct(c)}%"></i></div><span class="mini">${paidPct(c)}%</span></td><td>${esc(c.stage)}</td><td>${esc(c.nextObligation)}</td><td>${badge(c.risk, riskCls(c.risk))}</td><td>${btn("Mở", "contractDetail", c.id)}</td></tr>`)), '<button class="btn btn-primary" onclick="contractForm()">+ Hợp đồng</button>')}</div>`
+  )}<div style="margin-top:14px">${card("Danh mục hợp đồng", table(["Mã", "Đối tác / nội dung", "Loại", "Giá trị", "Đã thanh toán", "Còn phải thanh toán", "Giai đoạn", "Nghĩa vụ tiếp theo", "Rủi ro", ""], cs.map((c) => `<tr><td><b>${esc(c.id)}</b></td><td>${esc(c.party)}<div class="mini">${esc(c.name)}</div></td><td>${c.kind === "thu" ? "Khách hàng" : "Nhà cung cấp"}</td><td>${tr(c.value)}</td><td>${tr(paidOf(c))}</td><td><b>${tr(c.value - paidOf(c))}</b></td><td>${esc(c.stage)}</td><td>${esc(c.nextObligation)}</td><td>${badge(c.risk, riskCls(c.risk))}</td><td>${btn("Mở", "contractDetail", c.id)}</td></tr>`)), A.canCreateContract(role) ? '<button class="btn btn-primary" onclick="contractForm()">+ Hợp đồng</button>' : "")}</div>`
 }
 
 const isDone = (status: string) => status === "Hoàn thành" || status === "Đã phát hành"
@@ -344,7 +345,7 @@ export function unitDashboardHtml(role: string): string {
 /** Dashboard of the remaining roles (heads, specialists): federation-wide picture computed from records. */
 export function baseDashboardHtml(): string {
   const ps = projectsView()
-  const f = M.financeMetrics(D("financeLines"), D("disbursement"))
+  const f = M.financeMetrics(D("financeLines"), disbursementView())
   const ins = D("incomingDocuments")
   const ar = A.debtSummary(D("contracts"), "thu", today())
   const eq = D("equipment")

@@ -3,6 +3,7 @@ import { resolveUnitChoice, unitChoiceGroups } from "./subUnitCore"
 import { staffView } from "./staffView"
 import { ROLE_TITLES } from "../workflow/rules"
 import { SKILLS, conclusionTasks, findExperts, type SkillKey } from "./actionsCore"
+import { canCreateContract } from "./accountingMetrics"
 import { addDays, localToday, vnDate } from "./dates"
 import { ROLE_PROFILES } from "./org"
 import { vldcData } from "./registry"
@@ -164,14 +165,16 @@ export function installActions(ctx: Ctx) {
   }
 
   function contractForm() {
+    if (!canCreateContract(me())) return
     open("Đề xuất hợp đồng", form(
-      field("Loại", select("k-kind", [["thu", "Hợp đồng thu (dịch vụ)"], ["chi", "Hợp đồng chi (mua sắm/thuê)"]])) + field("Đối tác", input("k-party")) +
+      field("Loại", select("k-kind", [["thu", "Khách hàng"], ["chi", "Nhà cung cấp"]])) + field("Đối tác", input("k-party")) +
       field("Nội dung", input("k-name"), true) + field("Giá trị (triệu đồng)", input("k-value", "", "number")) + field("Dự án", select("k-project", projectOptions())) +
       field("Hạn thanh toán đợt 1", input("k-due", addDays(today(), 30), "date")),
       "saveContractForm", "Tạo dự thảo hợp đồng"))
   }
 
   function saveContractForm() {
+    if (!canCreateContract(me())) return
     const party = val("k-party")
     const name = val("k-name")
     const value = num("k-value")

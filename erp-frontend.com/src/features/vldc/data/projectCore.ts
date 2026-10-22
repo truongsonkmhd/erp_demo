@@ -11,8 +11,8 @@ import type { ChangeRequest, ChangeRequestKind, Project, StoredProject, WbsItem 
 
 export const PROJECT_STATUSES = ["Chuẩn bị", "Đang thực hiện", "Tạm dừng", "Nghiệm thu", "Hoàn thành"] as const
 export const CR_KINDS: ChangeRequestKind[] = ["Phạm vi", "Ngân sách", "Thời gian"]
-/** Roles that create projects and edit their plan (dates, budget, WBS). */
-export const PROJECT_CREATORS = ["lanhdao", "kehoach"]
+/** Roles that create projects and edit their plan (dates, budget, WBS); the federation head only views (and decides CRs, gives work). */
+export const PROJECT_CREATORS = ["kehoach"]
 export const PROJECT_APPROVER = "lanhdao"
 /** Cost ahead of technical progress by more than this many points is flagged. */
 export const OVERRUN_GAP = 10
@@ -133,8 +133,7 @@ export function wbsRemovalProblems(prev: StoredProject, next: StoredProject, wor
 
 export const canCreateProject = (role: string) => PROJECT_CREATORS.includes(role)
 /** Progress, milestones and change requests: the lead, the roles of the project's unit, and the creators. */
-export const canUpdateProject = (p: StoredProject, role: string) =>
-  canCreateProject(role) || p.leadRole === role || (!!roleUnitCode(role) && roleUnitCode(role) === unitCodeOf(p.unit))
+export const canUpdateProject = (p: StoredProject, role: string) => role !== PROJECT_APPROVER && (canCreateProject(role) || p.leadRole === role || (!!roleUnitCode(role) && roleUnitCode(role) === unitCodeOf(p.unit)))
 
 export function updateWbs(p: StoredProject, progress: Record<string, number>, role: string, byName: string, note: string, now: string): StoredProject {
   if (!note.trim()) throw new Error("Vui lòng ghi nội dung công việc đã làm")

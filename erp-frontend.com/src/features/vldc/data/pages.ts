@@ -1,5 +1,5 @@
-import { escapeHtml as esc, jsCall } from "../workflow/html"
-import { projectsView } from "./projectView"
+import { escapeHtml as esc, formatBillion, formatMillion, jsCall } from "../workflow/html"
+import { disbursementView, projectsView } from "./projectView"
 import { staffView } from "./staffView"
 import { subUnitsOf } from "./subUnitCore"
 import { overallKpi, unitKpis } from "../workflow/kpi"
@@ -23,15 +23,16 @@ export const kpis = (...tiles: string[]) => `<div class="grid kpis">${tiles.join
 export const bar = (label: string, pct: number, right = `${pct}%`) =>
   `<div class="chart-row"><span>${esc(label)}</span><div class="chart-track"><i style="width:${Math.max(0, Math.min(100, pct))}%"></i></div><b>${right}</b></div>`
 export const metric = (label: string, value: string | number) => `<div class="metric"><span>${esc(label)}</span><b>${value}</b></div>`
-export const ty = (billion: number) => `${billion.toLocaleString("vi-VN", { maximumFractionDigits: 1 })} tỷ`
-export const tr = (million: number) => (million >= 1000 ? ty(million / 1000) : `${million.toLocaleString("vi-VN")} triệu`)
+/** Money from billion / million VND, always written in full (2.600.000.000 đ). */
+export const ty = formatBillion
+export const tr = formatMillion
 const riskBadge = (r: Risk) => {
   const level = M.riskLevel(r)
   return `<span class="badge ${level === "Cao" ? "b-danger" : level === "TB" ? "b-warn" : "b-ok"}">${level}</span>`
 }
 function finance() {
   const lines = D("financeLines")
-  const f = M.financeMetrics(lines, D("disbursement"))
+  const f = M.financeMetrics(lines, disbursementView())
   const overruns = projectsView().filter(M.isOverrun)
   const rows = lines.map((l) => `<tr><td>${esc(l.source)}</td><td>${esc(l.project)}</td><td>${esc(l.item)}</td><td>${esc(l.unit)}</td><td>${tr(l.budget)}</td><td>${tr(l.committed)}</td><td>${tr(l.paid)}</td></tr>`).join("")
   return `${kpis(
@@ -113,7 +114,7 @@ function organization() {
   const subs = D("subUnits")
   const support = units.filter((u) => u.type === "Bộ máy giúp việc")
   const direct = units.filter((u) => u.type === "Đơn vị trực thuộc")
-  return `<div class="card"><div class="card-head"><div><h3>Cơ cấu tổ chức & chức năng</h3><div class="mini">${support.length} phòng chức năng • ${direct.length} đơn vị trực thuộc • ${people.length} nhân sự • ${subs.filter((x) => x.active).length} tổ/phòng</div></div><div class="toolbar"><span class="official-badge">DỮ LIỆU CÔNG KHAI</span><button class="btn btn-primary" onclick="show('units')">Mở không gian đơn vị</button></div></div><div class="org-grid">${units.map((u) => `<div class="org-card"><span class="org-chip">${esc(u.type)}</span><h4>${esc(u.name)}</h4><div class="org-meta"><span><b>Lãnh đạo:</b> ${esc(u.leader)}</span>${u.deputy ? `<span><b>Phó:</b> ${esc(u.deputy)}</span>` : ""}<span><b>Nhân sự:</b> ${people.filter((p) => p.unit === u.id).length} người</span></div><p>${esc(u.mission)}</p>${(() => { const mine = subUnitsOf(u.id, subs); return mine.length ? `<div class="mini" style="margin-bottom:8px"><b>Tổ/phòng:</b> ${mine.map((x) => esc(x.name)).join(" • ")}</div>` : "" })()}</div>`).join("")}</div></div>`
+  return `<div class="card"><div class="card-head"><div><h3>Cơ cấu tổ chức & chức năng</h3><div class="mini">${support.length} phòng chức năng • ${direct.length} đơn vị trực thuộc • ${people.length} nhân sự • ${subs.filter((x) => x.active).length} tổ/phòng</div></div><div class="toolbar"><span class="official-badge">DỮ LIỆU CÔNG KHAI</span><button class="btn btn-primary" onclick="show('units')">Xem đơn vị</button></div></div><div class="org-grid">${units.map((u) => `<div class="org-card"><span class="org-chip">${esc(u.type)}</span><h4>${esc(u.name)}</h4><div class="org-meta"><span><b>Lãnh đạo:</b> ${esc(u.leader)}</span>${u.deputy ? `<span><b>Phó:</b> ${esc(u.deputy)}</span>` : ""}<span><b>Nhân sự:</b> ${people.filter((p) => p.unit === u.id).length} người</span></div><p>${esc(u.mission)}</p>${(() => { const mine = subUnitsOf(u.id, subs); return mine.length ? `<div class="mini" style="margin-bottom:8px"><b>Tổ/phòng:</b> ${mine.map((x) => esc(x.name)).join(" • ")}</div>` : "" })()}</div>`).join("")}</div></div>`
 }
 
 function equipmentCatalog() {

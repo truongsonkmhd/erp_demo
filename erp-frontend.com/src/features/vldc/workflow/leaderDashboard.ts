@@ -1,5 +1,5 @@
 import { groupedBars, lineChart } from "./charts.ts"
-import { KPI_GIVER, RATING_LABELS, itemFlags, unitKpis, type UnitKpi } from "./kpi.ts"
+import { RATING_LABELS, isKpiGiver, itemFlags, unitKpis, type UnitKpi } from "./kpi.ts"
 import { isClosed } from "./rules.ts"
 import { escapeHtml as esc, formatBillion, formatMoney, jsCall } from "./html.ts"
 import type { WorkItem } from "./types.ts"
@@ -34,7 +34,7 @@ const RATING_BADGE: Record<UnitKpi["rating"], string> = { good: "b-ok", watch: "
 /** Units ranked by KPI = completed ÷ work given by the head, with the counts behind it. */
 function kpiScorecard(kpis: UnitKpi[], today: string): string {
   const ranked = [...kpis].sort((a, b) => (b.score ?? -1) - (a.score ?? -1))
-  const given = (k: UnitKpi) => k.items.filter((x) => x.type === "directive" && x.createdBy === KPI_GIVER)
+  const given = (k: UnitKpi) => k.items.filter((x) => x.type === "directive" && isKpiGiver(x.createdBy))
   const rows = ranked.map((k) => {
     const g = given(k)
     const open = g.filter((x) => !isClosed(x))

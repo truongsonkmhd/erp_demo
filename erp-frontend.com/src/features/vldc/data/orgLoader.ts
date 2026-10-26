@@ -1,21 +1,20 @@
-import { getRoles } from "@/services/RoleService"
-import { getDepartments } from "@/services/DepartmentService"
-import { applyBackendOrg, setRolePerson } from "./org"
+import { apiRequest } from "@/lib/api"
+import { applyBackendOrg, setRolePerson, type OrgDirectory } from "./org"
 
 let loaded: Promise<boolean> | undefined
 
 /**
- * Loads role titles and units from the backend (tbl_role, tbl_department) once per session. Accounts
- * without read access, or an unreachable backend, keep the seeded defaults – the demo still works.
+ * Loads positions, the unit tree and who holds which role in which unit (GET /api/org/directory) once per
+ * session. An unreachable backend keeps the seeded defaults – the demo still works.
  */
 export function loadOrgFromBackend(): Promise<boolean> {
-  return (loaded ??= Promise.all([getRoles(), getDepartments()])
-    .then(([roles, departments]) => {
-      applyBackendOrg(roles, departments)
+  return (loaded ??= apiRequest<OrgDirectory>("/api/org/directory")
+    .then((directory) => {
+      applyBackendOrg(directory)
       return true
     })
     .catch((error) => {
-      console.warn("[VLDC] Không tải được vai trò/phòng ban từ backend, dùng dữ liệu mặc định:", error)
+      console.warn("[VLDC] Không tải được tổ chức từ backend, dùng dữ liệu mặc định:", error)
       return false
     }))
 }

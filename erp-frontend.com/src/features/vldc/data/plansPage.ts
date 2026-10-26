@@ -6,6 +6,7 @@ import {
   type Pace, type PlanFilter, type PlanNode,
 } from "./planCore"
 import { vldcData } from "./registry"
+import { managesAllUnits } from "./access"
 import type { Plan } from "./types"
 
 /** Kế hoạch for the leader: every plan's progress against where it should be today, slowest first. */
@@ -77,7 +78,7 @@ function reminderScope(plan: Plan) {
 export function installPlansPage(render: Record<string, () => void>, ctx: Ctx) {
   const base = render.plans
   // Leaders follow progress; other roles keep the planning page.
-  render.plans = () => (ctx.role() === "lanhdao" ? rerender() : base())
+  render.plans = () => (managesAllUnits(ctx.role()) ? rerender() : base())
 
   function planDetail(id: string) {
     const plans = vldcData.get("plans")

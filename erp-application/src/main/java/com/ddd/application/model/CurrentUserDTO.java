@@ -10,4 +10,6 @@ import java.util.List;
 public class CurrentUserDTO extends UserDTO {
     private String roleName;
     private List<PermissionDTO> permissions;
+    /** Units whose work, KPI and statistics this user manages (own unit and sub-units); empty when none. */
+    private List<String> managedUnitCodes;
 }

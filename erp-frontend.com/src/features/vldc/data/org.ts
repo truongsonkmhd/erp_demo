@@ -1,9 +1,10 @@
 import { ROLE_TITLES } from "../workflow/rules.ts"
+import { applyDirectory, orgRoles, roleUnit, type DirectoryPerson, type DirectoryPosition } from "./access.ts"
 
 /**
- * VLDC organisation: units (tbl_department) and role profiles (tbl_role + tbl_user). The backend is the
- * source; the values below are the same as its seed (environment/mysql) and are used until it loads or
- * when it cannot be reached. Every unit name in records is resolved to a unit code, whatever its spelling.
+ * VLDC organisation: units (tbl_department) and role profiles (tbl_role + tbl_user, unit and chức vụ in access.ts).
+ * The backend is the source; the values below are the same as its seed (environment/mysql) and are used until it
+ * loads or when it cannot be reached. Every unit name in records is resolved to a unit code, whatever its spelling.
  */
 
 export type UnitCode = "BLD" | "KT" | "KHTC" | "TCHC" | "MD" | "DB" | "HK" | "TT"
@@ -20,12 +21,6 @@ export const UNIT_DEFS: OrgUnitDef[] = [
   { code: "TT", name: "TT Công nghệ & Kiểm định", short: "TT Kiểm định", aliases: ["TT Kiểm định", "Trung tâm Công nghệ & Kiểm định", "Trung tâm Công nghệ & Kiểm định máy ĐVL", "Trung tâm CN&KĐM"] },
 ]
 
-/** Unit of each role (tbl_role.department_id). */
-const ROLE_UNIT: Record<string, UnitCode> = {
-  lanhdao: "BLD", kythuat: "KT", kehoach: "KHTC", ketoan: "KHTC", ketoantruong: "KHTC", tochuc: "TCHC",
-  truongdonvi: "MD", chunhiem: "MD", matdat: "MD", bien: "DB", hientruong: "DB", hangkhong: "HK", trungtam: "TT",
-}
-
 /** Person shown for each role (tbl_user.full_name of the seeded demo accounts). */
 const ROLE_PEOPLE: Record<string, [name: string, avatar: string]> = {
   lanhdao: ["Nguyễn Văn Minh", "LD"], truongdonvi: ["Trần Quốc Hùng", "TD"], chunhiem: ["Lê Hoàng Nam", "CN"],
@@ -40,11 +35,12 @@ export type RoleProfile = { name: string; title: string; unit: string; unitCode:
 export const ROLE_PROFILES: Record<string, RoleProfile> = {}
 const unitNames: Partial<Record<UnitCode, string>> = {}
 
-const unitDef = (code: UnitCode) => UNIT_DEFS.find((u) => u.code === code) as OrgUnitDef
-export const unitName = (code: UnitCode) => unitNames[code] ?? unitDef(code).name
+const unitDef = (code: UnitCode) => UNIT_DEFS.find((u) => u.code === code)
+export const unitName = (code: UnitCode) => unitNames[code] ?? unitDef(code)?.name ?? code
 
 function rebuildProfiles() {
-  for (const [role, code] of Object.entries(ROLE_UNIT)) {
+  for (const role of orgRoles()) {
+    const code = roleUnit(role) as UnitCode
     const prev = ROLE_PROFILES[role]
     ROLE_PROFILES[role] = {
       name: prev?.name ?? ROLE_PEOPLE[role]?.[0] ?? "",
@@ -75,31 +71,35 @@ export function unitCodeOf(name: string | undefined): UnitCode | undefined {
   return name ? index.get(unitKey(name)) : undefined
 }
 
-export const roleUnitCode = (role: string): UnitCode | undefined => ROLE_UNIT[role]
-export const rolesOfUnit = (code: UnitCode) => Object.keys(ROLE_UNIT).filter((r) => ROLE_UNIT[r] === code)
+export const roleUnitCode = (role: string): UnitCode | undefined => roleUnit(role) as UnitCode | undefined
+export const rolesOfUnit = (code: UnitCode) => orgRoles().filter((r) => roleUnit(r) === code)
 
 /** Leadership and the functional departments follow every project; units see their own. */
 const SEES_ALL_PROJECTS: UnitCode[] = ["BLD", "KT", "KHTC"]
 export function canSeeProject(role: string, projectUnit: string | undefined): boolean {
-  const code = ROLE_UNIT[role]
+  const code = roleUnitCode(role)
   if (!code) return false
   return SEES_ALL_PROJECTS.includes(code) || unitCodeOf(projectUnit) === code
 }
 
-export type BackendRole = { code: string; name: string; departmentName?: string | null }
-export type BackendDepartment = { code: string; name: string }
+export type OrgDirectory = {
+  positions: DirectoryPosition[]
+  units: { code: string; name: string; parentCode?: string | null }[]
+  people: (DirectoryPerson & { fullName: string; roleNames: string[] })[]
+}
 
-/** Applies tbl_role / tbl_department; roles without a department keep their default unit. */
-export function applyBackendOrg(roles: BackendRole[], departments: BackendDepartment[]) {
-  for (const d of departments) if (UNIT_DEFS.some((u) => u.code === d.code)) unitNames[d.code as UnitCode] = d.name
+/** Applies GET /api/org/directory: unit names and tree, each role's title, person, chức vụ and đơn vị. */
+export function applyBackendOrg(dir: OrgDirectory) {
+  for (const d of dir.units) if (UNIT_DEFS.some((u) => u.code === d.code)) unitNames[d.code as UnitCode] = d.name
   index = aliasIndex()
-  for (const r of roles) {
-    if (!(r.code in ROLE_UNIT)) continue
-    if (r.name) ROLE_TITLES[r.code] = r.name
-    const code = unitCodeOf(r.departmentName ?? undefined)
-    if (code) ROLE_UNIT[r.code] = code
+  applyDirectory(dir)
+  for (const person of dir.people) {
+    person.roleCodes.forEach((code, i) => {
+      if (person.roleNames[i]) ROLE_TITLES[code] = person.roleNames[i]
+    })
   }
   rebuildProfiles()
+  for (const person of dir.people) person.roleCodes.forEach((code) => setRolePerson(code, person.fullName))
 }
 
 /** The signed-in account's real name replaces the default person of its role. */

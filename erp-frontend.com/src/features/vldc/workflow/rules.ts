@@ -1,4 +1,5 @@
 import type { WorkItem, WorkNotice } from "./types.ts"
+import { assignableRoles, canAssign, managesAllUnits, managesWorkOf } from "../data/access.ts"
 
 /** The 13 business accounts seeded in tbl_user (admin acts through the "view as" role picker). */
 export const BUSINESS_ROLES = [
@@ -22,24 +23,11 @@ export const ROLE_TITLES: Record<string, string> = {
   ketoantruong: "Kế toán trưởng",
 }
 
-const UNIT_HEAD_DELEGATES = ["chunhiem", "hientruong"]
-
-/** Who each role may hand work down to. */
-export const DELEGATES: Record<string, string[]> = {
-  lanhdao: BUSINESS_ROLES.filter((role) => role !== "lanhdao"),
-  truongdonvi: UNIT_HEAD_DELEGATES,
-  matdat: UNIT_HEAD_DELEGATES,
-  bien: UNIT_HEAD_DELEGATES,
-  hangkhong: UNIT_HEAD_DELEGATES,
-  trungtam: ["kythuat"],
-  chunhiem: ["hientruong"],
-  ketoantruong: ["ketoan"],
-  kythuat: [],
-  kehoach: [],
-  tochuc: [],
-  hientruong: [],
-  ketoan: [],
-}
+/**
+ * Who a role may hand work down to: not a fixed list per role but its scope (data/access.ts) – people of a lower
+ * chức vụ in the unit it manages or a sub-unit. Giving work also needs the vldc-directives:create permission.
+ */
+export const delegatesOf = (role: string) => assignableRoles(role, BUSINESS_ROLES)
 
 export const PAYMENT_STEPS: { owner: string; label: string }[] = [
   { owner: "chunhiem", label: "Lập đề nghị thanh toán" },
@@ -58,14 +46,17 @@ function isDirectParty(item: WorkItem, role: string): boolean {
   return item.createdBy === role || item.owner === role || item.cc.includes(role)
 }
 
-/** lanhdao sees everything; others see items they are party to, plus the subtree under those. */
+/**
+ * Whoever manages the whole organisation sees everything; a unit manager also sees work owned in the units it
+ * manages; everyone sees items they are party to, plus the subtree under those.
+ */
 export function isVisible(item: WorkItem, role: string, all: WorkItem[]): boolean {
-  if (role === "lanhdao") return true
+  if (managesAllUnits(role)) return true
   const byId = new Map(all.map((x) => [x.id, x]))
   const seen = new Set<string>()
   let cursor: WorkItem | undefined = item
   while (cursor && !seen.has(cursor.id)) {
-    if (isDirectParty(cursor, role)) return true
+    if (isDirectParty(cursor, role) || managesWorkOf(role, cursor.owner)) return true
     seen.add(cursor.id)
     cursor = cursor.parentId ? byId.get(cursor.parentId) : undefined
   }
@@ -139,7 +130,7 @@ function directiveActions(item: WorkItem, role: string, perms: string[], all: Wo
   if (isOwner && item.status === "Đang thực hiện") {
     actions.push("progress")
     if (!hasOpenChildren(item, all)) actions.push("submit")
-    if (hasPerm(perms, DIRECTIVE_CREATE) && (DELEGATES[role] || []).length) actions.push("delegate")
+    if (hasPerm(perms, DIRECTIVE_CREATE) && delegatesOf(role).length) actions.push("delegate")
   }
   if (item.createdBy === role && item.status === "Chờ duyệt") actions.push("approve", "return")
   if (parties(item).includes(role)) actions.push("comment")
@@ -206,7 +197,7 @@ function applyDirectiveAction(item: WorkItem, action: WorkAction, input: ActionI
     case "delegate": {
       const child = input.child
       if (!child) throw new Error("Thiếu thông tin việc con")
-      if (!(DELEGATES[role] || []).includes(child.owner)) throw new Error("Chỉ được giao việc cho cấp dưới trực tiếp")
+      if (!canAssign(role, child.owner)) throw new Error("Người nhận không thuộc phạm vi quản lý của bạn")
       const title = requireText(child.title, "Vui lòng nhập nội dung công việc")
       const due = requireDue(child.due, "Vui lòng chọn hạn hoàn thành", now, item.due)
       const cc = (child.cc || []).filter((r) => r !== child.owner)
@@ -247,8 +238,9 @@ export function createDirective(
   perms: string[],
   now: string,
 ): WorkItem {
-  if (role !== "lanhdao" || !hasPerm(perms, DIRECTIVE_CREATE)) throw new Error("Bạn không có quyền giao chỉ đạo")
-  if (!DELEGATES.lanhdao.includes(input.owner)) throw new Error("Vui lòng chọn đơn vị chủ trì")
+  if (!hasPerm(perms, DIRECTIVE_CREATE)) throw new Error("Bạn không có quyền giao việc")
+  if (!input.owner) throw new Error("Vui lòng chọn người chủ trì")
+  if (!canAssign(role, input.owner)) throw new Error("Người chủ trì không thuộc phạm vi quản lý của bạn")
   const title = requireText(input.title, "Vui lòng nhập nội dung chỉ đạo")
   const due = requireDue(input.due, "Vui lòng chọn hạn hoàn thành", now)
   const cc = input.cc.filter((r) => r !== input.owner && r !== role)

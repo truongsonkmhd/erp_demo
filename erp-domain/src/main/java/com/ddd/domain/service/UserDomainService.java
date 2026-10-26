@@ -5,9 +5,13 @@ import com.xxxx.ddd.domain.model.entity.User;
 import java.util.List;
 
 public interface UserDomainService {
-    User createUser(User user, java.util.List<String> roleCodes, String levelCode);
+    /**
+     * positionCode / orgUnitId: chức vụ and đơn vị of the user. On update null keeps the current value, while a blank
+     * code or an id &lt;= 0 clears it.
+     */
+    User createUser(User user, java.util.List<String> roleCodes, String levelCode, String positionCode, Long orgUnitId);
 
-    User updateUser(Long id, User patch, java.util.List<String> roleCodes, String levelCode);
+    User updateUser(Long id, User patch, java.util.List<String> roleCodes, String levelCode, String positionCode, Long orgUnitId);
 
     User getById(Long id);
 

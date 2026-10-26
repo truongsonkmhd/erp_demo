@@ -8,4 +8,6 @@ public class SaveDepartmentRequest {
     @NotBlank private String code;
     @NotBlank private String name;
     private String description;
+    /** Đơn vị cha; null ở cấp gốc. */
+    private Long parentId;
 }

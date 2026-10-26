@@ -1,4 +1,5 @@
 import { UNIT_DEFS, roleUnitCode, unitKey, unitName, type UnitCode } from "./org.ts"
+import { managesAllUnits } from "./access.ts"
 import { vnDate } from "./dates.ts"
 import type { CalendarEvent, NewsKind, NewsPost, SubUnit } from "./types.ts"
 
@@ -32,7 +33,7 @@ export function visiblePosts(posts: NewsPost[], role: string, subs: SubUnit[] = 
   return posts.filter((p) => {
     if (p.status !== "Đã đăng") return p.authorRole === role
     // Tổ/phòng have no accounts of their own: their posts reach the accounts of the parent unit.
-    return role === "lanhdao" || p.audience === "ALL" || audienceUnit(p.audience, subs) === unit || p.authorRole === role
+    return managesAllUnits(role) || p.audience === "ALL" || audienceUnit(p.audience, subs) === unit || p.authorRole === role
   })
 }
 

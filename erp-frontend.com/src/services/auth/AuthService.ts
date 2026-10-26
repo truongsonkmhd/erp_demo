@@ -90,6 +90,12 @@ export async function fetchCurrentUser(): Promise<CurrentUser> {
     accountType?: number
     levelId?: string
     roleName?: string
+    positionCode?: string | null
+    positionName?: string | null
+    positionLevel?: number | null
+    orgUnitCode?: string | null
+    orgUnitName?: string | null
+    managedUnitCodes?: string[]
     permissions?: { id: string; code?: string; label: string; pageCode?: string; actionCode?: string }[]
   }>("/api/authenticate/me")
 
@@ -104,6 +110,12 @@ export async function fetchCurrentUser(): Promise<CurrentUser> {
     accountType: me.accountType,
     levelId: me.levelId,
     roleName: me.roleName,
+    positionCode: me.positionCode,
+    positionName: me.positionName,
+    positionLevel: me.positionLevel,
+    orgUnitCode: me.orgUnitCode,
+    orgUnitName: me.orgUnitName,
+    managedUnitCodes: me.managedUnitCodes || [],
     permissions: me.permissions || [],
   }
   updateStoredUser(user)

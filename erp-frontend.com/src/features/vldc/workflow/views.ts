@@ -1,7 +1,7 @@
 import { escapeHtml as esc, formatDate, formatMoney, formatTime, jsCall, statusBadge } from "./html"
 import { disbursementView, projectsView, spendView } from "../data/projectView"
 import {
-  DELEGATES,
+  BUSINESS_ROLES,
   PAYMENT_STEPS,
   ROLE_TITLES,
   allowedActions,
@@ -9,6 +9,7 @@ import {
   childrenOf,
   createDirective,
   createPayment,
+  delegatesOf,
   hasPerm,
   isAtRisk,
   isClosed,
@@ -28,6 +29,7 @@ import { performanceHtml, unitDetailHtml } from "./kpiViews"
 import { kpiUnits, rolesByUnit, unitKpis, unitOfRole } from "./kpi"
 import { vldcData } from "../data/registry"
 import { ROLE_PROFILES, roleUnitCode, rolesOfUnit, unitCodeOf } from "../data/org"
+import { managesAllUnits } from "../data/access"
 import { subUnitOptions } from "../data/subUnitPage"
 
 export { escapeHtml, statusBadge } from "./html"
@@ -158,11 +160,12 @@ function renderDirectives() {
   const open = visible.filter((x) => !isClosed(x))
   const atRisk = open.filter((x) => isAtRisk(x, all, today()))
   const waiting = visible.filter((x) => x.createdBy === role && x.status === "Chờ duyệt")
-  // The head is never the owner: its first column follows the work it gave out that nobody has accepted yet.
-  const leader = role === "lanhdao"
+  // The top of the organisation is never the owner: its first column follows the work it gave out that nobody has accepted yet.
+  const leader = managesAllUnits(role)
   const mine = leader ? notYetAccepted(role, visible) : ownerInbox(role, all).filter((x) => x.type !== "payment")
-  const canCreate = role === "lanhdao" && hasPerm(perms, "vldc-directives:create")
-  const canReset = role === "lanhdao" || perms.includes("*")
+  // Giving work needs the permission and someone in the role's managed scope to give it to.
+  const canCreate = hasPerm(perms, "vldc-directives:create") && delegatesOf(role).length > 0
+  const canReset = leader || perms.includes("*")
   const el = content()
   if (!el) return
   el.innerHTML = `${offlineBanner()}<div class="grid kpis"><div class="kpi"><div class="label">Đang mở</div><div class="value">${open.length}</div><div class="sub">Chỉ đạo & việc liên quan</div></div><div class="kpi"><div class="label">Nguy cơ trễ</div><div class="value">${atRisk.length}</div><div class="sub">≤ 2 ngày, &lt; 80%</div></div><div class="kpi"><div class="label">Chờ tôi duyệt</div><div class="value">${waiting.length}</div><div class="sub">Đã báo cáo hoàn thành</div></div><div class="kpi"><div class="label">Hoàn thành</div><div class="value">${visible.length - open.length}</div><div class="sub">Đã duyệt đóng</div></div></div>
@@ -300,7 +303,7 @@ function projectTarget(projectId: string, wbsId = ""): { sub?: string; unit?: st
   return { sub: sub?.id, unit: sub?.unit ?? unitCodeOf(p.unit) }
 }
 
-const ownerOfUnit = (unit?: string) => (unit ? DELEGATES.lanhdao.find((r) => rolesOfUnit(unit as never).includes(r)) : undefined)
+const ownerOfUnit = (unit?: string) => (unit ? delegatesOf(ctx.role()).find((r) => rolesOfUnit(unit as never).includes(r)) : undefined)
 
 /** Picking a project / WBS item in the directive form moves the owner and tổ to the ones doing it. */
 function applyProjectTarget(projectId: string, wbsId = "") {
@@ -316,11 +319,13 @@ function applyProjectTarget(projectId: string, wbsId = "") {
 }
 
 function wfCreateDirective(presetSub = "", presetProject = "", presetWbs = "") {
-  const others = DELEGATES.lanhdao
+  const role = ctx.role()
+  const others = delegatesOf(role)
+  if (!others.length) return shell.openModal("Giao việc", '<div class="mini">Không có người nào thuộc phạm vi quản lý của bạn để giao việc.</div>')
   const target = presetSub ? { sub: presetSub, unit: vldcData.get("subUnits").find((s) => s.id === presetSub)?.unit } : projectTarget(presetProject, presetWbs)
   const owner = ownerOfUnit(target.unit) || others[0]
   const sub = target.sub ? vldcData.get("subUnits").find((s) => s.id === target.sub) : undefined
-  shell.openModal("Giao việc", `<div class="form-grid"><div class="full"><label>Nội dung chỉ đạo</label><textarea id="wf-title" rows="2"></textarea></div><div><label>Người chủ trì (theo đơn vị)</label><select id="wf-owner" onchange="wfSubOptions(this.value)">${roleOptions(others, owner)}</select><div class="mini" id="wf-owner-unit" style="margin-top:4px">${ownerUnitHint(owner)}</div></div><div><label>Tổ / phòng thực hiện</label><select id="wf-sub">${subOptionsHtml(owner, sub?.id)}</select></div>${projectPicker(presetProject, true, presetWbs)}<div><label>Hạn hoàn thành</label><input id="wf-due" type="date" min="${today()}"></div>${priorityField}<div class="full"><label>Kết quả / minh chứng yêu cầu</label><input id="wf-desc"></div><div class="full"><label>Phối hợp</label>${ccBoxes(others)}</div></div><button class="btn btn-primary" style="margin-top:10px" onclick="wfSubmitDirective()">Giao việc</button>`)
+  shell.openModal("Giao việc", `<div class="form-grid"><div class="full"><label>Nội dung chỉ đạo</label><textarea id="wf-title" rows="2"></textarea></div><div><label>Người chủ trì (theo đơn vị)</label><select id="wf-owner" onchange="wfSubOptions(this.value)">${roleOptions(others, owner)}</select><div class="mini" id="wf-owner-unit" style="margin-top:4px">${ownerUnitHint(owner)}</div></div><div><label>Tổ / phòng thực hiện</label><select id="wf-sub">${subOptionsHtml(owner, sub?.id)}</select></div>${projectPicker(presetProject, true, presetWbs)}<div><label>Hạn hoàn thành</label><input id="wf-due" type="date" min="${today()}"></div>${priorityField}<div class="full"><label>Kết quả / minh chứng yêu cầu</label><input id="wf-desc"></div><div class="full"><label>Phối hợp</label>${ccBoxes(BUSINESS_ROLES.filter((r) => r !== role))}</div></div><button class="btn btn-primary" style="margin-top:10px" onclick="wfSubmitDirective()">Giao việc</button>`)
 }
 
 function wfSubmitDirective() {
@@ -344,7 +349,7 @@ function wfSubmitDirective() {
 function wfDelegate(id: string) {
   const item = store.items().find((x) => x.id === id)
   if (!item) return
-  const subs = DELEGATES[ctx.role()] || []
+  const subs = delegatesOf(ctx.role())
   shell.openModal(`Giao việc con • ${item.id}`, `<div class="mini">Thuộc: ${esc(item.title)}</div><div class="form-grid" style="margin-top:8px"><div class="full"><label>Nội dung công việc</label><textarea id="wf-title" rows="2"></textarea></div><div><label>Giao cho</label><select id="wf-owner">${roleOptions(subs)}</select></div><div><label>Hạn hoàn thành</label><input id="wf-due" type="date" min="${today()}" max="${esc(item.due)}" value="${esc(item.due)}"></div>${priorityField}<div class="full"><label>Mô tả</label><input id="wf-desc"></div></div><button class="btn btn-primary" style="margin-top:10px" ${jsCall("wfSubmitDelegate", item.id)}>Giao việc</button>`)
 }
 
@@ -453,11 +458,12 @@ function paymentsBlock(): string {
 }
 
 function leaderStats(): string {
+  const role = ctx.role()
   const all = store.items()
   const open = all.filter((x) => x.type !== "payment" && !isClosed(x))
   const risky = open.filter((x) => isAtRisk(x, all, today()))
-  const pendingPayments = all.filter((x) => x.type === "payment" && x.owner === "lanhdao" && !isClosed(x))
-  const waiting = all.filter((x) => x.createdBy === "lanhdao" && x.status === "Chờ duyệt")
+  const pendingPayments = all.filter((x) => x.type === "payment" && x.owner === role && !isClosed(x))
+  const waiting = all.filter((x) => x.createdBy === role && x.status === "Chờ duyệt")
   const box = (label: string, value: number, sub: string) => `<div class="kpi" style="cursor:pointer" onclick="show('directives')"><div class="label">${label}</div><div class="value">${value}</div><div class="sub">${sub}</div></div>`
   return `<div class="grid kpis" style="margin-bottom:14px">${box("Chỉ đạo & việc đang mở", open.length, "Toàn Liên đoàn")}${box("Nguy cơ trễ", risky.length, "Cần đôn đốc")}${box("Chờ tôi duyệt", waiting.length, "Đã báo cáo hoàn thành")}${box("Hồ sơ chờ phê duyệt", pendingPayments.length, "Thanh toán liên phòng")}</div>`
 }
@@ -516,18 +522,18 @@ export function installWorkflow(render: Record<string, () => void>, nextShell: S
 
   render.dashboard = function () {
     const el = content()
-    if (ctx.role() === "lanhdao" && el) {
+    if (managesAllUnits(ctx.role()) && el) {
       el.innerHTML = leaderDashboardHtml(store.items(), { projects: projectsView(), disbursement: disbursementView(), spend: spendView(), org: leaderOrg(), risks: vldcData.get("risks"), cash: leaderCash() }, today(), offlineBanner())
       return
     }
     unitDashboard()
     prepend(inboxBlock(5))
   }
-  wrap(render, "command", () => (ctx.role() === "lanhdao" ? leaderStats() : ""))
+  wrap(render, "command", () => (managesAllUnits(ctx.role()) ? leaderStats() : ""))
   const command = render.command
   render.command = function () {
     command()
-    if (ctx.role() === "lanhdao") commandHeatmap()
+    if (managesAllUnits(ctx.role())) commandHeatmap()
   }
   render.performance = function () {
     const el = content()

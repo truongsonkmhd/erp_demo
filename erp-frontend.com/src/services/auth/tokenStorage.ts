@@ -13,6 +13,13 @@ export type StoredAuthUser = {
   accountType?: number
   levelId?: string | null
   roleName?: string | null
+  /** Chức vụ and đơn vị (tbl_position / tbl_department), and the units this user manages. */
+  positionCode?: string | null
+  positionName?: string | null
+  positionLevel?: number | null
+  orgUnitCode?: string | null
+  orgUnitName?: string | null
+  managedUnitCodes?: string[]
   permissions?: { id: string; code?: string; label: string; pageCode?: string; actionCode?: string }[]
 }
 

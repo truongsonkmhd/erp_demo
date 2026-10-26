@@ -1,6 +1,7 @@
 import { isClosed, rolledUpProgress } from "./rules.ts"
 import type { WorkItem } from "./types.ts"
 import { UNIT_DEFS, rolesOfUnit, unitName, type UnitCode } from "../data/org.ts"
+import { managedUnits, managesAllUnits } from "../data/access.ts"
 
 /** Unit KPIs computed from the shared work items, so every page shows the same, traceable numbers. */
 
@@ -75,8 +76,16 @@ export function ratingOf(score: number | null): UnitKpi["rating"] {
   return score == null ? "none" : score >= 85 ? "good" : score >= 70 ? "watch" : "bad"
 }
 
-/** Who gives the work KPI is measured on. */
-export const KPI_GIVER = "lanhdao"
+/** Unit KPI is measured on the work given by whoever manages the whole organisation (chức vụ Lãnh đạo by default). */
+export const isKpiGiver = (role: string) => managesAllUnits(role)
+
+/** Units whose KPI the role may see: those it manages, else its own unit; nothing when it has no unit. */
+export function visibleKpiUnits(role: string): Unit[] {
+  const managed = managedUnits(role)
+  if (managed.size) return kpiUnits().filter((u) => managed.has(u.id))
+  const own = unitOfRole(role)
+  return own ? [own] : []
+}
 
 /** KPI = completed ÷ all work the federation head gave the unit × 100 (approved = completed; sub-tasks are the unit's own split). */
 export function unitKpi(unit: Unit, all: WorkItem[], today: string): UnitKpi {
@@ -92,7 +101,7 @@ export function unitKpi(unit: Unit, all: WorkItem[], today: string): UnitKpi {
     onTime: pct(flags.filter((f) => !f.overdue && !f.late).length, items.length),
     evidence: pct(started.filter((x) => x.evidence?.trim()).length, started.length),
   }
-  const given = items.filter((x) => x.type === "directive" && x.createdBy === KPI_GIVER)
+  const given = items.filter((x) => x.type === "directive" && isKpiGiver(x.createdBy))
   const completed = given.filter(isClosed).length
   const score = given.length ? Math.round((completed / given.length) * 100) : null
   const done = items.filter(isClosed).length

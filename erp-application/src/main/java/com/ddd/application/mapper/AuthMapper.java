@@ -1,12 +1,17 @@
 package com.xxxx.ddd.application.mapper;
 
 import com.xxxx.ddd.application.model.CurrentUserDTO;
+import com.xxxx.ddd.application.model.OrgPersonDTO;
+import com.xxxx.ddd.application.model.OrgUnitDTO;
+import com.xxxx.ddd.application.model.PositionDTO;
 import com.xxxx.ddd.application.model.PermissionDTO;
 import com.xxxx.ddd.application.model.RoleDTO;
 import com.xxxx.ddd.application.model.RoleLevelDTO;
 import com.xxxx.ddd.application.model.UserDTO;
 import com.xxxx.ddd.domain.model.auth.FixedRoleLevel;
+import com.xxxx.ddd.domain.model.entity.Department;
 import com.xxxx.ddd.domain.model.entity.Permission;
+import com.xxxx.ddd.domain.model.entity.Position;
 import com.xxxx.ddd.domain.model.entity.Role;
 import com.xxxx.ddd.domain.model.entity.User;
 
@@ -38,6 +43,7 @@ public class AuthMapper {
         dto.setRoleCodes(user.getRoles().stream().map(Role::getCode).sorted().toList());
         dto.setAccountType(user.getAccountType());
         dto.setLevelId(user.getLevelCode());
+        applyOrg(dto, user);
         dto.setBaseSalary(user.getBaseSalary());
         dto.setActive(user.getActive());
         dto.setCreatedAt(format(user.getCreatedAt()));
@@ -57,12 +63,71 @@ public class AuthMapper {
         dto.setRoleCodes(base.getRoleCodes());
         dto.setAccountType(base.getAccountType());
         dto.setLevelId(base.getLevelId());
+        applyOrg(dto, user);
         dto.setBaseSalary(base.getBaseSalary());
         dto.setActive(base.getActive());
         dto.setCreatedAt(base.getCreatedAt());
         dto.setUpdatedAt(base.getUpdatedAt());
         dto.setRoleName(user.getRoles().stream().filter(role -> role.getCode().equals(user.getRoleCode())).map(Role::getName).findFirst().orElse(null));
         dto.setPermissions(toPermissionDTOs(user.getEffectivePermissions()));
+        return dto;
+    }
+
+    private static void applyOrg(UserDTO dto, User user) {
+        Position position = user.getPosition();
+        if (position != null) {
+            dto.setPositionCode(position.getCode());
+            dto.setPositionName(position.getName());
+            dto.setPositionLevel(position.getLevel());
+        }
+        Department unit = user.getOrgUnit();
+        if (unit != null) {
+            dto.setOrgUnitId(unit.getId());
+            dto.setOrgUnitCode(unit.getCode());
+            dto.setOrgUnitName(unit.getName());
+        }
+    }
+
+    public static PositionDTO toPositionDTO(Position position) {
+        PositionDTO dto = new PositionDTO();
+        dto.setId(position.getId());
+        dto.setCode(position.getCode());
+        dto.setName(position.getName());
+        dto.setLevel(position.getLevel());
+        dto.setManagesUnit(Boolean.TRUE.equals(position.getManagesUnit()));
+        return dto;
+    }
+
+    public static OrgUnitDTO toOrgUnitDTO(Department unit, java.util.Map<Long, Department> byId) {
+        OrgUnitDTO dto = new OrgUnitDTO();
+        dto.setId(unit.getId());
+        dto.setCode(unit.getCode());
+        dto.setName(unit.getName());
+        dto.setDescription(unit.getDescription());
+        dto.setParentId(unit.getParentId());
+        Department parent = unit.getParentId() == null ? null : byId.get(unit.getParentId());
+        dto.setParentCode(parent == null ? null : parent.getCode());
+        return dto;
+    }
+
+    public static OrgPersonDTO toOrgPersonDTO(User user) {
+        OrgPersonDTO dto = new OrgPersonDTO();
+        dto.setId(user.getId());
+        dto.setFullName(user.getFullName());
+        List<Role> roles = user.getRoles().stream().sorted(Comparator.comparing(Role::getCode)).toList();
+        dto.setRoleCodes(roles.stream().map(Role::getCode).toList());
+        dto.setRoleNames(roles.stream().map(Role::getName).toList());
+        Position position = user.getPosition();
+        if (position != null) {
+            dto.setPositionCode(position.getCode());
+            dto.setPositionName(position.getName());
+            dto.setPositionLevel(position.getLevel());
+            dto.setManagesUnit(Boolean.TRUE.equals(position.getManagesUnit()));
+        }
+        if (user.getOrgUnit() != null) {
+            dto.setOrgUnitCode(user.getOrgUnit().getCode());
+            dto.setOrgUnitName(user.getOrgUnit().getName());
+        }
         return dto;
     }
 

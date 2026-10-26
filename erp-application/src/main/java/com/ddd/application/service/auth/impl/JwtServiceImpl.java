@@ -139,6 +139,8 @@ public class JwtServiceImpl implements JwtService {
         // putting them here made admin tokens exceed the 8 KB request-header limit of Tomcat and nginx.
         StringJoiner scope = new StringJoiner(" ");
         if (includeScope) {
+            // Roles only: permissions, position and unit change often and are reloaded from the database on every
+            // request (JwtAuthenticationFilter), so a revoked permission takes effect without waiting for the token.
             user.getRoles().forEach(role -> scope.add("ROLE_" + role.getCode().trim().toUpperCase()));
         }
         return Jwts.builder()

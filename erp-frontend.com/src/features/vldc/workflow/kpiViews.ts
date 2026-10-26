@@ -1,5 +1,5 @@
 import { escapeHtml as esc, formatDate, jsCall, statusBadge } from "./html.ts"
-import { CRITERIA, RATING_LABELS, itemFlags, overallKpi, subUnitKpis, unitKpi, unitKpis, unitOfRole, kpiUnits, type UnitKpi } from "./kpi.ts"
+import { CRITERIA, RATING_LABELS, itemFlags, overallKpi, subUnitKpis, unitKpi, visibleKpiUnits, kpiUnits, type UnitKpi } from "./kpi.ts"
 import { ROLE_TITLES, isClosed, rolledUpProgress } from "./rules.ts"
 import type { WorkItem } from "./types.ts"
 
@@ -27,8 +27,8 @@ function heatmap(kpis: UnitKpi[]): string {
 }
 
 export function performanceHtml(all: WorkItem[], role: string, today: string): string {
-  const own = unitOfRole(role)
-  const kpis = role === "lanhdao" || !own ? unitKpis(all, today) : [unitKpi(own, all, today)]
+  // Statistics follow the role's scope: managed units (all of them for the top), else its own unit.
+  const kpis = visibleKpiUnits(role).map((u) => unitKpi(u, all, today))
   const total = overallKpi(kpis, today)
   const kpi = (label: string, value: string, sub: string) => `<div class="kpi"><div class="label">${label}</div><div class="value">${value}</div><div class="sub">${sub}</div></div>`
   const scope = kpis.length > 1 ? `${kpis.length} đơn vị` : esc(kpis[0]?.unit.name ?? "")

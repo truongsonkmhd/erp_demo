@@ -1,6 +1,7 @@
 import { escapeHtml as esc, jsCall } from "../workflow/html"
 import { localToday, vnDate } from "./dates"
 import { UNIT_DEFS, unitName, type UnitCode } from "./org"
+import { managesAllUnits } from "./access"
 import { subTabsHtml } from "./menuPolicy"
 import { bar } from "./pages"
 import { vldcData } from "./registry"
@@ -119,7 +120,7 @@ export function installCapabilityPage(render: Record<string, () => void>, ctx: C
     const metric = (l: string, v: string) => `<div class="metric"><span>${l}</span><b>${v}</b></div>`
     ctx.openModal(`Hồ sơ năng lực • ${p.id}`, `<h2 style="margin:0 0 4px">${esc(p.name)}</h2><div class="mini">${esc(p.title)} • ${esc(unitLabel(p.unit))}${subName(p.subUnit) ? ` • ${esc(subName(p.subUnit) as string)}` : ""}</div>
 <div class="grid twoeq" style="margin-top:12px"><div>${metric("Năm sinh", `${p.birthYear} (${ageOf(p, today)} tuổi)`)}${metric("Học vấn", esc(p.education))}${metric("Chuyên ngành", esc(p.major))}${metric("Kinh nghiệm", `${p.experience} năm`)}${metric("Nơi làm việc", p.onField ? "Đang ở hiện trường" : "Văn phòng")}</div>
-<div><h4 style="margin-top:0">Chứng chỉ</h4>${p.certs.map((c) => { const [label, cls] = CERT_LABEL[certState(c.expiry, today)]; return `<div class="metric"><span>${esc(c.name)}<br><small>Hạn ${esc(vnDate(c.expiry))}</small></span><b><span class="badge ${cls}">${label}</span></b></div>` }).join("") || '<div class="mini">Chưa có chứng chỉ.</div>'}</div></div>${ctx.role() === "lanhdao" ? transferHtml(p) : ""}`)
+<div><h4 style="margin-top:0">Chứng chỉ</h4>${p.certs.map((c) => { const [label, cls] = CERT_LABEL[certState(c.expiry, today)]; return `<div class="metric"><span>${esc(c.name)}<br><small>Hạn ${esc(vnDate(c.expiry))}</small></span><b><span class="badge ${cls}">${label}</span></b></div>` }).join("") || '<div class="mini">Chưa có chứng chỉ.</div>'}</div></div>${managesAllUnits(ctx.role()) ? transferHtml(p) : ""}`)
   }
 
   /** Điều chuyển tổ/phòng (any unit's active tổ; moving across units changes the unit too). */
@@ -130,7 +131,7 @@ export function installCapabilityPage(render: Record<string, () => void>, ctx: C
 
   function staffTransfer(id: string) {
     const p = staffView().find((x) => x.id === id)
-    if (!p || ctx.role() !== "lanhdao") return
+    if (!p || !managesAllUnits(ctx.role())) return
     const target = ((document.getElementById("st-sub") as HTMLSelectElement | null)?.value ?? "")
     try {
       const next = transferStaff(p, target, vldcData.get("subUnits"))

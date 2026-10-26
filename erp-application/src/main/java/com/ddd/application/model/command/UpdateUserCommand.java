@@ -14,6 +14,8 @@ public class UpdateUserCommand {
     private java.util.List<String> roleCodes;
     private Integer accountType;
     private String levelId;
+    private String positionCode;
+    private Long orgUnitId;
     private BigDecimal baseSalary;
     private Boolean active;
 }

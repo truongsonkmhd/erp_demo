@@ -15,6 +15,12 @@ public class UserDTO {
     private java.util.List<String> roleCodes;
     private Integer accountType;
     private String levelId;
+    private String positionCode;
+    private String positionName;
+    private Integer positionLevel;
+    private Long orgUnitId;
+    private String orgUnitCode;
+    private String orgUnitName;
     private BigDecimal baseSalary;
     private Boolean active;
     private String createdAt;

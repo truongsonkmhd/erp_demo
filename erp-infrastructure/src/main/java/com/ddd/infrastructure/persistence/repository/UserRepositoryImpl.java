@@ -89,6 +89,11 @@ public class UserRepositoryImpl implements UserRepository {
     }
 
     @Override
+    public List<User> findAllActive() {
+        return userJPAMapper.findAllActive();
+    }
+
+    @Override
     public long countByRoleId(Long roleId) {
         return userJPAMapper.countByRoleId(roleId);
     }

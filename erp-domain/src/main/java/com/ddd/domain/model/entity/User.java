@@ -51,6 +51,20 @@ public class User {
     @Column(name = "base_salary")
     private BigDecimal baseSalary;
 
+    /** Chức vụ trong tổ chức (không phải Role). */
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    @ManyToOne
+    @JoinColumn(name = "position_id")
+    private Position position;
+
+    /** Đơn vị người dùng thuộc về; cùng chức vụ quyết định phạm vi quản lý. */
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    @ManyToOne
+    @JoinColumn(name = "department_id")
+    private Department orgUnit;
+
     private Boolean active = true;
 
     @Column(name = "is_deleted")

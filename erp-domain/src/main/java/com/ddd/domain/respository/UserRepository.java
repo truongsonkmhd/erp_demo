@@ -28,6 +28,9 @@ public interface UserRepository {
 
     long countSearch(String keyword);
 
+    /** Active, not deleted users with roles, position and unit loaded. */
+    List<User> findAllActive();
+
     long countByRoleId(Long roleId);
     long countActiveByRoleId(Long roleId);
 }

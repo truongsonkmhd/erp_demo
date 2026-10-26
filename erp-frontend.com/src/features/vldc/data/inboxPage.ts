@@ -9,6 +9,7 @@ import {
   type InboxFilter, type InboxRow, type InboxScope, type InboxSort, type UrgencyGroup,
 } from "./inboxCore"
 import { vldcData } from "./registry"
+import { managesAllUnits } from "./access"
 
 /** Công việc (inbox): one urgency-ordered list of everything waiting on the role, with filter chips and search. */
 
@@ -17,7 +18,7 @@ type Ctx = { role(): string }
 const state = { filter: "mine" as InboxFilter, scope: "mine" as InboxScope, query: "", source: "", sort: "due" as InboxSort, collapsed: new Set<UrgencyGroup>(["later"]) }
 let ctx: Ctx = { role: () => "" }
 const today = () => localToday()
-const isLeader = () => ctx.role() === "lanhdao"
+const isLeader = () => managesAllUnits(ctx.role())
 const content = () => document.getElementById("content")
 
 /** Work meant for one tổ/phòng shows it next to the owner ("Trưởng đơn vị › Tổ đo điện"). */

@@ -5,6 +5,7 @@ import com.xxxx.ddd.application.model.PermissionDTO;
 import com.xxxx.ddd.application.model.RoleDTO;
 import com.xxxx.ddd.application.model.command.CreatePermissionCommand;
 import com.xxxx.ddd.application.model.command.SaveRoleCommand;
+import com.xxxx.ddd.application.service.audit.AuditAppService;
 import com.xxxx.ddd.application.service.role.RoleAppService;
 import com.xxxx.ddd.domain.model.entity.Permission;
 import com.xxxx.ddd.domain.model.entity.Role;
@@ -22,6 +23,9 @@ public class RoleAppServiceImpl implements RoleAppService {
 
     @Autowired
     private RoleDomainService roleDomainService;
+
+    @Autowired
+    private AuditAppService audit;
 
     @Override
     @Transactional(readOnly = true)
@@ -44,6 +48,7 @@ public class RoleAppServiceImpl implements RoleAppService {
                 .setSummary(command.getSummary());
         if (command.getDepartmentId() != null) role.setDepartment(new com.xxxx.ddd.domain.model.entity.Department().setId(command.getDepartmentId()));
         Role saved = roleDomainService.createRole(role, toSet(command.getPermissionIds()));
+        audit.record("create", AuditAppService.ROLE, saved.getCode(), "permissions=" + permissionCodes(saved));
         return AuthMapper.toRoleDTO(saved);
     }
 
@@ -55,14 +60,19 @@ public class RoleAppServiceImpl implements RoleAppService {
                 .setName(command.getName())
                 .setSummary(command.getSummary());
         if (command.getDepartmentId() != null) patch.setDepartment(new com.xxxx.ddd.domain.model.entity.Department().setId(command.getDepartmentId()));
+        List<String> before = permissionCodes(roleDomainService.getById(id));
         Role updated = roleDomainService.updateRole(id, patch, toSet(command.getPermissionIds()));
+        List<String> after = permissionCodes(updated);
+        audit.record("update", AuditAppService.ROLE, updated.getCode(), before.equals(after) ? null : "permissions " + before + " -> " + after);
         return AuthMapper.toRoleDTO(updated);
     }
 
     @Override
     @Transactional
     public void delete(Long id) {
+        String code = roleDomainService.getById(id).getCode();
         roleDomainService.deleteRole(id);
+        audit.record("delete", AuditAppService.ROLE, code, null);
     }
 
     @Override
@@ -88,7 +98,9 @@ public class RoleAppServiceImpl implements RoleAppService {
             action.setId(command.getActionId());
             permission.setAction(action);
         }
-        return AuthMapper.toPermissionDTO(roleDomainService.createPermission(permission));
+        PermissionDTO created = AuthMapper.toPermissionDTO(roleDomainService.createPermission(permission));
+        audit.record("create", AuditAppService.PERMISSION, created.getCode(), null);
+        return created;
     }
 
     @Override
@@ -97,13 +109,20 @@ public class RoleAppServiceImpl implements RoleAppService {
         Permission permission = new Permission()
                 .setLabel(command.getLabel())
                 .setNote(command.getNote());
-        return AuthMapper.toPermissionDTO(roleDomainService.updatePermission(code, permission));
+        PermissionDTO updated = AuthMapper.toPermissionDTO(roleDomainService.updatePermission(code, permission));
+        audit.record("update", AuditAppService.PERMISSION, code, null);
+        return updated;
     }
 
     @Override
     @Transactional
     public void deletePermission(String code) {
         roleDomainService.deletePermission(code);
+        audit.record("delete", AuditAppService.PERMISSION, code, null);
+    }
+
+    private List<String> permissionCodes(Role role) {
+        return role.getPermissions() == null ? List.of() : role.getPermissions().stream().map(Permission::getCode).sorted().toList();
     }
 
     private Set<String> toSet(List<String> values) {

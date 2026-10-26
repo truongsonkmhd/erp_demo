@@ -6,4 +6,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface DepartmentJPAMapper extends JpaRepository<Department, Long> {
     boolean existsByCode(String code);
     boolean existsByCodeAndIdNot(String code, Long id);
+    long countByParentId(Long parentId);
 }

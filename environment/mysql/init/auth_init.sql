@@ -31,7 +31,18 @@ CREATE TABLE IF NOT EXISTS tbl_department (
   id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
   code VARCHAR(50) NOT NULL UNIQUE,
   name VARCHAR(150) NOT NULL,
-  description VARCHAR(500) NULL
+  description VARCHAR(500) NULL,
+  parent_id BIGINT NULL,
+  CONSTRAINT fk_department_parent FOREIGN KEY (parent_id) REFERENCES tbl_department(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Chức vụ: level 1 là cấp cao nhất; manages_unit = quản lý đơn vị mình và các đơn vị con.
+CREATE TABLE IF NOT EXISTS tbl_position (
+  id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  code VARCHAR(50) NOT NULL UNIQUE,
+  name VARCHAR(150) NOT NULL,
+  level INT NOT NULL,
+  manages_unit TINYINT(1) NOT NULL DEFAULT 0
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS tbl_role (
@@ -67,8 +78,13 @@ CREATE TABLE IF NOT EXISTS tbl_user (
   active TINYINT(1) NOT NULL DEFAULT 1,
   is_deleted TINYINT(1) NOT NULL DEFAULT 0,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  position_id BIGINT NULL,
+  department_id BIGINT NULL,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  CONSTRAINT chk_user_account_type CHECK (account_type IN (1,2,3))
+  CONSTRAINT chk_user_account_type CHECK (account_type IN (1,2,3)),
+  CONSTRAINT fk_user_position FOREIGN KEY (position_id) REFERENCES tbl_position(id),
+  CONSTRAINT fk_user_department FOREIGN KEY (department_id) REFERENCES tbl_department(id),
+  INDEX idx_user_department (department_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS tbl_user_role (
@@ -86,6 +102,20 @@ CREATE TABLE IF NOT EXISTS tbl_token (
   refresh_token TEXT NOT NULL,
   expiration_time DATETIME NOT NULL,
   CONSTRAINT fk_token_user FOREIGN KEY (user_id) REFERENCES tbl_user(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS tbl_audit_log (
+  id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  actor_id BIGINT NULL,
+  actor_username VARCHAR(100) NULL,
+  action VARCHAR(50) NOT NULL,
+  resource_type VARCHAR(50) NOT NULL,
+  resource_id VARCHAR(100) NULL,
+  detail VARCHAR(2000) NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_audit_resource (resource_type, resource_id),
+  INDEX idx_audit_actor (actor_id),
+  INDEX idx_audit_created (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS tbl_invalidated_token (

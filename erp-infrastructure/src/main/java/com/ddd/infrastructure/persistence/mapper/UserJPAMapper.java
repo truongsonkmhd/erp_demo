@@ -38,6 +38,12 @@ public interface UserJPAMapper extends JpaRepository<User, Long> {
     @Query("SELECT COUNT(u) FROM User u WHERE (u.isDeleted = false OR u.isDeleted IS NULL) AND (:keyword IS NULL OR :keyword = '' OR LOWER(u.fullName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR LOWER(u.username) LIKE LOWER(CONCAT('%', :keyword, '%')) OR LOWER(u.email) LIKE LOWER(CONCAT('%', :keyword, '%')))")
     long countSearch(@Param("keyword") String keyword);
 
+    @Query("SELECT DISTINCT u FROM User u LEFT JOIN FETCH u.roles LEFT JOIN FETCH u.position LEFT JOIN FETCH u.orgUnit WHERE u.active = true AND (u.isDeleted = false OR u.isDeleted IS NULL) ORDER BY u.fullName")
+    List<User> findAllActive();
+
+    @Query("SELECT COUNT(u) FROM User u WHERE u.orgUnit.id = :departmentId AND (u.isDeleted = false OR u.isDeleted IS NULL)")
+    long countByOrgUnitId(@Param("departmentId") Long departmentId);
+
     @Query("SELECT COUNT(DISTINCT u) FROM User u JOIN u.roles r WHERE r.id = :roleId AND (u.isDeleted = false OR u.isDeleted IS NULL)")
     long countByRoleId(@Param("roleId") Long roleId);
 

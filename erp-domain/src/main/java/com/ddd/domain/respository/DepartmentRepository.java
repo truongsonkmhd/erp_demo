@@ -10,6 +10,8 @@ public interface DepartmentRepository {
     boolean existsByCode(String code);
     boolean existsByCodeAndIdNot(String code, Long id);
     long countRoles(Long id);
+    long countChildren(Long id);
+    long countUsers(Long id);
     Department save(Department department);
     void delete(Department department);
 }

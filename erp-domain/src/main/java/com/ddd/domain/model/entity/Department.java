@@ -21,4 +21,8 @@ public class Department {
 
     @Column(length = 500)
     private String description;
+
+    /** Đơn vị cha; null ở cấp gốc. */
+    @Column(name = "parent_id")
+    private Long parentId;
 }

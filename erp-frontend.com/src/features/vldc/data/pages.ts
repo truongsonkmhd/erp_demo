@@ -8,6 +8,7 @@ import { workflowStore } from "../workflow/repository"
 import { localToday, vnDate } from "./dates"
 import * as M from "./metrics"
 import { vldcData } from "./registry"
+import { managesAllUnits, rolePosition } from "./access"
 import type { Project, Risk } from "./types"
 
 /** Engine pages rebuilt on Firestore data: every tile is computed from the records shown below it. */
@@ -75,7 +76,7 @@ function meetings(ctx: Ctx) {
   const ms = M.sortMeetings(D("meetings"), today())
   const m = M.meetingMetrics(ms, today())
   const conclusions = D("inboxTasks").filter((t) => t.type === "Kết luận họp")
-  const canCreate = ["lanhdao", "truongdonvi"].includes(ctx.role())
+  const canCreate = !!rolePosition(ctx.role())?.managesUnit
   return `${kpis(
     kpi("Cuộc họp sắp tới", m.upcoming, `Trong ${ms.length} cuộc họp`),
     kpi("Kết luận mở", m.openConclusions, "Chưa hoàn thành"),
@@ -87,7 +88,7 @@ function meetings(ctx: Ctx) {
 function strategy(ctx: Ctx) {
   const goals = D("strategicGoals")
   const weighted = Math.round(goals.reduce((s, g) => s + g.actual * g.weight, 0) / (goals.reduce((s, g) => s + g.weight, 0) || 1))
-  return `<div class="command-hero"><div class="inner"><div class="eyebrow">STRATEGY → EXECUTION</div><h2>Kế hoạch chiến lược • thực hiện ${weighted}%</h2><p>Mỗi mục tiêu chiến lược được liên kết với sáng kiến, dự án/nhiệm vụ, KPI và đơn vị chịu trách nhiệm. Điểm thực hiện là trung bình có trọng số các mục tiêu.</p></div></div><div class="card" style="margin-top:14px"><div class="card-head"><h3>Mục tiêu & kết quả</h3>${ctx.role() === "lanhdao" ? '<button class="btn btn-primary" onclick="goalForm()">+ Mục tiêu</button>' : ""}</div>${goals.map((g) => `<div class="strategy-line"><div><b>${esc(g.goal)}</b><div class="mini">${esc(g.owner)} • Trọng số ${g.weight}%</div></div><div><div class="bar"><i style="width:${g.actual}%"></i></div></div><div><b>${g.actual}%</b><div class="mini">Thực hiện</div></div><div><span class="badge ${g.actual >= 85 ? "b-ok" : g.actual >= 70 ? "b-warn" : "b-danger"}">${esc(g.target)}</span></div></div>`).join("")}</div><div class="grid twoeq" style="margin-top:14px"><div class="card"><h3>Sáng kiến trọng điểm</h3>${D("initiatives").map((i) => metric(i.name, `${i.progress}%`)).join("")}</div><div class="card"><h3>Liên kết thực thi</h3><p class="mini">Mục tiêu → Sáng kiến → Dự án → Task → KPI → Báo cáo → Giao việc.</p><button class="btn btn-light" onclick="show('command')">Mở Command Center</button></div></div>`
+  return `<div class="command-hero"><div class="inner"><div class="eyebrow">STRATEGY → EXECUTION</div><h2>Kế hoạch chiến lược • thực hiện ${weighted}%</h2><p>Mỗi mục tiêu chiến lược được liên kết với sáng kiến, dự án/nhiệm vụ, KPI và đơn vị chịu trách nhiệm. Điểm thực hiện là trung bình có trọng số các mục tiêu.</p></div></div><div class="card" style="margin-top:14px"><div class="card-head"><h3>Mục tiêu & kết quả</h3>${managesAllUnits(ctx.role()) ? '<button class="btn btn-primary" onclick="goalForm()">+ Mục tiêu</button>' : ""}</div>${goals.map((g) => `<div class="strategy-line"><div><b>${esc(g.goal)}</b><div class="mini">${esc(g.owner)} • Trọng số ${g.weight}%</div></div><div><div class="bar"><i style="width:${g.actual}%"></i></div></div><div><b>${g.actual}%</b><div class="mini">Thực hiện</div></div><div><span class="badge ${g.actual >= 85 ? "b-ok" : g.actual >= 70 ? "b-warn" : "b-danger"}">${esc(g.target)}</span></div></div>`).join("")}</div><div class="grid twoeq" style="margin-top:14px"><div class="card"><h3>Sáng kiến trọng điểm</h3>${D("initiatives").map((i) => metric(i.name, `${i.progress}%`)).join("")}</div><div class="card"><h3>Liên kết thực thi</h3><p class="mini">Mục tiêu → Sáng kiến → Dự án → Task → KPI → Báo cáo → Giao việc.</p><button class="btn btn-light" onclick="show('command')">Mở Command Center</button></div></div>`
 }
 
 function command() {
@@ -149,7 +150,7 @@ export function installDataPages(render: Record<string, () => void>, ctx: Ctx) {
   for (const [page, html] of Object.entries(RENDERERS)) {
     render[page] = function () {
       // Command Center is leadership-only; other roles land on their own dashboard as before.
-      if (page === "command" && ctx.role() !== "lanhdao") return render.dashboard()
+      if (page === "command" && !managesAllUnits(ctx.role())) return render.dashboard()
       const el = content()
       if (el) el.innerHTML = html(ctx)
     }

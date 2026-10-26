@@ -1,4 +1,5 @@
 import type { Advance, BankAccount, BankLine, ClosingTask, Contract, FixedAsset, Voucher } from "./types.ts"
+import { managesAllUnits } from "./access.ts"
 
 /** Accounting figures derived from stored records (money in million VND). */
 
@@ -157,4 +158,4 @@ export function revenueSummary(contracts: Contract[], today: string) {
 }
 
 /** Contracts are drafted by the business roles; the federation head only views them. */
-export const canCreateContract = (role: string) => role !== "lanhdao"
+export const canCreateContract = (role: string) => !managesAllUnits(role)

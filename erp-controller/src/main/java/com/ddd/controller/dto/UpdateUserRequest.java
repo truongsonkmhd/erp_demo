@@ -14,6 +14,10 @@ public class UpdateUserRequest {
     private java.util.List<String> roleCodes;
     private Integer accountType;
     private String levelId;
+    /** Mã chức vụ (tbl_position.code); rỗng để bỏ chức vụ. */
+    private String positionCode;
+    /** Đơn vị (tbl_department.id); 0 để bỏ đơn vị. */
+    private Long orgUnitId;
     private BigDecimal baseSalary;
     private Boolean active;
 }

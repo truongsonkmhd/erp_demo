@@ -3,6 +3,8 @@ package com.xxxx.ddd.domain.service.impl;
 import com.xxxx.ddd.domain.model.auth.FixedRoleLevel;
 import com.xxxx.ddd.domain.model.entity.Role;
 import com.xxxx.ddd.domain.model.entity.User;
+import com.xxxx.ddd.domain.respository.DepartmentRepository;
+import com.xxxx.ddd.domain.respository.PositionRepository;
 import com.xxxx.ddd.domain.respository.RoleRepository;
 import com.xxxx.ddd.domain.respository.UserRepository;
 import com.xxxx.ddd.domain.service.UserDomainService;
@@ -24,9 +26,15 @@ public class UserDomainServiceImpl implements UserDomainService {
     @Autowired
     private RoleRepository roleRepository;
 
+    @Autowired
+    private PositionRepository positionRepository;
+
+    @Autowired
+    private DepartmentRepository departmentRepository;
+
     @Override
     @Transactional
-    public User createUser(User user, List<String> roleCodes, String levelCode) {
+    public User createUser(User user, List<String> roleCodes, String levelCode, String positionCode, Long orgUnitId) {
         if (user.getEmail() == null || user.getEmail().isBlank()) {
             throw new IllegalArgumentException("Email is required");
         }
@@ -53,6 +61,7 @@ public class UserDomainServiceImpl implements UserDomainService {
         }
 
         assignRoleAndLevel(user, roleCodes, levelCode);
+        assignOrg(user, positionCode, orgUnitId);
         validateAccountType(user.getAccountType());
         LocalDateTime now = LocalDateTime.now();
         user.setActive(user.getActive() == null ? Boolean.TRUE : user.getActive());
@@ -88,7 +97,7 @@ public class UserDomainServiceImpl implements UserDomainService {
 
     @Override
     @Transactional
-    public User updateUser(Long id, User patch, List<String> roleCodes, String levelCode) {
+    public User updateUser(Long id, User patch, List<String> roleCodes, String levelCode, String positionCode, Long orgUnitId) {
         User user = getById(id);
         if (patch.getFullName() != null && !patch.getFullName().isBlank()) {
             user.setFullName(patch.getFullName());
@@ -132,6 +141,7 @@ public class UserDomainServiceImpl implements UserDomainService {
             String nextLevel = levelCode != null ? levelCode : user.getLevelCode();
             assignRoleAndLevel(user, nextRole, nextLevel);
         }
+        assignOrg(user, positionCode, orgUnitId);
         user.setUpdatedAt(LocalDateTime.now());
         userRepository.save(user);
         return userRepository.findByIdWithAuth(id).orElse(user);
@@ -229,6 +239,17 @@ public class UserDomainServiceImpl implements UserDomainService {
                 ? FixedRoleLevel.defaultCode()
                 : FixedRoleLevel.require(levelCode).getCode();
         user.setLevelCode(resolvedLevel);
+    }
+
+    private void assignOrg(User user, String positionCode, Long orgUnitId) {
+        if (positionCode != null) {
+            user.setPosition(positionCode.isBlank() ? null : positionRepository.findByCode(positionCode.trim())
+                    .orElseThrow(() -> new IllegalArgumentException("Position not found: " + positionCode)));
+        }
+        if (orgUnitId != null) {
+            user.setOrgUnit(orgUnitId <= 0 ? null : departmentRepository.findById(orgUnitId)
+                    .orElseThrow(() -> new IllegalArgumentException("Department not found: " + orgUnitId)));
+        }
     }
 
     private void validateAccountType(Integer type) {

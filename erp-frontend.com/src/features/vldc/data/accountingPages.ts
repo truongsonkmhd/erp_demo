@@ -2,6 +2,7 @@ import { escapeHtml as esc, formatDate, jsCall, statusBadge } from "../workflow/
 import { disbursementView, projectsView } from "./projectView"
 import { kpiUnits, unitKpi } from "../workflow/kpi"
 import { roleUnitCode, unitCodeOf, unitName } from "./org"
+import { managesAllUnits } from "./access"
 import { PAYMENT_STEPS, ROLE_TITLES, isClosed } from "../workflow/rules"
 import { workflowStore } from "../workflow/repository"
 import type { WorkItem } from "../workflow/types"
@@ -57,7 +58,7 @@ function revenueSection(): string {
 }
 
 function accounting(ctx: Ctx, chief = ctx.role() === "ketoantruong") {
-  const leader = ctx.role() === "lanhdao"
+  const leader = managesAllUnits(ctx.role())
   const v = A.voucherSummary(D("vouchers"))
   const pays = payments().filter((p) => !isClosed(p))
   const adv = A.advanceSummary(D("advances"), today())
@@ -119,7 +120,7 @@ function paymentsPage() {
   return `${kpis(
     kpi("Hồ sơ đang xử lý", open.length, tr(sumM(open))),
     kpi("Chờ kế toán", open.filter((p) => ["ketoan", "ketoantruong"].includes(p.owner)).length, "Kiểm tra / kiểm soát"),
-    kpi("Chờ lãnh đạo duyệt", open.filter((p) => p.owner === "lanhdao").length, "Phê duyệt chi"),
+    kpi("Chờ lãnh đạo duyệt", open.filter((p) => p.owner === PAYMENT_STEPS[4].owner).length, "Phê duyệt chi"),
     kpi("Đã chi", ps.filter((p) => p.status === "Đã chi").length, tr(sumM(ps.filter((p) => p.status === "Đã chi")))),
   )}<div class="grid twoeq" style="margin-top:14px">${open.map((p) => card(`${esc(p.id)} • ${esc(p.title)}`, `${metric("Số tiền", tr((p.amount ?? 0) / 1e6))}${metric("Đang ở", esc(roleTitle(p.owner)))}${stepper(p)}${linked(p.id).map((v) => `<div class="mini" style="margin-top:6px">Chứng từ: <a href="javascript:void 0" ${jsCall("voucherDetail", v.id)}>${esc(v.id)}</a> • ${voucherStatus(v.status)}</div>`).join("")}`, btn("Mở hồ sơ", "wfOpen", p.id))).join("") || '<div class="mini">Không có hồ sơ đang xử lý.</div>'}</div>`
 }

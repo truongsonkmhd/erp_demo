@@ -1,5 +1,6 @@
 package com.xxxx.ddd.controller.http;
 
+import com.xxxx.ddd.application.service.audit.AuditAppService;
 import com.xxxx.ddd.controller.dto.SaveDepartmentRequest;
 import com.xxxx.ddd.controller.model.enums.ResultUtil;
 import com.xxxx.ddd.controller.model.vo.ResultMessage;
@@ -14,8 +15,12 @@ import java.util.List;
 @RequestMapping("/api/departments")
 public class DepartmentController {
     private final DepartmentService service;
+    private final AuditAppService audit;
 
-    public DepartmentController(DepartmentService service) { this.service = service; }
+    public DepartmentController(DepartmentService service, AuditAppService audit) {
+        this.service = service;
+        this.audit = audit;
+    }
 
     @GetMapping
     public ResultMessage<List<Department>> findAll() { return ResultUtil.data(service.findAll()); }
@@ -25,18 +30,28 @@ public class DepartmentController {
 
     @PostMapping
     public ResultMessage<Department> create(@Valid @RequestBody SaveDepartmentRequest request) {
-        return ResultUtil.data(service.create(request.getCode(), request.getName(), request.getDescription()));
+        Department saved = service.create(request.getCode(), request.getName(), request.getDescription(), request.getParentId());
+        audit.record("create", AuditAppService.DEPARTMENT, saved.getId(), describe(saved));
+        return ResultUtil.data(saved);
     }
 
     @PutMapping("/{id}")
     public ResultMessage<Department> update(@PathVariable Long id, @Valid @RequestBody SaveDepartmentRequest request) {
-        return ResultUtil.data(service.update(id, request.getCode(), request.getName(), request.getDescription()));
+        String before = describe(service.get(id));
+        Department saved = service.update(id, request.getCode(), request.getName(), request.getDescription(), request.getParentId());
+        audit.record("update", AuditAppService.DEPARTMENT, id, before + " -> " + describe(saved));
+        return ResultUtil.data(saved);
     }
 
     @DeleteMapping("/{id}")
     public ResultMessage<Long> delete(@PathVariable Long id) {
         service.delete(id);
+        audit.record("delete", AuditAppService.DEPARTMENT, id, null);
         return ResultUtil.data(id);
+    }
+
+    private static String describe(Department d) {
+        return "code=" + d.getCode() + " parent=" + d.getParentId();
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

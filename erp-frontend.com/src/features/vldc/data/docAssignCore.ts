@@ -1,4 +1,5 @@
 import { ROLE_TITLES } from "../workflow/rules.ts"
+import { managesAllUnits } from "./access.ts"
 import { slaOf, type InboxRow, type InboxScope } from "./inboxCore.ts"
 import type { AssignmentRecipient, AssignmentReply, DocAssignment, ReplyResult } from "./types.ts"
 
@@ -9,7 +10,7 @@ export const REPLY_RESULTS: ReplyResult[] = ["Hoàn thành", "Cần thêm thời
 export const ASSIGNER_ROLES = ["lanhdao", "tochuc", "truongdonvi", "matdat", "bien", "hangkhong", "trungtam"]
 
 export const canAssign = (role: string) => ASSIGNER_ROLES.includes(role)
-export const canManageAssignment = (a: DocAssignment, role: string) => a.assignedBy === role || role === "lanhdao"
+export const canManageAssignment = (a: DocAssignment, role: string) => a.assignedBy === role || managesAllUnits(role)
 export const isOpenAssignment = (a: DocAssignment) => !a.closedAt
 
 type NewAssignment = Omit<DocAssignment, "createdAt" | "recipients" | "closedAt"> & { recipients: string[]; now: string }

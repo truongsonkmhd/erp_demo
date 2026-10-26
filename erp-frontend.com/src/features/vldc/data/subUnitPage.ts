@@ -4,6 +4,7 @@ import { isClosed } from "../workflow/rules"
 import { workflowStore } from "../workflow/repository"
 import { localToday, vnDate } from "./dates"
 import { UNIT_DEFS, unitName, type UnitCode } from "./org"
+import { managesAllUnits } from "./access"
 import { kpis } from "./pages"
 import { vldcData } from "./registry"
 import { staffView } from "./staffView"
@@ -14,7 +15,6 @@ import type { SubUnit, SubUnitKind } from "./types"
 
 type Ctx = { role(): string; openModal(title: string, html: string): void; closeModal(): void }
 
-const MANAGER = "lanhdao"
 const state = { collapsed: new Set<string>() }
 const content = () => document.getElementById("content")
 const value = (id: string) => ((document.getElementById(id) as HTMLInputElement | null)?.value ?? "").trim()
@@ -27,7 +27,7 @@ export function installSubUnitPage(render: Record<string, () => void>, ctx: Ctx)
   const subs = () => vldcData.get("subUnits")
   const staff = () => staffView()
   const find = (id: string) => subs().find((s) => s.id === id)
-  const manager = () => ctx.role() === MANAGER
+  const manager = () => managesAllUnits(ctx.role())
   const personName = (id?: string) => (id ? staff().find((p) => p.id === id)?.name : undefined)
 
   function pageHtml(): string {

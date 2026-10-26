@@ -6,6 +6,7 @@ import com.xxxx.ddd.application.model.UserPageDTO;
 import com.xxxx.ddd.application.model.command.ChangePasswordCommand;
 import com.xxxx.ddd.application.model.command.CreateUserCommand;
 import com.xxxx.ddd.application.model.command.UpdateUserCommand;
+import com.xxxx.ddd.application.service.audit.AuditAppService;
 import com.xxxx.ddd.application.service.user.UserAppService;
 import com.xxxx.ddd.domain.model.entity.User;
 import com.xxxx.ddd.domain.service.UserDomainService;
@@ -30,6 +31,9 @@ public class UserAppServiceImpl implements UserAppService {
 
     @Autowired
     private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private AuditAppService audit;
 
     @Override
     @Transactional(readOnly = true)
@@ -72,7 +76,9 @@ public class UserAppServiceImpl implements UserAppService {
                 .setBaseSalary(command.getBaseSalary())
                 .setActive(command.getActive() == null || command.getActive())
                 .setAccountType(command.getAccountType() == null ? 2 : command.getAccountType());
-        User saved = userDomainService.createUser(user, roles(command.getRoleCodes(), command.getRoleCode()), command.getLevelId());
+        User saved = userDomainService.createUser(user, roles(command.getRoleCodes(), command.getRoleCode()), command.getLevelId(),
+                command.getPositionCode(), command.getOrgUnitId());
+        audit.record("create", AuditAppService.USER, saved.getId(), describe(saved));
         return AuthMapper.toUserDTO(saved);
     }
 
@@ -89,7 +95,11 @@ public class UserAppServiceImpl implements UserAppService {
                 .setBaseSalary(command.getBaseSalary())
                 .setActive(command.getActive())
                 .setAccountType(command.getAccountType());
-        User updated = userDomainService.updateUser(id, patch, roles(command.getRoleCodes(), command.getRoleCode()), command.getLevelId());
+        String before = describe(userDomainService.getById(id));
+        User updated = userDomainService.updateUser(id, patch, roles(command.getRoleCodes(), command.getRoleCode()), command.getLevelId(),
+                command.getPositionCode(), command.getOrgUnitId());
+        String after = describe(updated);
+        if (!before.equals(after)) audit.record("update-access", AuditAppService.USER, id, before + " -> " + after);
         return AuthMapper.toUserDTO(updated);
     }
 
@@ -98,6 +108,7 @@ public class UserAppServiceImpl implements UserAppService {
     public void delete(Long id) {
         requireAdminForTarget(id);
         userDomainService.deactivate(id);
+        audit.record("delete", AuditAppService.USER, id, null);
     }
 
     @Override
@@ -114,6 +125,7 @@ public class UserAppServiceImpl implements UserAppService {
             throw new IllegalArgumentException("Password confirmation does not match");
         }
         userDomainService.changePassword(command.getId(), passwordEncoder.encode(command.getPassword()));
+        audit.record("change-password", AuditAppService.USER, command.getId(), null);
     }
 
     @Override
@@ -125,6 +137,15 @@ public class UserAppServiceImpl implements UserAppService {
         requireAdminForTarget(id);
         userDomainService.getById(id);
         userDomainService.changePassword(id, passwordEncoder.encode(DEFAULT_PASSWORD));
+        audit.record("reset-password", AuditAppService.USER, id, null);
+    }
+
+    /** Access-relevant state of a user: roles, chức vụ, đơn vị and whether the account is active. */
+    private String describe(User user) {
+        return "roles=" + user.getRoles().stream().map(role -> role.getCode()).sorted().toList()
+                + " position=" + (user.getPosition() == null ? null : user.getPosition().getCode())
+                + " unit=" + (user.getOrgUnit() == null ? null : user.getOrgUnit().getCode())
+                + " active=" + user.getActive();
     }
 
     private List<String> roles(List<String> codes, String legacyCode) {

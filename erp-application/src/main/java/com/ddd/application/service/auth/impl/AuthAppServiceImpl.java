@@ -6,6 +6,7 @@ import com.xxxx.ddd.application.model.CurrentUserDTO;
 import com.xxxx.ddd.application.model.command.AuthenticateCommand;
 import com.xxxx.ddd.application.service.auth.AuthAppService;
 import com.xxxx.ddd.application.service.auth.JwtService;
+import com.xxxx.ddd.application.service.org.OrgAppService;
 import com.xxxx.ddd.domain.model.entity.Token;
 import com.xxxx.ddd.domain.model.entity.User;
 import com.xxxx.ddd.domain.service.UserDomainService;
@@ -27,6 +28,9 @@ public class AuthAppServiceImpl implements AuthAppService {
 
     @Autowired
     private JwtService jwtService;
+
+    @Autowired
+    private OrgAppService orgAppService;
 
     @Override
     @Transactional
@@ -74,7 +78,9 @@ public class AuthAppServiceImpl implements AuthAppService {
     @Transactional(readOnly = true)
     public CurrentUserDTO me(String username) {
         User user = userDomainService.getByUsernameOrEmail(username);
-        return AuthMapper.toCurrentUserDTO(user);
+        CurrentUserDTO dto = AuthMapper.toCurrentUserDTO(user);
+        dto.setManagedUnitCodes(orgAppService.managedUnitCodes(user));
+        return dto;
     }
 
     private AuthenticationDTO rotateRefresh(String refreshToken) {

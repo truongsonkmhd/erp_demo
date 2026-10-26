@@ -41,6 +41,8 @@ public class AuthControllerMapper {
         command.setRoleCodes(request.getRoleCodes());
         command.setAccountType(request.getAccountType());
         command.setLevelId(request.getLevelId());
+        command.setPositionCode(request.getPositionCode());
+        command.setOrgUnitId(request.getOrgUnitId());
         command.setBaseSalary(request.getBaseSalary());
         command.setActive(request.getActive());
         return command;
@@ -56,6 +58,8 @@ public class AuthControllerMapper {
         command.setRoleCodes(request.getRoleCodes());
         command.setAccountType(request.getAccountType());
         command.setLevelId(request.getLevelId());
+        command.setPositionCode(request.getPositionCode());
+        command.setOrgUnitId(request.getOrgUnitId());
         command.setBaseSalary(request.getBaseSalary());
         command.setActive(request.getActive());
         return command;

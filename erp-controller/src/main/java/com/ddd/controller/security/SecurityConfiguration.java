@@ -9,6 +9,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.Customizer;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -22,6 +23,7 @@ import java.nio.charset.StandardCharsets;
 
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity
 public class SecurityConfiguration {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
@@ -47,6 +49,10 @@ public class SecurityConfiguration {
                                 "/api/authenticate/login-with-token",
                                 "/api/authenticate/logout"
                         ).permitAll()
+                        .requestMatchers("/error").permitAll()
+                        // Directory and positions are for every signed-in user; assignees carry @PreAuthorize plus a scope check.
+                        .requestMatchers(HttpMethod.GET, "/api/org/**").authenticated()
+                        .requestMatchers("/api/audit-logs", "/api/audit-logs/**").hasAuthority("ROLE_ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/users", "/api/users/**").hasAnyAuthority("ROLE_ADMIN", "users:access")
                         .requestMatchers(HttpMethod.GET, "/api/roles", "/api/roles/**").hasAnyAuthority("ROLE_ADMIN", "roles:access", "users:access")
                         .requestMatchers(HttpMethod.GET, "/api/departments", "/api/departments/**").hasAnyAuthority("ROLE_ADMIN", "roles:access", "users:access")
@@ -64,7 +70,8 @@ public class SecurityConfiguration {
                         .requestMatchers("/ws", "/ws/**").permitAll()
                         .requestMatchers("/api/vldc/**").authenticated()
                         .requestMatchers("/actuator/**").permitAll()
-                        .anyRequest().permitAll()
+                        // Deny by default: a new endpoint must be signed in, and declares its permission with @PreAuthorize.
+                        .anyRequest().authenticated()
                 )
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint(authenticationEntryPoint())

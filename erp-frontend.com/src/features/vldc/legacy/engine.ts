@@ -10,6 +10,7 @@
  */
 
 import { installWorkflow, workflowBadges, workflowPerms } from "@/features/vldc/workflow/views";
+import { managesAllUnits } from "@/features/vldc/data/access";
 import { escapeHtml } from "@/features/vldc/workflow/html";
 import { vldcData } from "@/features/vldc/data/registry";
 import { addDays, localToday, vnDate } from "@/features/vldc/data/dates";
@@ -166,7 +167,7 @@ function setCalendarWeek(step){calendarOffset=step===0?0:calendarOffset+step;ren
 function toggleCalendarSync(){calendarSync=!calendarSync;render.calendar()}
 function canSeeScoped(x){
  if(x.scope==='federation') return true;
- if(current==='lanhdao') return true;
+ if(managesAllUnits(current)) return true;
  if(x.scope==='unit') return unitCodeOf(x.unit)===roleUnitCode(current);
  if(x.scope==='project') return canSeeProject(current,D('projects').find(p=>p.id===x.project)?.unit);
  if(x.scope==='personal') return x.ownerRole===current || x.owner===current;
@@ -239,7 +240,7 @@ const _dashboardV71=render.dashboard;
 render.dashboard=function(){
  _dashboardV71();
  const c=document.getElementById('content'); if(!c)return;
- if(current!=='lanhdao'){
+ if(!managesAllUnits(current)){
   const firstHero=c.querySelector('.module-hero');
   if(firstHero){firstHero.querySelector('.hero-tag').textContent=(roles[current].unit||'Đơn vị').toUpperCase(); const h=firstHero.querySelector('h2'); if(h)h.textContent='Không gian làm việc • '+roles[current].title;}
  }

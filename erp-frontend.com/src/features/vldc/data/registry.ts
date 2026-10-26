@@ -1,3 +1,5 @@
+import { apiRequest } from "@/lib/api"
+import { apiRepo } from "./apiRepo"
 import { firestoreRepo, localRepo } from "./repos"
 import { createSyncedCollection, type SyncedCollection } from "./syncedCollection"
 import { DATASETS, storageOf, type DatasetKey, type Row } from "./datasets"
@@ -12,7 +14,8 @@ const collections = Object.fromEntries(
     const store = storageOf(key)
     // Every user save is audited, except the audit trail itself.
     const onSaved = key === "auditEvents" ? undefined : (rows: { id: string }[]) => rows.forEach((row) => auditEvent(store.firestore, row))
-    return [key, createSyncedCollection(key, firestoreRepo(store.firestore), localRepo(store.local), seed, { sharedSeed: store.shared, onSaved })]
+    const primary = store.api ? apiRepo(DATASETS[key].collection, apiRequest) : firestoreRepo(store.firestore)
+    return [key, createSyncedCollection(key, primary, localRepo(store.local), seed, { sharedSeed: store.shared, onSaved })]
   }),
 ) as unknown as Collections
 

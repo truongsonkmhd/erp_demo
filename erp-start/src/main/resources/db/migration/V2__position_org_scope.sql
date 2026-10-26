@@ -1,7 +1,6 @@
 -- Chức vụ (Position) tách khỏi Role, đơn vị dạng cây và audit log (Đặc tả phân quyền chức vụ/role/permission).
--- Run once on an existing database; fresh databases get the same schema from init/auth_init.sql and the data
--- from init/vldc_org_scope.sql.
-USE `erp-demo`;
+-- Idempotent: a fresh database already has the tables and columns from environment/mysql/init/auth_init.sql, so every
+-- DDL step only runs when its object is missing; the data steps only fill what is not set yet.
 
 -- 1. Danh mục chức vụ: level 1 là cấp cao nhất; manages_unit = quản lý đơn vị mình và các đơn vị con.
 CREATE TABLE IF NOT EXISTS tbl_position (
@@ -12,20 +11,7 @@ CREATE TABLE IF NOT EXISTS tbl_position (
   manages_unit TINYINT(1) NOT NULL DEFAULT 0
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 2. Đơn vị dạng cây (tbl_department là org unit).
-ALTER TABLE tbl_department
-  ADD COLUMN parent_id BIGINT NULL,
-  ADD CONSTRAINT fk_department_parent FOREIGN KEY (parent_id) REFERENCES tbl_department(id);
-
--- 3. Người dùng thuộc một đơn vị và giữ một chức vụ (không còn suy ra đơn vị từ role).
-ALTER TABLE tbl_user
-  ADD COLUMN position_id BIGINT NULL,
-  ADD COLUMN department_id BIGINT NULL,
-  ADD CONSTRAINT fk_user_position FOREIGN KEY (position_id) REFERENCES tbl_position(id),
-  ADD CONSTRAINT fk_user_department FOREIGN KEY (department_id) REFERENCES tbl_department(id);
-CREATE INDEX idx_user_department ON tbl_user (department_id);
-
--- 4. Audit log cho thao tác nhạy cảm (đổi quyền, chức vụ, đơn vị, tài khoản).
+-- 2. Audit log cho thao tác nhạy cảm (đổi quyền, chức vụ, đơn vị, tài khoản).
 CREATE TABLE IF NOT EXISTS tbl_audit_log (
   id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
   actor_id BIGINT NULL,
@@ -40,7 +26,24 @@ CREATE TABLE IF NOT EXISTS tbl_audit_log (
   INDEX idx_audit_created (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 5. Data (same as init/vldc_org_scope.sql).
+-- 3. Đơn vị dạng cây (tbl_department là org unit), người dùng thuộc một đơn vị và giữ một chức vụ.
+SET @has := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tbl_department' AND COLUMN_NAME = 'parent_id');
+SET @ddl := IF(@has = 0, 'ALTER TABLE tbl_department ADD COLUMN parent_id BIGINT NULL, ADD CONSTRAINT fk_department_parent FOREIGN KEY (parent_id) REFERENCES tbl_department(id)', 'DO 0');
+PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @has := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tbl_user' AND COLUMN_NAME = 'position_id');
+SET @ddl := IF(@has = 0, 'ALTER TABLE tbl_user ADD COLUMN position_id BIGINT NULL, ADD CONSTRAINT fk_user_position FOREIGN KEY (position_id) REFERENCES tbl_position(id)', 'DO 0');
+PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @has := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tbl_user' AND COLUMN_NAME = 'department_id');
+SET @ddl := IF(@has = 0, 'ALTER TABLE tbl_user ADD COLUMN department_id BIGINT NULL, ADD CONSTRAINT fk_user_department FOREIGN KEY (department_id) REFERENCES tbl_department(id)', 'DO 0');
+PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @has := (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tbl_user' AND INDEX_NAME = 'idx_user_department');
+SET @ddl := IF(@has = 0, 'CREATE INDEX idx_user_department ON tbl_user (department_id)', 'DO 0');
+PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- 4. Data.
 INSERT INTO tbl_position (code, name, level, manages_unit) VALUES
   ('LANH_DAO', 'Lãnh đạo', 1, 1),
   ('TRUONG_DON_VI', 'Trưởng phòng / Đoàn trưởng', 2, 1),

@@ -1,7 +1,7 @@
 import { escapeHtml as esc, formatDate, jsCall } from "../workflow/html"
 import { assignmentInboxRows } from "./docAssignCore"
 import { topicReviewRows } from "./scienceCore"
-import { projectCrRows } from "./projectCore"
+import { projectApprovalRows, projectCrRows, projectDeleteRows } from "./projectCore"
 import { workflowStore } from "../workflow/repository"
 import { localToday } from "./dates"
 import {
@@ -35,6 +35,8 @@ function rows(): InboxRow[] {
     ...inboxRows(workflowStore.items(), vldcData.get("inboxTasks"), ctx.role(), scope, today()).map(withSubUnit),
     ...assignmentInboxRows(vldcData.get("docAssignments"), ctx.role(), scope, today()),
     ...topicReviewRows(vldcData.get("scienceTopics"), ctx.role(), today()),
+    ...projectApprovalRows(vldcData.get("projects"), ctx.role(), today()),
+    ...projectDeleteRows(vldcData.get("projects"), ctx.role(), today()),
     ...projectCrRows(vldcData.get("projects"), ctx.role(), today()),
   ]
 }

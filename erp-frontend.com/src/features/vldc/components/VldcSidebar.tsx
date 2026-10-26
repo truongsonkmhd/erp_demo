@@ -158,7 +158,8 @@ export function VldcSidebar({
                         key={item.code}
                         to={item.url}
                         onClick={onNavigate}
-                        className={({ isActive: active }) => `vx-item${active ? " is-active" : ""}`}
+                        // pathname is the menu entry of the page, so a merged page (tab) highlights its parent
+                        className={({ isActive: active }) => `vx-item${active || item.url === pathname ? " is-active" : ""}`}
                       >
                         <Icon size={16} aria-hidden="true" />
                         <span>{item.title}</span>

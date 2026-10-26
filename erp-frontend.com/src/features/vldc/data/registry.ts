@@ -35,8 +35,9 @@ let started: Promise<unknown> | undefined
 
 /** Synchronous, always-populated accessors for the legacy engine, plus lifecycle for the page host. */
 export const vldcData = {
+  /** Rows of a dataset; soft-deleted rows (deletedAt) are left out. */
   get<K extends DatasetKey>(key: K): Row<K>[] {
-    return collections[key].items() as Row<K>[]
+    return (collections[key].items() as Row<K>[]).filter((row) => !(row as { deletedAt?: string }).deletedAt)
   },
   save<K extends DatasetKey>(key: K, row: Row<K>): Promise<void> {
     return (collections[key] as SyncedCollection<Row<K>>).save(row)

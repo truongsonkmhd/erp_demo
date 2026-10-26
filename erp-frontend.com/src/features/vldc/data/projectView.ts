@@ -1,14 +1,20 @@
 import { workflowStore } from "../workflow/repository"
-import { isClosed, rolledUpProgress } from "../workflow/rules"
+import { isClosed, isWork, rolledUpProgress, setProjectAccess } from "../workflow/rules"
 import { localToday } from "./dates"
 import { disbursementSeries, disbursementSummary } from "./disbursementCore"
-import { computeProject, type WorkLink } from "./projectCore"
+import { canSeeProject, computeProject, type WorkLink } from "./projectCore"
 import { vldcData } from "./registry"
 import type { Project } from "./types"
 
-/** Work items (payments aside) linked to a project, as projects see them. */
+// The units of a project (Phòng Kỹ thuật and the approver always; the others once it is approved) see its work and note on it.
+setProjectAccess((projectId, role) => {
+  const p = vldcData.get("projects").find((x) => x.id === projectId)
+  return !!p && canSeeProject(p, role)
+})
+
+/** Work items linked to a project (payments and proposals not approved yet aside), as projects see them. */
 export function projectWork(items = workflowStore.items(), today = localToday()): WorkLink[] {
-  return items.filter((x) => x.type !== "payment" && x.project).map((x) => ({
+  return items.filter((x) => isWork(x) && x.project).map((x) => ({
     project: x.project, wbsItem: x.wbsItem, progress: rolledUpProgress(x, items), closed: isClosed(x),
     overdue: !isClosed(x) && x.due < today, pending: x.status === "Chờ duyệt", root: x.type === "directive",
   }))

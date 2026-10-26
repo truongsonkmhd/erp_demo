@@ -13,6 +13,11 @@ export default defineConfig(({ mode }) => ({
         target: "http://localhost:1122",
         changeOrigin: true,
       },
+      // Realtime (STOMP over WebSocket) when VITE_API_BASE_URL is empty.
+      "/ws": {
+        target: "ws://localhost:1122",
+        ws: true,
+      },
     },
   },
   plugins: [

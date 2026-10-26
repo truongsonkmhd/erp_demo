@@ -1,5 +1,8 @@
-import { apiRequest } from "@/lib/api"
+import { Client } from "@stomp/stompjs"
+import { API_BASE, apiRequest } from "@/lib/api"
+import { getAccessToken } from "@/services/auth/tokenStorage"
 import { apiRepo } from "./apiRepo"
+import { socketUrl, stompChangeFeed } from "./realtime"
 import { firestoreRepo, localRepo } from "./repos"
 import { createSyncedCollection, type SyncedCollection } from "./syncedCollection"
 import { DATASETS, storageOf, type DatasetKey, type Row } from "./datasets"
@@ -8,13 +11,20 @@ import { auditEvent, setAuditSink, type AuditEvent } from "./audit"
 
 type Collections = { [K in DatasetKey]: SyncedCollection<Row<K>> }
 
+/** One WebSocket for every API-backed collection; it opens when the first one subscribes. */
+const changeFeed = stompChangeFeed({
+  url: () => socketUrl(API_BASE, window.location),
+  token: getAccessToken,
+  createClient: (config) => new Client(config),
+})
+
 const collections = Object.fromEntries(
   (Object.keys(DATASETS) as DatasetKey[]).map((key) => {
     const seed = () => (DATASETS[key].seed as (today: string) => { id: string }[])(localToday())
     const store = storageOf(key)
     // Every user save is audited, except the audit trail itself.
     const onSaved = key === "auditEvents" ? undefined : (rows: { id: string }[]) => rows.forEach((row) => auditEvent(store.firestore, row))
-    const primary = store.api ? apiRepo(DATASETS[key].collection, apiRequest) : firestoreRepo(store.firestore)
+    const primary = store.api ? apiRepo(DATASETS[key].collection, apiRequest, changeFeed) : firestoreRepo(store.firestore)
     return [key, createSyncedCollection(key, primary, localRepo(store.local), seed, { sharedSeed: store.shared, onSaved })]
   }),
 ) as unknown as Collections

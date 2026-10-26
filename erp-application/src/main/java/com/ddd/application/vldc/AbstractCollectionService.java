@@ -2,6 +2,8 @@ package com.xxxx.ddd.application.vldc;
 
 import com.xxxx.ddd.domain.model.entity.vldc.BaseRecord;
 import com.xxxx.ddd.domain.respository.vldc.RecordRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -12,9 +14,16 @@ import java.util.Set;
 /** Transactions are declared per data method: a class-level one would also wrap name()/rowType(). */
 public abstract class AbstractCollectionService<D extends CollectionRow, E extends BaseRecord> implements CollectionService<D> {
     private final RecordRepository<E> repository;
+    private ApplicationEventPublisher events = event -> { };
 
     protected AbstractCollectionService(RecordRepository<E> repository) {
         this.repository = repository;
+    }
+
+    /** Setter injection keeps subclass constructors unchanged; without a publisher (unit tests) nothing is sent. */
+    @Autowired(required = false)
+    public void setEventPublisher(ApplicationEventPublisher events) {
+        this.events = events;
     }
 
     /** existing is null when the row is new; the returned entity must carry row.getId(). */
@@ -36,7 +45,9 @@ public abstract class AbstractCollectionService<D extends CollectionRow, E exten
     public D upsert(D row, String actor) {
         E entity = toEntity(row, repository.findById(row.getId()).orElse(null));
         entity.setUpdatedBy(actor);
-        return toRow(repository.save(entity));
+        D saved = toRow(repository.save(entity));
+        events.publishEvent(new CollectionChangedEvent(name(), List.of(row.getId()), false));
+        return saved;
     }
 
     @Transactional
@@ -52,6 +63,8 @@ public abstract class AbstractCollectionService<D extends CollectionRow, E exten
             entity.setUpdatedBy(actor);
             return entity;
         }).toList();
-        return repository.saveAll(entities).size();
+        int written = repository.saveAll(entities).size();
+        events.publishEvent(new CollectionChangedEvent(name(), rows.stream().map(CollectionRow::getId).toList(), true));
+        return written;
     }
 }

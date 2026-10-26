@@ -3,7 +3,7 @@ import type { WorkItem } from "./types.ts"
 
 /** Search, status filter and export rows of the Giao việc list. */
 
-export const TYPE_LABELS: Record<WorkItem["type"], string> = { directive: "Chỉ đạo", task: "Việc được giao", payment: "Hồ sơ thanh toán" }
+export const TYPE_LABELS: Record<WorkItem["type"], string> = { directive: "Chỉ đạo", task: "Việc được giao", payment: "Hồ sơ thanh toán", proposal: "Nhiệm vụ đề xuất" }
 
 /** Names shown for role codes, tổ ids and project ids. */
 export type DirectiveLabels = { role(code: string): string; subUnit(id?: string): string; project(id?: string): string }

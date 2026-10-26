@@ -489,11 +489,12 @@ SELECT u.id, r.id FROM tbl_user u JOIN tbl_role r ON u.email = CONCAT(r.code, '@
 INSERT IGNORE INTO tbl_role_permission (role_id, permission_id)
 SELECT r.id, p.id
 FROM (
-  -- Every business role can open and work on directives, inbox and notifications.
+  -- Every business role can open and work on directives (a tab of Nhiệm vụ / Dự án), inbox and notifications.
   SELECT r0.code AS role_code, perm.code AS perm_code
   FROM tbl_role r0
   CROSS JOIN (
     SELECT 'vldc-directives:access' AS code UNION ALL
+    SELECT 'vldc-projects:access' UNION ALL
     SELECT 'vldc-directives:update' UNION ALL
     SELECT 'vldc-action:access' UNION ALL
     SELECT 'vldc-notifications:access'

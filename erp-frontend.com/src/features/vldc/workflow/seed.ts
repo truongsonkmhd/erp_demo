@@ -1,9 +1,16 @@
 import type { WorkItem } from "./types.ts"
-import { applyAction, createDirective, createPayment, type ActionInput, type WorkAction } from "./rules.ts"
+import { applyAction, createDirective, createPayment, createProposal, type ActionInput, type WorkAction } from "./rules.ts"
 import { roleUnitCode } from "../data/org.ts"
 import { SUB_UNIT_DEFS } from "../data/seed/subUnitDefs.ts"
 
 const ALL = ["*"]
+
+/** Project a seeded directive belongs to when the call does not name one: the owner unit's main project. */
+const PROJECT_OF: Record<string, string> = {
+  matdat: "VLDC-2027-001", truongdonvi: "VLDC-2027-001", chunhiem: "VLDC-2027-001", bien: "VLDC-2026-014", hientruong: "VLDC-2026-014",
+  hangkhong: "VLDC-2026-022", trungtam: "VLDC-2026-030", kythuat: "VLDC-2027-003", kehoach: "VLDC-2027-001", ketoan: "VLDC-2027-001",
+  ketoantruong: "VLDC-2026-014", tochuc: "VLDC-2027-001",
+}
 
 /** Demo data built through the real rules so history and notifications stay consistent. */
 export function buildSeed(today: string): WorkItem[] {
@@ -18,8 +25,10 @@ export function buildSeed(today: string): WorkItem[] {
     put(result.item)
     if (result.created) put(result.created)
   }
-  const directive = (id: string, owner: string, cc: string[], title: string, days: number, priority: WorkItem["priority"] = "Cao") =>
-    put(createDirective({ id, title, owner, cc, due: due(days), priority }, "lanhdao", ALL, at(clock += 2)))
+  const directive = (id: string, owner: string, cc: string[], title: string, days: number, priority: WorkItem["priority"] = "Cao", project = PROJECT_OF[owner]) =>
+    put(createDirective({ id, title, owner, cc, due: due(days), priority, project }, "lanhdao", ALL, at(clock += 2)))
+  const proposal = (id: string, role: string, title: string, days: number, project?: string) =>
+    put(createProposal({ id, title, due: due(days), priority: "Trung bình", project }, role, ALL, at(clock += 2)))
   const delegate = (from: string, role: string, id: string, owner: string, title: string, days: number) =>
     act(from, "delegate", role, { child: { id, title, owner, due: due(days) } })
   const payment = (id: string, title: string, amount: number, days: number, parentId?: string) =>
@@ -27,9 +36,9 @@ export function buildSeed(today: string): WorkItem[] {
 
   // Earlier work (started 2–3 weeks ago) so each unit's KPI has finished, returned, late and overdue items to measure.
   type Past = { start: number; due: number; evidence?: string; returned?: string; approveDaysAgo?: number; progress?: number }
-  const finished = (id: string, owner: string, title: string, o: Past) => {
+  const finished = (id: string, owner: string, title: string, o: Past & { project?: string }) => {
     clock = -24 * o.start
-    directive(id, owner, [], title, o.due, "Trung bình")
+    directive(id, owner, [], title, o.due, "Trung bình", o.project)
     act(id, "accept", owner)
     act(id, "progress", owner, { progress: 80, evidence: o.evidence })
     act(id, "submit", owner)
@@ -41,9 +50,9 @@ export function buildSeed(today: string): WorkItem[] {
     if (o.approveDaysAgo !== undefined) clock = -24 * o.approveDaysAgo
     act(id, "approve", "lanhdao")
   }
-  const ongoing = (id: string, owner: string, title: string, o: Past) => {
+  const ongoing = (id: string, owner: string, title: string, o: Past & { project?: string }) => {
     clock = -24 * o.start
-    directive(id, owner, [], title, o.due, "Trung bình")
+    directive(id, owner, [], title, o.due, "Trung bình", o.project)
     act(id, "accept", owner)
     act(id, "progress", owner, { progress: o.progress ?? 50, evidence: o.evidence })
   }
@@ -53,7 +62,7 @@ export function buildSeed(today: string): WorkItem[] {
 
   finished("CD-SEED-10", "bien", "Báo cáo kết quả khảo sát tuyến B2", { start: 21, due: -10, evidence: "Báo cáo tuyến B2 v2" })
   finished("CD-SEED-11", "bien", "Bảo dưỡng định kỳ tàu khảo sát", { start: 20, due: -16, approveDaysAgo: 12 })
-  ongoing("CD-SEED-12", "bien", "Xử lý số liệu địa chấn nông tuyến B3", { start: 16, due: -2, progress: 60, evidence: "Đã xử lý 3/5 băng" })
+  ongoing("CD-SEED-12", "bien", "Xử lý số liệu địa chấn nông tuyến B3", { start: 16, due: -2, progress: 60, evidence: "Đã xử lý 3/5 băng", project: "VLDC-2026-018" })
 
   finished("CD-SEED-13", "hangkhong", "Lập kế hoạch bay đo quý IV", { start: 22, due: -12, evidence: "Kế hoạch bay đo Q4" })
   finished("CD-SEED-14", "hangkhong", "Hiệu chỉnh thiết bị đo phổ gamma máy bay", { start: 19, due: -8, evidence: "Chứng nhận hiệu chỉnh" })
@@ -69,7 +78,7 @@ export function buildSeed(today: string): WorkItem[] {
 
   finished("CD-SEED-22", "kehoach", "Tổng hợp báo cáo giải ngân tháng 9", { start: 21, due: -12, evidence: "Báo cáo giải ngân T9" })
   finished("CD-SEED-23", "ketoan", "Đối chiếu tạm ứng công tác hiện trường quý III", { start: 20, due: -15, approveDaysAgo: 11, evidence: "Bảng đối chiếu tạm ứng" })
-  ongoing("CD-SEED-24", "kehoach", "Lập dự toán điều chỉnh NV-2027-003", { start: 8, due: 5, progress: 40, evidence: "Dự toán v1" })
+  ongoing("CD-SEED-24", "kehoach", "Lập dự toán điều chỉnh NV-2027-003", { start: 8, due: 5, progress: 40, evidence: "Dự toán v1", project: "VLDC-2027-003" })
 
   finished("CD-SEED-25", "tochuc", "Hoàn thiện hồ sơ nâng lương quý IV", { start: 20, due: -10, evidence: "Danh sách nâng lương" })
   finished("CD-SEED-26", "tochuc", "Cập nhật hồ sơ chứng chỉ hành nghề cán bộ kỹ thuật", { start: 18, due: -9, evidence: "Danh mục chứng chỉ", returned: "Còn thiếu 6 chứng chỉ GIS" })
@@ -81,11 +90,12 @@ export function buildSeed(today: string): WorkItem[] {
   delegate("CD-SEED-1", "matdat", "TASK-SEED-1", "chunhiem", "Lập phương án tăng ca và điều phối tổ đo tuyến 3", 4)
   act("TASK-SEED-1", "accept", "chunhiem")
   act("TASK-SEED-1", "progress", "chunhiem", { progress: 40, evidence: "Đã bố trí 2/3 tổ đo" })
-  delegate("TASK-SEED-1", "chunhiem", "TASK-SEED-2", "hientruong", "Đo bổ sung 12 km tuyến T3 và cập nhật nhật ký GPS", 3)
+  delegate("CD-SEED-1", "matdat", "TASK-SEED-2", "chunhiem", "Đo bổ sung 12 km tuyến T3 và cập nhật nhật ký GPS", 3)
 
   directive("CD-SEED-2", "trungtam", ["kythuat"], "Rà soát toàn bộ thiết bị hết hạn kiểm định quý IV", 2)
   act("CD-SEED-2", "accept", "trungtam")
-  delegate("CD-SEED-2", "trungtam", "TASK-SEED-3", "kythuat", "Kiểm tra hồ sơ kiểm định 18 máy đo từ và trọng lực", 2)
+  // Trung tâm has no staff of its own: Phòng Kỹ thuật's part comes from the federation head.
+  directive("TASK-SEED-3", "kythuat", ["trungtam"], "Kiểm tra hồ sơ kiểm định 18 máy đo từ và trọng lực", 2, "Cao", "VLDC-2026-030")
   act("TASK-SEED-3", "accept", "kythuat")
   act("TASK-SEED-3", "progress", "kythuat", { progress: 50, evidence: "9/18 thiết bị" })
 
@@ -99,9 +109,17 @@ export function buildSeed(today: string): WorkItem[] {
   act("CD-SEED-6", "accept", "hangkhong")
   act("CD-SEED-6", "progress", "hangkhong", { progress: 90, evidence: "Báo cáo tổng hợp v1" })
   act("CD-SEED-6", "submit", "hangkhong")
-  directive("CD-SEED-7", "truongdonvi", ["chunhiem"], "Phân công nhân lực bổ sung cho dự án VLDC-2027-003", 5)
+  directive("CD-SEED-7", "truongdonvi", ["chunhiem"], "Phân công nhân lực bổ sung cho dự án VLDC-2027-003", 5, "Cao", "VLDC-2027-003")
   act("CD-SEED-7", "accept", "truongdonvi")
   act("CD-SEED-7", "progress", "truongdonvi", { progress: 30 })
+
+  // Nhiệm vụ đề xuất: one waiting, one approved and under way, one returned for correction.
+  proposal("DX-SEED-1", "chunhiem", "Đo bổ sung điểm kiểm tra lặp tuyến T5", 7, "VLDC-2027-001")
+  proposal("DX-SEED-2", "hientruong", "Lập sổ tay an toàn thao tác thiết bị trên boong", 12)
+  act("DX-SEED-2", "endorse", "bien")
+  act("DX-SEED-2", "progress", "hientruong", { progress: 35, evidence: "Dàn ý và 3/8 chương" })
+  proposal("DX-SEED-3", "kythuat", "Chuẩn hoá mẫu báo cáo kết quả đo sâu điện", 9)
+  act("DX-SEED-3", "return", "lanhdao", { note: "Nêu rõ phạm vi áp dụng và đơn vị phối hợp" })
 
   payment("PAY-SEED-1", "Thanh toán chi phí khảo sát đợt 2 – VLDC-2027-001", 245_000_000, 5)
   payment("PAY-SEED-2", "Chi phí đối chiếu, xác nhận công nợ HĐ-2026-031", 86_000_000, 4, "CD-SEED-3")

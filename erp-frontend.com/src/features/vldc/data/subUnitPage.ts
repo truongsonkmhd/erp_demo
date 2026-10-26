@@ -80,7 +80,7 @@ ${open ? rows || '<div class="mini" style="padding:8px 0">Chưa chia tổ/phòng
     const crit = (l: string, v: number | null) => metric(l, v == null ? "–" : `${v}%`)
     const open = k.items.filter((x) => !isClosed(x))
     const actions = manager() && s.active
-      ? `<div class="toolbar" style="margin-top:12px"><button class="btn btn-primary" ${jsCall("wfCreateDirectiveFor", s.id)}>Giao việc cho tổ</button><button class="btn btn-light" ${jsCall("subForm", s.unit, s.id)}>Sửa</button><button class="btn btn-light" ${jsCall("subDissolve", s.id)}>Giải thể</button></div>`
+      ? `<div class="toolbar" style="margin-top:12px"><button class="btn btn-light" ${jsCall("subForm", s.unit, s.id)}>Sửa</button><button class="btn btn-light" ${jsCall("subDissolve", s.id)}>Giải thể</button></div>`
       : ""
     ctx.openModal(`${s.kind} • ${s.name}`, `<div class="mini">${esc(unitLabel(s.unit))}${s.active ? "" : " • đã giải thể"}</div><p>${esc(s.duty)}</p>
 <div class="grid twoeq"><div>${metric("Tổ trưởng", esc(personName(s.headId) ?? "Chưa chỉ định"))}${metric("Nhân sự", `${members.length} người`)}${metric("Việc đang mở", String(open.length))}${metric("Điểm KPI", k.score == null ? "–" : `${k.score} • ${RATING_LABELS[k.rating]}`)}${crit("Tiến độ", k.criteria.progress.value)}${crit("Đúng hạn", k.criteria.onTime.value)}${crit("Chất lượng", k.criteria.quality.value)}</div>

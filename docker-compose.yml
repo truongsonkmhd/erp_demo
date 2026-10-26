@@ -34,10 +34,11 @@ services:
       mysql:
         condition: service_healthy
     environment:
-      MYSQL_URL: jdbc:mysql://mysql:3306/erp-demo?allowPublicKeyRetrieval=true&useSSL=false
+      MYSQL_URL: jdbc:mysql://mysql:3306/erp-demo?allowPublicKeyRetrieval=true&useSSL=false&rewriteBatchedStatements=true
       MYSQL_USER: root
       MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       JWT_BASE64_SECRET: ${JWT_BASE64_SECRET:?set JWT_BASE64_SECRET in .env}
+      FLYWAY_ENABLED: "true"
     ports:
       - "${BACKEND_BIND:-127.0.0.1}:${BACKEND_PORT:-11124}:1122"
 

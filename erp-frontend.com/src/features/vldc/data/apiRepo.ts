@@ -1,3 +1,4 @@
+import type { ChangeFeed } from "./realtime"
 import type { Repo } from "./syncedCollection"
 
 /** apiRequest from lib/api.ts (Bearer token, refresh on 401, ResultMessage unwrapped); injected so tests need no browser. */
@@ -7,11 +8,11 @@ export type ApiRequest = <T>(path: string, init?: { method?: string; body?: unkn
 const plain = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T
 
 /**
- * Repo backed by the Spring API /api/vldc/{collection}. Until realtime (WebSocket) lands, subscribers are
- * refreshed after every write and by polling; a poll only emits when the server list changed.
- * Only the first load reports errors (so the collection can go offline); later poll failures are transient.
+ * Repo backed by the Spring API /api/vldc/{collection}. Subscribers re-fetch the list when the backend reports a
+ * change (WebSocket feed) and after this client's own writes; the list only re-emits when it actually changed.
+ * Only the first load reports errors (so the collection can go offline); later refetch failures are transient.
  */
-export function apiRepo<T extends { id: string }>(collection: string, request: ApiRequest, { pollMs = 10_000 } = {}): Repo<T> {
+export function apiRepo<T extends { id: string }>(collection: string, request: ApiRequest, feed: ChangeFeed): Repo<T> {
   const base = `/api/vldc/${encodeURIComponent(collection)}`
   const refreshers = new Set<() => Promise<void>>()
   const refreshAll = () => Promise.all([...refreshers].map((refresh) => refresh()))
@@ -46,10 +47,10 @@ export function apiRepo<T extends { id: string }>(collection: string, request: A
       }
       refreshers.add(refresh)
       void refresh()
-      const timer = setInterval(() => void refresh(), pollMs)
+      const unwatch = feed.watch(collection, () => void refresh())
       return () => {
         stopped = true
-        clearInterval(timer)
+        unwatch()
         refreshers.delete(refresh)
       }
     },

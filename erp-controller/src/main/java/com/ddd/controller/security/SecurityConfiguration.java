@@ -60,6 +60,8 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.POST, "/api/roles", "/api/permissions").hasAnyAuthority("ROLE_ADMIN", "roles:create")
                         .requestMatchers(HttpMethod.DELETE, "/api/roles/**", "/api/permissions/**").hasAnyAuthority("ROLE_ADMIN", "roles:delete")
                         .requestMatchers("/api/roles/**", "/api/permissions/**").hasAnyAuthority("ROLE_ADMIN", "roles:update")
+                        // WebSocket handshake carries no Authorization header; STOMP CONNECT is authenticated (StompAuthInterceptor).
+                        .requestMatchers("/ws", "/ws/**").permitAll()
                         .requestMatchers("/api/vldc/**").authenticated()
                         .requestMatchers("/actuator/**").permitAll()
                         .anyRequest().permitAll()

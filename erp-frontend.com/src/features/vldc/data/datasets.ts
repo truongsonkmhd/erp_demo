@@ -21,6 +21,7 @@ import type { AuditEvent } from "./audit.ts"
  * Every Firestore-backed business dataset: collection vldc_<collection>, its seed, and the engine
  * pages that show it (re-rendered in place when the data changes). A "shared" dataset reuses a collection
  * that other screens also own (Firestore name + localStorage key given explicitly; seeding only tops up).
+ * An "api" dataset is stored by the Spring backend (/api/vldc/<collection>, MySQL) instead of Firestore.
  */
 export const DATASETS = {
   inboxTasks: { collection: "inbox_tasks", seed: ex.inboxTasks, pages: ["action", "dashboard", "today"] },
@@ -66,16 +67,17 @@ export const DATASETS = {
   scienceTopics: { collection: "science_topics", seed: sc.scienceTopics, pages: ["research", "action"] },
   docAssignments: { collection: "doc_assignments", seed: da.docAssignments, pages: ["documents", "action", "dashboard"] },
   staffProfiles: { collection: "staff_profiles", seed: st.staffProfiles, pages: ["capability", "hr"] },
-  news: { collection: "news", seed: nw.news, pages: ["news", "dashboard"] },
+  news: { collection: "news", api: true, seed: nw.news, pages: ["news", "dashboard"] },
   debtRecords: { collection: "debt_records", seed: lg.debtRecords, pages: ["debts", "cashin", "cashout", "dashboard"] },
   cashEntries: { collection: "cash_entries", seed: lg.cashEntries, pages: ["cashin", "cashout", "debts", "dashboard", "finance", "acctreports"] },
   auditEvents: { collection: "audit_events", seed: (): AuditEvent[] => [], pages: ["audit"] },
 } as const
 
-/** Firestore collection and localStorage key of a dataset. */
-export function storageOf(key: DatasetKey): { firestore: string; local: string; shared: boolean } {
-  const def: { collection: string; shared?: { firestore: string; local: string } } = DATASETS[key]
-  return def.shared ? { ...def.shared, shared: true } : { firestore: `vldc_${def.collection}`, local: `vldc_${def.collection}_v1`, shared: false }
+/** Firestore collection and localStorage key of a dataset, and whether the backend API stores it. */
+export function storageOf(key: DatasetKey): { firestore: string; local: string; shared: boolean; api: boolean } {
+  const def: { collection: string; api?: boolean; shared?: { firestore: string; local: string } } = DATASETS[key]
+  const api = def.api === true
+  return def.shared ? { ...def.shared, shared: true, api } : { firestore: `vldc_${def.collection}`, local: `vldc_${def.collection}_v1`, shared: false, api }
 }
 
 export type DatasetKey = keyof typeof DATASETS

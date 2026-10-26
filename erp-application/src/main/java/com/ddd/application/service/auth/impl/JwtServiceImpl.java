@@ -2,7 +2,6 @@ package com.xxxx.ddd.application.service.auth.impl;
 
 import com.xxxx.ddd.application.service.auth.JwtService;
 import com.xxxx.ddd.domain.model.entity.InvalidatedToken;
-import com.xxxx.ddd.domain.model.entity.Permission;
 import com.xxxx.ddd.domain.model.entity.Token;
 import com.xxxx.ddd.domain.model.entity.User;
 import com.xxxx.ddd.domain.respository.InvalidatedTokenRepository;
@@ -136,14 +135,11 @@ public class JwtServiceImpl implements JwtService {
 
     private String buildToken(User user, boolean includeScope, long ttlSeconds) {
         Instant now = Instant.now();
+        // Roles only: permission codes are loaded from the DB on every request (JwtAuthenticationFilter), and
+        // putting them here made admin tokens exceed the 8 KB request-header limit of Tomcat and nginx.
         StringJoiner scope = new StringJoiner(" ");
         if (includeScope) {
             user.getRoles().forEach(role -> scope.add("ROLE_" + role.getCode().trim().toUpperCase()));
-            for (Permission permission : user.getEffectivePermissions()) {
-                if (permission.getCode() != null && !permission.getCode().isBlank()) {
-                    scope.add(permission.getCode());
-                }
-            }
         }
         return Jwts.builder()
                 .id(UUID.randomUUID().toString())

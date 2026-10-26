@@ -18,6 +18,11 @@ import java.util.Set;
 @Table(name = "tbl_user")
 public class User {
 
+    /** Self-registered account waiting for an admin to grant roles, chức vụ and đơn vị. */
+    public static final String REGISTRATION_PENDING = "PENDING";
+    public static final String REGISTRATION_APPROVED = "APPROVED";
+    public static final String REGISTRATION_REJECTED = "REJECTED";
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -64,6 +69,21 @@ public class User {
     @ManyToOne
     @JoinColumn(name = "department_id")
     private Department orgUnit;
+
+    /** Null for accounts created by an admin; PENDING / APPROVED / REJECTED for self-registered ones. */
+    @Column(name = "registration_status", length = 20)
+    private String registrationStatus;
+
+    /** Đơn vị the person said they work in when registering; only a hint for the admin who approves. */
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    @ManyToOne
+    @JoinColumn(name = "requested_department_id")
+    private Department requestedOrgUnit;
+
+    public boolean isPendingRegistration() {
+        return REGISTRATION_PENDING.equals(registrationStatus);
+    }
 
     private Boolean active = true;
 

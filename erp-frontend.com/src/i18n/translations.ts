@@ -143,6 +143,7 @@ const viTree = {
     inactiveUser: "Tài khoản đã bị khóa hoặc vô hiệu hóa",
     requiredFields: "Vui lòng nhập email và mật khẩu",
     genericError: "Không thể đăng nhập. Vui lòng thử lại.",
+    pendingApproval: "Tài khoản đang chờ quản trị viên duyệt. Bạn sẽ đăng nhập được sau khi được duyệt.",
   },
   dashboard: {
     overview: "Tổng quan",
@@ -668,6 +669,7 @@ const enTree: typeof viTree = {
     inactiveUser: "This account is inactive or disabled",
     requiredFields: "Email and password are required",
     genericError: "Unable to sign in. Please try again.",
+    pendingApproval: "This account is waiting for administrator approval. You can sign in once it is approved.",
   },
   dashboard: {
     overview: "Overview",
@@ -1193,6 +1195,7 @@ const zhTree: typeof viTree = {
     inactiveUser: "该账号已被锁定或停用",
     requiredFields: "请输入邮箱和密码",
     genericError: "无法登录，请重试。",
+    pendingApproval: "该账号正在等待管理员审核，审核通过后即可登录。",
   },
   dashboard: {
     overview: "总览",

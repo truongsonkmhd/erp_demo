@@ -13,15 +13,27 @@ public interface UserDomainService {
 
     User updateUser(Long id, User patch, java.util.List<String> roleCodes, String levelCode, String positionCode, Long orgUnitId);
 
+    /**
+     * Tự đăng ký: the account is created inactive, without any role, chức vụ or đơn vị, and waits for an admin.
+     * requestedOrgUnitId is only recorded as the đơn vị the person claims (may be null).
+     */
+    User register(User user, Long requestedOrgUnitId);
+
+    /** Grants roles, chức vụ and đơn vị to a pending registration and activates it. */
+    User approveRegistration(Long id, java.util.List<String> roleCodes, String levelCode, String positionCode, Long orgUnitId);
+
+    /** Rejects a pending registration; the email becomes free to register again. */
+    User rejectRegistration(Long id);
+
     User getById(Long id);
 
     User getByUsernameOrEmail(String login);
 
     User getByEmail(String email);
 
-    List<User> search(String keyword, int pageNo, int pageSize);
+    List<User> search(String keyword, String registrationStatus, int pageNo, int pageSize);
 
-    long countSearch(String keyword);
+    long countSearch(String keyword, String registrationStatus);
 
     void changePassword(Long id, String encodedPassword);
 

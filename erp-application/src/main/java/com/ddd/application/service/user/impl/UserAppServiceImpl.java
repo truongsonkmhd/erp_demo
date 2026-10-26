@@ -37,13 +37,13 @@ public class UserAppServiceImpl implements UserAppService {
 
     @Override
     @Transactional(readOnly = true)
-    public UserPageDTO search(String keyword, int pageNo, int pageSize) {
+    public UserPageDTO search(String keyword, String registrationStatus, int pageNo, int pageSize) {
         int page = pageNo <= 0 ? 1 : pageNo;
         int size = pageSize <= 0 ? 10 : pageSize;
-        List<UserDTO> users = userDomainService.search(keyword, page, size).stream()
+        List<UserDTO> users = userDomainService.search(keyword, registrationStatus, page, size).stream()
                 .map(AuthMapper::toUserDTO)
                 .toList();
-        long total = userDomainService.countSearch(keyword);
+        long total = userDomainService.countSearch(keyword, registrationStatus);
         UserPageDTO pageDTO = new UserPageDTO();
         pageDTO.setUsers(users);
         pageDTO.setPageNo(page);
@@ -138,6 +138,24 @@ public class UserAppServiceImpl implements UserAppService {
         userDomainService.getById(id);
         userDomainService.changePassword(id, passwordEncoder.encode(DEFAULT_PASSWORD));
         audit.record("reset-password", AuditAppService.USER, id, null);
+    }
+
+    @Override
+    @Transactional
+    public UserDTO approveRegistration(Long id, com.xxxx.ddd.application.model.command.ApproveRegistrationCommand command) {
+        requireAdminForAssignedRoles(command.getRoleCodes());
+        User approved = userDomainService.approveRegistration(id, command.getRoleCodes(), command.getLevelId(),
+                command.getPositionCode(), command.getOrgUnitId());
+        audit.record("approve-registration", AuditAppService.USER, id, describe(approved));
+        return AuthMapper.toUserDTO(approved);
+    }
+
+    @Override
+    @Transactional
+    public void rejectRegistration(Long id) {
+        String email = userDomainService.getById(id).getEmail();
+        userDomainService.rejectRegistration(id);
+        audit.record("reject-registration", AuditAppService.USER, id, "email=" + email);
     }
 
     /** Access-relevant state of a user: roles, chức vụ, đơn vị and whether the account is active. */

@@ -1,6 +1,6 @@
 import { isRoleWithoutLevels } from "@/constants/roles"
 import { apiRequest } from "@/lib/api"
-import { EmployeeAccount, EmployeeAccountInput } from "@/types/auth"
+import { EmployeeAccount, EmployeeAccountInput, RegistrationStatus } from "@/types/auth"
 
 type BackendUser = {
   id: number
@@ -14,6 +14,11 @@ type BackendUser = {
   levelId: string
   baseSalary?: number
   active: boolean
+  registrationStatus?: RegistrationStatus | null
+  requestedOrgUnitId?: number | null
+  requestedOrgUnitName?: string | null
+  positionCode?: string | null
+  orgUnitId?: number | null
   createdAt: string
   updatedAt: string
 }
@@ -38,6 +43,11 @@ function mapUser(user: BackendUser): EmployeeAccount {
     levelId: user.levelId,
     baseSalary: user.baseSalary == null ? undefined : Number(user.baseSalary),
     active: Boolean(user.active),
+    registrationStatus: user.registrationStatus ?? null,
+    requestedOrgUnitId: user.requestedOrgUnitId ?? null,
+    requestedOrgUnitName: user.requestedOrgUnitName ?? null,
+    positionCode: user.positionCode ?? null,
+    orgUnitId: user.orgUnitId ?? null,
     createdAt: user.createdAt || "",
     updatedAt: user.updatedAt || "",
   }
@@ -107,4 +117,28 @@ export async function updateEmployee(id: string, input: Partial<EmployeeAccountI
 
 export async function deleteEmployee(id: string): Promise<void> {
   await apiRequest(`/api/users/${id}`, { method: "DELETE" })
+}
+
+export type ApproveRegistrationInput = {
+  roleCodes: string[]
+  levelId?: string
+  positionCode?: string
+  /** Undefined keeps the đơn vị the person requested. */
+  orgUnitId?: number
+}
+
+/** Grants roles, chức vụ and đơn vị to a self-registered account and activates it. */
+export async function approveRegistration(id: string, input: ApproveRegistrationInput): Promise<EmployeeAccount> {
+  const approved = await apiRequest<BackendUser>(`/api/users/${id}/approve`, { method: "POST", body: input })
+  return mapUser(approved)
+}
+
+export async function rejectRegistration(id: string): Promise<void> {
+  await apiRequest(`/api/users/${id}/reject`, { method: "POST" })
+}
+
+export type Position = { id: number; code: string; name: string; level?: number; managesUnit?: boolean }
+
+export function getPositions(): Promise<Position[]> {
+  return apiRequest<Position[]>("/api/org/positions")
 }

@@ -117,6 +117,7 @@ const App = () => (
 
         <Route element={<PublicOnlyRoute />}>
           <Route path="/auth" element={<AuthScreen />} />
+          <Route path="/register" element={<AuthScreen mode="register" />} />
         </Route>
 
         <Route element={<ProtectedRoute />}>

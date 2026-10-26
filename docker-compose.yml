@@ -1,5 +1,5 @@
 # Full stack: MySQL + backend + frontend. Values come from .env next to this file (see .env.example).
-# Ports are bound to 127.0.0.1; the host nginx proxies to them.
+# Ports bind to 127.0.0.1 by default (the host nginx proxies to them); set *_BIND=0.0.0.0 in .env to open one to the LAN.
 name: erp-demo
 
 services:
@@ -18,7 +18,7 @@ services:
       - ./environment/data/erp_db_data:/var/lib/mysql
       - ./environment/mysql/init:/docker-entrypoint-initdb.d:ro
     ports:
-      - "127.0.0.1:${MYSQL_PORT:-3319}:3306"
+      - "${MYSQL_BIND:-127.0.0.1}:${MYSQL_PORT:-3319}:3306"
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
       interval: 10s
@@ -39,7 +39,7 @@ services:
       MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       JWT_BASE64_SECRET: ${JWT_BASE64_SECRET:?set JWT_BASE64_SECRET in .env}
     ports:
-      - "127.0.0.1:${BACKEND_PORT:-11124}:1122"
+      - "${BACKEND_BIND:-127.0.0.1}:${BACKEND_PORT:-11124}:1122"
 
   frontend:
     build: ./erp-frontend.com
@@ -49,4 +49,4 @@ services:
     depends_on:
       - backend
     ports:
-      - "127.0.0.1:${FRONTEND_PORT:-18088}:80"
+      - "${FRONTEND_BIND:-127.0.0.1}:${FRONTEND_PORT:-18088}:80"

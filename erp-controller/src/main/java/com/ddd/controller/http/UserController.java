@@ -3,8 +3,6 @@ package com.xxxx.ddd.controller.http;
 import com.xxxx.ddd.application.model.UserDTO;
 import com.xxxx.ddd.application.model.UserPageDTO;
 import com.xxxx.ddd.application.service.user.UserAppService;
-import com.xxxx.ddd.application.model.command.ApproveRegistrationCommand;
-import com.xxxx.ddd.controller.dto.ApproveRegistrationRequest;
 import com.xxxx.ddd.controller.dto.ChangePasswordRequest;
 import com.xxxx.ddd.controller.dto.CreateUserRequest;
 import com.xxxx.ddd.controller.dto.UpdateUserRequest;
@@ -28,11 +26,10 @@ public class UserController {
     @GetMapping
     public ResultMessage<UserPageDTO> search(
             @RequestParam(required = false) String keyword,
-            @RequestParam(required = false) String registrationStatus,
             @RequestParam(defaultValue = "1") int pageNo,
             @RequestParam(defaultValue = "10") int pageSize) {
         try {
-            return ResultUtil.data(userAppService.search(keyword, registrationStatus, pageNo, pageSize));
+            return ResultUtil.data(userAppService.search(keyword, pageNo, pageSize));
         } catch (Exception e) {
             log.error("Search users error", e);
             return ResultUtil.error(500, "Failed to search users");
@@ -106,41 +103,6 @@ public class UserController {
         } catch (Exception e) {
             log.error("Reset password error", e);
             return ResultUtil.error(500, "Failed to reset password");
-        }
-    }
-
-    /** Grants roles, chức vụ and đơn vị to a self-registered account and activates it (users:update). */
-    @PostMapping("/{id}/approve")
-    public ResultMessage<UserDTO> approve(@PathVariable Long id, @Valid @RequestBody ApproveRegistrationRequest request) {
-        try {
-            ApproveRegistrationCommand command = new ApproveRegistrationCommand();
-            command.setRoleCodes(request.getRoleCodes());
-            command.setLevelId(request.getLevelId());
-            command.setPositionCode(request.getPositionCode());
-            command.setOrgUnitId(request.getOrgUnitId());
-            return ResultUtil.data(userAppService.approveRegistration(id, command));
-        } catch (IllegalArgumentException e) {
-            return ResultUtil.error(400, e.getMessage());
-        } catch (AccessDeniedException e) {
-            throw e;
-        } catch (Exception e) {
-            log.error("Approve registration error", e);
-            return ResultUtil.error(500, "Failed to approve registration");
-        }
-    }
-
-    @PostMapping("/{id}/reject")
-    public ResultMessage<Long> reject(@PathVariable Long id) {
-        try {
-            userAppService.rejectRegistration(id);
-            return ResultUtil.data(id);
-        } catch (IllegalArgumentException e) {
-            return ResultUtil.error(400, e.getMessage());
-        } catch (AccessDeniedException e) {
-            throw e;
-        } catch (Exception e) {
-            log.error("Reject registration error", e);
-            return ResultUtil.error(500, "Failed to reject registration");
         }
     }
 

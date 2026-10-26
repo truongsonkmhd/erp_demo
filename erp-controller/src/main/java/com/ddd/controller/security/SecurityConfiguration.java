@@ -47,9 +47,7 @@ public class SecurityConfiguration {
                                 "/api/authenticate",
                                 "/api/authenticate/refresh-token",
                                 "/api/authenticate/login-with-token",
-                                "/api/authenticate/logout",
-                                "/api/authenticate/register",
-                                "/api/authenticate/register/units"
+                                "/api/authenticate/logout"
                         ).permitAll()
                         .requestMatchers("/error").permitAll()
                         // Directory and positions are for every signed-in user; assignees carry @PreAuthorize plus a scope check.

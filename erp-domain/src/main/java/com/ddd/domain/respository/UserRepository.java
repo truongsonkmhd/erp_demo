@@ -24,10 +24,9 @@ public interface UserRepository {
 
     boolean existsByEmailAndIdNot(String email, Long id);
 
-    /** registrationStatus null or blank = every account. */
-    List<User> search(String keyword, String registrationStatus, int offset, int limit);
+    List<User> search(String keyword, int offset, int limit);
 
-    long countSearch(String keyword, String registrationStatus);
+    long countSearch(String keyword);
 
     /** Active, not deleted users with roles, position and unit loaded. */
     List<User> findAllActive();

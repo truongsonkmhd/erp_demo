@@ -15,9 +15,10 @@ export function findExperts(staff: StaffSkill[], skill: SkillKey, minLevel: numb
     .sort((a, b) => b[skill] - a[skill] || Number(a.onField) - Number(b.onField) || a.name.localeCompare(b.name))
 }
 
-/** The 7 days of the week `offset` weeks from today ("dd/mm/yyyy"), plus a label "Tuần dd/mm – dd/mm/yyyy". */
+/** Monday–Sunday of the week `offset` weeks from today ("dd/mm/yyyy"), plus a label "Tuần dd/mm – dd/mm/yyyy". */
 export function calendarWeek(today: string, offset: number): { days: string[]; label: string } {
-  const days = Array.from({ length: 7 }, (_, i) => vnDate(addDays(today, offset * 7 + i)))
+  const sinceMonday = (new Date(`${today}T00:00:00Z`).getUTCDay() + 6) % 7
+  const days = Array.from({ length: 7 }, (_, i) => vnDate(addDays(today, offset * 7 - sinceMonday + i)))
   return { days, label: `Tuần ${days[0].slice(0, 5)} – ${days[6]}` }
 }
 

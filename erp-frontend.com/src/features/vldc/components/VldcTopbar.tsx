@@ -1,4 +1,4 @@
-import { Bell, CalendarDays, ChevronRight, Inbox, Menu, Search, Sparkles, type LucideIcon } from "lucide-react"
+import { Bell, ChevronRight, Menu, Search, type LucideIcon } from "lucide-react"
 import { getPageMeta, getRoles, getShellBadges } from "@/features/vldc/legacy/engine"
 import { vldcActions } from "@/features/vldc/store"
 
@@ -20,10 +20,7 @@ export function VldcTopbar({ role, roles, page, group, onRoleChange, onOpenMenu,
   // Recomputed on every render; the store bumps badgeSeq whenever the legacy data changes.
   const badges = getShellBadges()
   const shortcuts: Shortcut[] = [
-    { page: "assistant", label: "Trợ lý AI", icon: Sparkles },
     { page: "notifications", label: "Thông báo", icon: Bell, badge: badges.notices },
-    { page: "calendar", label: "Lịch hôm nay", icon: CalendarDays, badge: badges.events },
-    { page: "action", label: "Việc của tôi", icon: Inbox, badge: badges.tasks },
   ]
 
   return (
@@ -57,7 +54,7 @@ export function VldcTopbar({ role, roles, page, group, onRoleChange, onOpenMenu,
           <button
             key={target}
             type="button"
-            className={`vx-icon-btn vx-action${page === target ? " is-active" : ""}${target === "assistant" ? " is-ai" : ""}`}
+            className={`vx-icon-btn vx-action${page === target ? " is-active" : ""}`}
             onClick={() => vldcActions.show(target)}
             title={badge ? `${label} (${badge.count})` : label}
             aria-label={badge ? `${label}, ${badge.count} mục` : label}

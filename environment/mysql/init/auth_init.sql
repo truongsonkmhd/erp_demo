@@ -80,11 +80,15 @@ CREATE TABLE IF NOT EXISTS tbl_user (
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   position_id BIGINT NULL,
   department_id BIGINT NULL,
+  registration_status VARCHAR(20) NULL,
+  requested_department_id BIGINT NULL,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT chk_user_account_type CHECK (account_type IN (1,2,3)),
   CONSTRAINT fk_user_position FOREIGN KEY (position_id) REFERENCES tbl_position(id),
   CONSTRAINT fk_user_department FOREIGN KEY (department_id) REFERENCES tbl_department(id),
-  INDEX idx_user_department (department_id)
+  CONSTRAINT fk_user_requested_department FOREIGN KEY (requested_department_id) REFERENCES tbl_department(id),
+  INDEX idx_user_department (department_id),
+  INDEX idx_user_registration_status (registration_status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS tbl_user_role (

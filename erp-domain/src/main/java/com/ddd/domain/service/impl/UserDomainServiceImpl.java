@@ -120,6 +120,9 @@ public class UserDomainServiceImpl implements UserDomainService {
         if (patch.getBaseSalary() != null) {
             user.setBaseSalary(patch.getBaseSalary());
         }
+        if (Boolean.TRUE.equals(patch.getActive()) && user.isPendingRegistration()) {
+            throw new IllegalArgumentException("Account is waiting for approval; approve it instead of activating it");
+        }
         if (patch.getActive() != null) {
             if (!patch.getActive() && user.getRoles().stream().anyMatch(Role::isAdmin)) {
                 Role admin = user.getRoles().stream().filter(Role::isAdmin).findFirst().orElseThrow();
@@ -148,6 +151,79 @@ public class UserDomainServiceImpl implements UserDomainService {
     }
 
     @Override
+    @Transactional
+    public User register(User user, Long requestedOrgUnitId) {
+        if (user.getFullName() == null || user.getFullName().isBlank()) {
+            throw new IllegalArgumentException("Full name is required");
+        }
+        if (user.getEmail() == null || user.getEmail().isBlank()) {
+            throw new IllegalArgumentException("Email is required");
+        }
+        if (user.getPassword() == null || user.getPassword().isBlank()) {
+            throw new IllegalArgumentException("Password is required");
+        }
+        String email = user.getEmail().trim();
+        if (userRepository.existsByEmail(email)) {
+            throw new IllegalArgumentException("Email already exists");
+        }
+        user.setEmail(email);
+        user.setFullName(user.getFullName().trim());
+        user.setUsername(generateUniqueUsername(email));
+        // Nothing the client sends decides access: no role, no chức vụ, no đơn vị until an admin approves.
+        user.setRoles(new java.util.HashSet<>());
+        user.setPosition(null);
+        user.setOrgUnit(null);
+        user.setLevelCode(null);
+        user.setAccountType(2);
+        user.setRequestedOrgUnit(requestedOrgUnitId == null ? null : departmentRepository.findById(requestedOrgUnitId)
+                .orElseThrow(() -> new IllegalArgumentException("Department not found: " + requestedOrgUnitId)));
+        user.setRegistrationStatus(User.REGISTRATION_PENDING);
+        user.setActive(false);
+        user.setIsDeleted(false);
+        LocalDateTime now = LocalDateTime.now();
+        user.setCreatedAt(now);
+        user.setUpdatedAt(now);
+        User saved = userRepository.save(user);
+        log.info("Registered user pending approval: {} ({})", saved.getUsername(), saved.getEmail());
+        return saved;
+    }
+
+    @Override
+    @Transactional
+    public User approveRegistration(Long id, List<String> roleCodes, String levelCode, String positionCode, Long orgUnitId) {
+        User user = requirePending(id);
+        if (roleCodes != null && roleCodes.stream().anyMatch(code -> "admin".equalsIgnoreCase(code))) {
+            throw new IllegalArgumentException("A self-registered account cannot be approved as admin");
+        }
+        assignRoleAndLevel(user, roleCodes, levelCode);
+        Long unitId = orgUnitId != null ? orgUnitId : user.getRequestedOrgUnit() == null ? null : user.getRequestedOrgUnit().getId();
+        assignOrg(user, positionCode, unitId);
+        user.setRegistrationStatus(User.REGISTRATION_APPROVED);
+        user.setActive(true);
+        user.setUpdatedAt(LocalDateTime.now());
+        userRepository.save(user);
+        return userRepository.findByIdWithAuth(id).orElse(user);
+    }
+
+    @Override
+    @Transactional
+    public User rejectRegistration(Long id) {
+        User user = requirePending(id);
+        user.setRegistrationStatus(User.REGISTRATION_REJECTED);
+        userRepository.save(user);
+        deactivate(id);
+        return user;
+    }
+
+    private User requirePending(Long id) {
+        User user = getById(id);
+        if (!user.isPendingRegistration()) {
+            throw new IllegalArgumentException("Account is not waiting for approval");
+        }
+        return user;
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public User getById(Long id) {
         return userRepository.findByIdWithAuth(id)
@@ -170,16 +246,16 @@ public class UserDomainServiceImpl implements UserDomainService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<User> search(String keyword, int pageNo, int pageSize) {
+    public List<User> search(String keyword, String registrationStatus, int pageNo, int pageSize) {
         int page = Math.max(pageNo, 1);
         int size = pageSize <= 0 ? 10 : pageSize;
         int offset = (page - 1) * size;
-        return userRepository.search(keyword, offset, size);
+        return userRepository.search(keyword, registrationStatus, offset, size);
     }
 
     @Override
-    public long countSearch(String keyword) {
-        return userRepository.countSearch(keyword);
+    public long countSearch(String keyword, String registrationStatus) {
+        return userRepository.countSearch(keyword, registrationStatus);
     }
 
     @Override

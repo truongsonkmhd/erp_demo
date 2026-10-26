@@ -86,6 +86,12 @@ public class AuthMapper {
             dto.setOrgUnitCode(unit.getCode());
             dto.setOrgUnitName(unit.getName());
         }
+        dto.setRegistrationStatus(user.getRegistrationStatus());
+        Department requested = user.getRequestedOrgUnit();
+        if (requested != null) {
+            dto.setRequestedOrgUnitId(requested.getId());
+            dto.setRequestedOrgUnitName(requested.getName());
+        }
     }
 
     public static PositionDTO toPositionDTO(Position position) {

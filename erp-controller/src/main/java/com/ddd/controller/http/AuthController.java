@@ -2,10 +2,14 @@ package com.xxxx.ddd.controller.http;
 
 import com.xxxx.ddd.application.model.AuthenticationDTO;
 import com.xxxx.ddd.application.model.CurrentUserDTO;
+import com.xxxx.ddd.application.model.OrgUnitDTO;
+import com.xxxx.ddd.application.model.UserDTO;
+import com.xxxx.ddd.application.model.command.RegisterCommand;
 import com.xxxx.ddd.application.service.auth.AuthAppService;
 import com.xxxx.ddd.controller.dto.AuthenticateRequest;
 import com.xxxx.ddd.controller.dto.LogoutRequest;
 import com.xxxx.ddd.controller.dto.RefreshTokenRequest;
+import com.xxxx.ddd.controller.dto.RegisterRequest;
 import com.xxxx.ddd.controller.mapper.AuthControllerMapper;
 import com.xxxx.ddd.controller.model.enums.ResultUtil;
 import com.xxxx.ddd.controller.model.vo.ResultMessage;
@@ -34,6 +38,31 @@ public class AuthController {
             log.error("Login error", e);
             return ResultUtil.error(500, "Failed to authenticate");
         }
+    }
+
+    /** Public: creates an account waiting for admin approval (no role, chức vụ or đơn vị until approved). */
+    @PostMapping("/register")
+    public ResultMessage<UserDTO> register(@Valid @RequestBody RegisterRequest request) {
+        try {
+            RegisterCommand command = new RegisterCommand();
+            command.setFullName(request.getFullName());
+            command.setEmail(request.getEmail());
+            command.setPhone(request.getPhone());
+            command.setPassword(request.getPassword());
+            command.setRequestedOrgUnitId(request.getRequestedOrgUnitId());
+            return ResultUtil.data(authAppService.register(command));
+        } catch (IllegalArgumentException e) {
+            return ResultUtil.error(400, e.getMessage());
+        } catch (Exception e) {
+            log.error("Register error", e);
+            return ResultUtil.error(500, "Failed to register");
+        }
+    }
+
+    /** Public: units offered on the registration form. */
+    @GetMapping("/register/units")
+    public ResultMessage<java.util.List<OrgUnitDTO>> registrationUnits() {
+        return ResultUtil.data(authAppService.registrationUnits());
     }
 
     @PostMapping("/refresh-token")

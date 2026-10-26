@@ -32,11 +32,11 @@ public interface UserJPAMapper extends JpaRepository<User, Long> {
     @Query("SELECT CASE WHEN COUNT(u) > 0 THEN true ELSE false END FROM User u WHERE LOWER(u.email) = LOWER(:email) AND u.id <> :id AND (u.isDeleted = false OR u.isDeleted IS NULL)")
     boolean existsByEmailAndIdNot(@Param("email") String email, @Param("id") Long id);
 
-    @Query("SELECT u FROM User u WHERE (u.isDeleted = false OR u.isDeleted IS NULL) AND (:keyword IS NULL OR :keyword = '' OR LOWER(u.fullName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR LOWER(u.username) LIKE LOWER(CONCAT('%', :keyword, '%')) OR LOWER(u.email) LIKE LOWER(CONCAT('%', :keyword, '%'))) ORDER BY u.updatedAt DESC")
-    List<User> search(@Param("keyword") String keyword, Pageable pageable);
+    @Query("SELECT u FROM User u WHERE (u.isDeleted = false OR u.isDeleted IS NULL) AND (:keyword IS NULL OR :keyword = '' OR LOWER(u.fullName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR LOWER(u.username) LIKE LOWER(CONCAT('%', :keyword, '%')) OR LOWER(u.email) LIKE LOWER(CONCAT('%', :keyword, '%'))) AND (:status = '' OR u.registrationStatus = :status) ORDER BY u.updatedAt DESC")
+    List<User> search(@Param("keyword") String keyword, @Param("status") String status, Pageable pageable);
 
-    @Query("SELECT COUNT(u) FROM User u WHERE (u.isDeleted = false OR u.isDeleted IS NULL) AND (:keyword IS NULL OR :keyword = '' OR LOWER(u.fullName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR LOWER(u.username) LIKE LOWER(CONCAT('%', :keyword, '%')) OR LOWER(u.email) LIKE LOWER(CONCAT('%', :keyword, '%')))")
-    long countSearch(@Param("keyword") String keyword);
+    @Query("SELECT COUNT(u) FROM User u WHERE (u.isDeleted = false OR u.isDeleted IS NULL) AND (:keyword IS NULL OR :keyword = '' OR LOWER(u.fullName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR LOWER(u.username) LIKE LOWER(CONCAT('%', :keyword, '%')) OR LOWER(u.email) LIKE LOWER(CONCAT('%', :keyword, '%'))) AND (:status = '' OR u.registrationStatus = :status)")
+    long countSearch(@Param("keyword") String keyword, @Param("status") String status);
 
     @Query("SELECT DISTINCT u FROM User u LEFT JOIN FETCH u.roles LEFT JOIN FETCH u.position LEFT JOIN FETCH u.orgUnit WHERE u.active = true AND (u.isDeleted = false OR u.isDeleted IS NULL) ORDER BY u.fullName")
     List<User> findAllActive();

@@ -76,16 +76,17 @@ public class UserRepositoryImpl implements UserRepository {
     }
 
     @Override
-    public List<User> search(String keyword, int offset, int limit) {
+    public List<User> search(String keyword, String registrationStatus, int offset, int limit) {
         int page = offset / Math.max(limit, 1);
-        List<User> users = userJPAMapper.search(keyword == null ? "" : keyword, PageRequest.of(page, limit));
+        List<User> users = userJPAMapper.search(keyword == null ? "" : keyword,
+                registrationStatus == null ? "" : registrationStatus, PageRequest.of(page, limit));
         users.forEach(this::initializeAuth);
         return users;
     }
 
     @Override
-    public long countSearch(String keyword) {
-        return userJPAMapper.countSearch(keyword == null ? "" : keyword);
+    public long countSearch(String keyword, String registrationStatus) {
+        return userJPAMapper.countSearch(keyword == null ? "" : keyword, registrationStatus == null ? "" : registrationStatus);
     }
 
     @Override

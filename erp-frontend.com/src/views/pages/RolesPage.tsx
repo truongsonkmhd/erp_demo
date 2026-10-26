@@ -21,7 +21,17 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { slugifyRoleCode, FIXED_ROLE_LEVELS, isAdminRole, isRoleWithoutLevels } from "@/constants/roles"
 import { useEmployees } from "@/hooks/useEmployees"
 import { useRoles } from "@/hooks/useRoles"
-import { addEmployee, deleteEmployee, resetEmployeePassword, updateEmployee, DEFAULT_EMPLOYEE_PASSWORD } from "@/services/EmployeeService"
+import {
+  addEmployee,
+  approveRegistration,
+  deleteEmployee,
+  getPositions,
+  rejectRegistration,
+  resetEmployeePassword,
+  updateEmployee,
+  DEFAULT_EMPLOYEE_PASSWORD,
+  type Position,
+} from "@/services/EmployeeService"
 import { addRole, deleteRole, getPermissions, updateRole } from "@/services/RoleService"
 import { addDepartment, deleteDepartment, getDepartments, updateDepartment, Department } from "@/services/DepartmentService"
 import { EmployeeAccount, EmployeeAccountInput, RoleDefinition, RoleDefinitionInput, RolePermission } from "@/types/auth"
@@ -75,6 +85,10 @@ export default function RolesPage({ area = "full" }: { area?: ManagementArea }) 
   const [departmentDialogOpen, setDepartmentDialogOpen] = useState(false)
   const [editingDepartment, setEditingDepartment] = useState<Department | null>(null)
   const [departmentForm, setDepartmentForm] = useState({ code: "", name: "", description: "" })
+  const [positions, setPositions] = useState<Position[]>([])
+  const [approveTarget, setApproveTarget] = useState<EmployeeAccount | null>(null)
+  const [approveForm, setApproveForm] = useState({ roleCodes: [] as string[], levelId: "", positionCode: "", orgUnitId: "" })
+  const [rejectTarget, setRejectTarget] = useState<EmployeeAccount | null>(null)
 
   const refreshDepartments = async () => setDepartments(await getDepartments())
 
@@ -82,6 +96,11 @@ export default function RolesPage({ area = "full" }: { area?: ManagementArea }) 
     if (!can(currentUser, "roles:access") && !can(currentUser, "users:access")) return
     void refreshDepartments().catch(() => appToast.error("Không thể tải phòng ban"))
   }, [currentUser])
+
+  useEffect(() => {
+    if (!canManageUsers) return
+    void getPositions().then(setPositions).catch(() => setPositions([]))
+  }, [canManageUsers])
 
   const uniqueRoles = useMemo(() => {
     const seen = new Set<string>()
@@ -244,6 +263,69 @@ export default function RolesPage({ area = "full" }: { area?: ManagementArea }) 
       appToast.error("Không thể xóa người dùng")
     } finally {
       setDeleteTarget(null)
+    }
+  }
+
+  const pendingUsers = employees.filter((item) => item.registrationStatus === "PENDING")
+  const accountUsers = employees.filter((item) => item.registrationStatus !== "PENDING")
+  const approveRole = findRole(approveForm.roleCodes[0] || "")
+  const approveLevels = isRoleWithoutLevels(approveRole) ? [] : approveRole?.levels ?? []
+
+  const openApprove = (employee: EmployeeAccount) => {
+    setApproveTarget(employee)
+    setApproveForm({
+      roleCodes: [],
+      levelId: "",
+      positionCode: "",
+      orgUnitId: employee.requestedOrgUnitId ? String(employee.requestedOrgUnitId) : "",
+    })
+  }
+
+  const toggleApproveRole = (code: string, checked: boolean) => {
+    setApproveForm((current) => {
+      const roleCodes = checked ? [...new Set([...current.roleCodes, code])] : current.roleCodes.filter((item) => item !== code)
+      const primary = findRole(roleCodes[0] || "")
+      const levelId = isRoleWithoutLevels(primary) ? "" : primary?.levels.some((level) => level.id === current.levelId) ? current.levelId : primary?.levels[0]?.id || ""
+      return { ...current, roleCodes, levelId }
+    })
+  }
+
+  const submitApprove = async () => {
+    if (!approveTarget) return
+    if (!approveForm.roleCodes.length) {
+      appToast.error("Thiếu vai trò", "Chọn ít nhất một vai trò cho tài khoản.")
+      return
+    }
+    setIsSaving(true)
+    try {
+      await approveRegistration(approveTarget.id, {
+        roleCodes: approveForm.roleCodes,
+        levelId: approveLevels.length ? approveForm.levelId || undefined : undefined,
+        positionCode: approveForm.positionCode || undefined,
+        orgUnitId: approveForm.orgUnitId ? Number(approveForm.orgUnitId) : undefined,
+      })
+      await refetchEmployees({ silent: true })
+      appToast.success("Đã duyệt tài khoản", `${approveTarget.fullName} có thể đăng nhập bằng mật khẩu đã đăng ký.`)
+      setApproveTarget(null)
+    } catch (error) {
+      console.error(error)
+      appToast.error("Không thể duyệt tài khoản", error instanceof Error ? error.message : undefined)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const submitReject = async () => {
+    if (!rejectTarget) return
+    try {
+      await rejectRegistration(rejectTarget.id)
+      await refetchEmployees({ silent: true })
+      appToast.success("Đã từ chối đăng ký")
+    } catch (error) {
+      console.error(error)
+      appToast.error("Không thể từ chối đăng ký")
+    } finally {
+      setRejectTarget(null)
     }
   }
 
@@ -490,9 +572,39 @@ export default function RolesPage({ area = "full" }: { area?: ManagementArea }) 
         </TabsList>
 
         {area === "full" && (
-        <TabsContent value="users" className="mt-5">
+        <TabsContent value="users" className="mt-5 space-y-5">
+          {pendingUsers.length > 0 && (
+            <Card className="border-amber-200 bg-amber-50/40">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Đăng ký chờ duyệt ({pendingUsers.length})</CardTitle>
+                <p className="text-sm text-muted-foreground">Tài khoản tự đăng ký chưa có vai trò và chưa đăng nhập được cho đến khi được duyệt.</p>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {pendingUsers.map((item) => (
+                  <div key={item.id} className="flex flex-col gap-3 rounded-lg border bg-background p-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="font-medium">{item.fullName}</p>
+                      <p className="break-all text-sm text-muted-foreground">
+                        {item.email}{item.phone ? ` · ${item.phone}` : ""}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Đơn vị đề nghị: {item.requestedOrgUnitName || "Không chọn"}
+                        {item.createdAt ? ` · Đăng ký lúc ${new Date(item.createdAt).toLocaleString("vi-VN")}` : ""}
+                      </p>
+                    </div>
+                    {can(currentUser, "users:update") && (
+                      <div className="flex shrink-0 gap-2">
+                        <Button size="sm" className="h-8" onClick={() => openApprove(item)}>Duyệt</Button>
+                        <Button size="sm" variant="ghost" className="h-8 text-destructive" onClick={() => setRejectTarget(item)}>Từ chối</Button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
           <PaginatedDataTable
-            data={employees}
+            data={accountUsers}
             columns={userColumns}
             rowKey={(item) => item.id}
             emptyMessage="Chưa có người dùng. Hãy tạo tài khoản và gán vai trò."
@@ -838,6 +950,86 @@ export default function RolesPage({ area = "full" }: { area?: ManagementArea }) 
           <DialogFooter><Button variant="outline" onClick={() => setDepartmentDialogOpen(false)}>Hủy</Button><Button disabled={isSaving} onClick={() => void saveDepartment()}>Lưu</Button></DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={Boolean(approveTarget)} onOpenChange={(open) => !open && setApproveTarget(null)}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Duyệt đăng ký</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="rounded-lg border bg-slate-50 p-3 text-sm">
+              <p className="font-medium">{approveTarget?.fullName}</p>
+              <p className="break-all text-muted-foreground">{approveTarget?.email}</p>
+              <p className="text-xs text-muted-foreground">Đơn vị đề nghị: {approveTarget?.requestedOrgUnitName || "Không chọn"}</p>
+            </div>
+            <div>
+              <Label className="mb-2 block">Vai trò <span className="text-destructive">*</span></Label>
+              <div className="grid grid-cols-1 gap-2 rounded-lg border p-3 sm:grid-cols-2">
+                {visibleRoles.map((role) => (
+                  <label key={role.id} className="flex items-center gap-2 text-sm">
+                    <Checkbox checked={approveForm.roleCodes.includes(role.code)} onCheckedChange={(checked) => toggleApproveRole(role.code, Boolean(checked))} />
+                    {role.name}
+                  </label>
+                ))}
+              </div>
+              <p className="mt-1 text-xs text-slate-500">Tài khoản tự đăng ký không được duyệt làm Admin.</p>
+            </div>
+            {approveLevels.length > 0 && (
+              <SelectField
+                label="Cấp bậc"
+                placeholder="Chọn cấp bậc"
+                options={approveLevels.map((level, index) => ({ value: level.id || `level-${index}`, label: level.name }))}
+                value={approveForm.levelId}
+                onValueChange={(value) => setApproveForm((current) => ({ ...current, levelId: value }))}
+                triggerClassName="bg-white"
+              />
+            )}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <Label htmlFor="approve-position" className="mb-1.5 block">Chức vụ</Label>
+                <select
+                  id="approve-position"
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={approveForm.positionCode}
+                  onChange={(event) => setApproveForm((current) => ({ ...current, positionCode: event.target.value }))}
+                >
+                  <option value="">Chưa gán</option>
+                  {positions.map((position) => <option key={position.id} value={position.code}>{position.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <Label htmlFor="approve-unit" className="mb-1.5 block">Đơn vị</Label>
+                <select
+                  id="approve-unit"
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={approveForm.orgUnitId}
+                  onChange={(event) => setApproveForm((current) => ({ ...current, orgUnitId: event.target.value }))}
+                >
+                  <option value="">Chưa gán</option>
+                  {departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
+                </select>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setApproveTarget(null)}>Hủy</Button>
+            <ActionButton onClick={() => void submitApprove()} disabled={isSaving}>
+              {isSaving ? "Đang duyệt..." : "Duyệt và kích hoạt"}
+            </ActionButton>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmationDialog
+        open={Boolean(rejectTarget)}
+        title="Từ chối đăng ký"
+        description={`Từ chối đăng ký của "${rejectTarget?.fullName || ""}" (${rejectTarget?.email || ""})? Email này có thể đăng ký lại sau.`}
+        confirmLabel="Từ chối"
+        cancelLabel="Hủy"
+        variant="destructive"
+        onOpenChange={(open) => !open && setRejectTarget(null)}
+        onConfirm={() => void submitReject()}
+      />
 
       <ConfirmationDialog
         open={Boolean(resetTarget)}

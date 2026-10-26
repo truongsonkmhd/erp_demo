@@ -21,6 +21,10 @@ public class UserDTO {
     private Long orgUnitId;
     private String orgUnitCode;
     private String orgUnitName;
+    /** Null for admin-created accounts; PENDING / APPROVED / REJECTED for self-registered ones. */
+    private String registrationStatus;
+    private Long requestedOrgUnitId;
+    private String requestedOrgUnitName;
     private BigDecimal baseSalary;
     private Boolean active;
     private String createdAt;

@@ -6,7 +6,8 @@ import type { WorkItem, WorkStatus } from "./types.ts"
  * another stands for, quick filters and swimlanes. Pure: the rules stay in rules.ts, the HTML in boardViews.ts.
  */
 
-export type Column = { key: string; title: string; status: WorkStatus; collapsed?: boolean }
+/** `also`: older statuses shown in this column (records from before the flow was simplified). */
+export type Column = { key: string; title: string; status: WorkStatus; also?: WorkStatus[]; collapsed?: boolean }
 
 export const PROJECT_COLUMNS: Column[] = [
   { key: "new", title: "Mới giao", status: "Mới giao" },
@@ -15,13 +16,12 @@ export const PROJECT_COLUMNS: Column[] = [
   { key: "done", title: "Hoàn thành", status: "Hoàn thành" },
 ]
 
+/** Nhiệm vụ: Chờ duyệt, Đang thực hiện, Hoàn thành, Từ chối. */
 export const PROPOSAL_COLUMNS: Column[] = [
-  { key: "proposed", title: "Chờ duyệt đề xuất", status: "Chờ duyệt đề xuất" },
-  { key: "returned", title: "Bị trả lại", status: "Bị trả lại" },
-  { key: "doing", title: "Đang thực hiện", status: "Đang thực hiện" },
-  { key: "review", title: "Chờ nghiệm thu", status: "Chờ duyệt" },
+  { key: "proposed", title: "Chờ duyệt", status: "Chờ duyệt đề xuất", also: ["Bị trả lại"] },
+  { key: "doing", title: "Đang thực hiện", status: "Đang thực hiện", also: ["Chờ duyệt"] },
   { key: "done", title: "Hoàn thành", status: "Hoàn thành" },
-  { key: "rejected", title: "Từ chối", status: "Từ chối", collapsed: true },
+  { key: "rejected", title: "Từ chối", status: "Từ chối" },
 ]
 
 /** Closed work stays on the board this many days after its last step; older ones are in the list view. */
@@ -36,7 +36,7 @@ export type BoardColumn = { column: Column; items: WorkItem[]; hidden: number }
 export function boardColumns(items: WorkItem[], columns: Column[], today: string): BoardColumn[] {
   const since = Date.parse(`${today}T00:00:00Z`) - DONE_DAYS * DAY
   return columns.map((column) => {
-    const all = items.filter((x) => x.status === column.status).sort((a, b) => a.due.localeCompare(b.due) || a.id.localeCompare(b.id))
+    const all = items.filter((x) => x.status === column.status || !!column.also?.includes(x.status)).sort((a, b) => a.due.localeCompare(b.due) || a.id.localeCompare(b.id))
     if (column.status !== "Hoàn thành" && column.status !== "Từ chối") return { column, items: all, hidden: 0 }
     const recent = all.filter((x) => Date.parse(lastStep(x)) >= since)
     return { column, items: recent, hidden: all.length - recent.length }
@@ -52,10 +52,19 @@ const MOVES: Record<string, Transition> = {
   "Chờ duyệt>Hoàn thành": { action: "approve", needsNote: false, edit: false },
   "Chờ duyệt>Đang thực hiện": { action: "return", needsNote: true, edit: false },
   "Chờ duyệt đề xuất>Đang thực hiện": { action: "endorse", needsNote: false, edit: false },
-  "Chờ duyệt đề xuất>Bị trả lại": { action: "return", needsNote: true, edit: false },
   "Chờ duyệt đề xuất>Từ chối": { action: "reject", needsNote: true, edit: false },
-  "Bị trả lại>Chờ duyệt đề xuất": { action: "resubmit", needsNote: false, edit: true },
 }
+
+/** Nhiệm vụ moves that differ from project work: done straight from under way (no acceptance step). */
+const PROPOSAL_MOVES: Record<string, Transition> = {
+  "Đang thực hiện>Hoàn thành": { action: "submit", needsNote: false, edit: false },
+}
+
+/** The move a drop stands for, by the item's kind. */
+const moveOf = (item: WorkItem, target: WorkStatus): Transition | undefined =>
+  (item.type === "proposal" ? PROPOSAL_MOVES[`${item.status}>${target}`] : undefined) ?? MOVES[`${item.status}>${target}`]
+const nextStatuses = (item: WorkItem) =>
+  [...Object.keys(MOVES), ...(item.type === "proposal" ? Object.keys(PROPOSAL_MOVES) : [])].filter((k) => k.startsWith(`${item.status}>`)).map((k) => k.split(">")[1])
 
 const FREE_MOVE: Transition = { action: "move", needsNote: false, edit: false }
 
@@ -67,7 +76,7 @@ const FREE_MOVE: Transition = { action: "move", needsNote: false, edit: false }
 export function transitionFor(item: WorkItem, target: WorkStatus, role: string, perms: string[], all: WorkItem[], free = false): Transition | null {
   if (item.status === target) return null
   if (free && isFreelyMovable(item) && TASK_STATUSES.includes(target)) return FREE_MOVE
-  const move = MOVES[`${item.status}>${target}`]
+  const move = moveOf(item, target)
   return move && item.owner === role && allowedActions(item, role, perms, all).includes(move.action) ? move : null
 }
 
@@ -91,13 +100,13 @@ function stepOwner(item: WorkItem, action: WorkAction): [string, string] {
 export function moveHint(item: WorkItem, target: WorkStatus, role: string, perms: string[], all: WorkItem[], free = false): string {
   if (item.status === target || transitionFor(item, target, role, perms, all, free)) return ""
   if (free && isFreelyMovable(item)) return `Việc không chuyển được sang "${target}".`
-  const move = MOVES[`${item.status}>${target}`]
+  const move = moveOf(item, target)
   // The giver's step on someone else's work: allowed, but from the task's panel, not by dragging.
   if (move && item.owner !== role && allowedActions(item, role, perms, all).includes(move.action)) {
     return `Bạn chỉ kéo thả việc được giao cho mình. ${move.action === "approve" ? "Duyệt" : "Trả lại"} việc này trong chi tiết việc (bấm vào thẻ).`
   }
   if (!move) {
-    const next = Object.keys(MOVES).filter((k) => k.startsWith(`${item.status}>`)).map((k) => `"${k.split(">")[1]}"`)
+    const next = nextStatuses(item).map((k) => `"${k}"`)
     return next.length
       ? `Không chuyển thẳng từ "${item.status}" sang "${target}". Bước tiếp theo: ${next.join(" hoặc ")}.`
       : `Việc ở trạng thái "${item.status}" không chuyển tiếp được.`

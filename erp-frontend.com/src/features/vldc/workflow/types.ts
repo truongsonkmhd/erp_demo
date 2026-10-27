@@ -14,6 +14,10 @@ export type WorkStatus =
 
 export type Priority = "Cao" | "Trung bình" | "Thấp"
 
+/** Độ phức tạp of a project task (its weight in the project's progress is computed by the backend). */
+export type Complexity = "Rất thấp" | "Thấp" | "Trung bình" | "Cao" | "Rất cao"
+export const COMPLEXITIES: Complexity[] = ["Rất thấp", "Thấp", "Trung bình", "Cao", "Rất cao"]
+
 export type HistoryEntry = {
   at: string
   by: string
@@ -51,6 +55,7 @@ export type WorkItem = {
   progress: number
   evidence?: string
   priority: Priority
+  complexity?: Complexity
   due: string
   createdAt: string
   updatedAt: string

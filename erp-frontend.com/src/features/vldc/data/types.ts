@@ -79,7 +79,8 @@ export type ChangeRequest = {
   id: string; kind: ChangeRequestKind; content: string; by: string; at: string; status: ChangeRequestStatus
   newEnd?: string; newBudget?: number; decidedAt?: string; note?: string
 }
-export type ProjectStatus = "Chuẩn bị" | "Đang thực hiện" | "Tạm dừng" | "Nghiệm thu" | "Hoàn thành"
+/** Khởi tạo → Đang thực hiện (on approval) ⇄ Tạm dừng → Hoàn thành; "Chuẩn bị" and "Nghiệm thu" only remain on older records. */
+export type ProjectStatus = "Khởi tạo" | "Đang thực hiện" | "Tạm dừng" | "Hoàn thành" | "Chuẩn bị" | "Nghiệm thu"
 export type ProjectLogEntry = { at: string; by: string; byName: string; note: string; changes: { name: string; from: number; to: number }[] }
 /**
  * A project as stored. budget in billion VND; unit is the unit name. Records created before projects were
@@ -87,6 +88,8 @@ export type ProjectLogEntry = { at: string; by: string; byName: string; note: st
  */
 export type StoredProject = {
   id: string; name: string; unit: string; subUnit?: string; leadRole?: string; budget: number; start?: string; end?: string
+  /** Mục tiêu và phạm vi of the project. */
+  description?: string
   status?: ProjectStatus; wbs: WbsItem[]; milestones?: Milestone[]; crs?: ChangeRequest[]; log?: ProjectLogEntry[]
   technical?: number; costUsed?: number; delayDays?: number; upcomingMilestones?: number; changeRequests?: number; changeRequestsPending?: number
   /** Units (codes) that support the main unit (`unit`); they see the project and note on its tasks once it is approved. */

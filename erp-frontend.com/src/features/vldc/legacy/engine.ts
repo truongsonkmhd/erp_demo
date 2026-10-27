@@ -337,7 +337,8 @@ export function getRoles(): Record<string, Role> { return roles; }
 export function getPageMeta(p: string): [string, string] | undefined { return pages[p]; }
 export function hasPage(p: string): boolean { return typeof render[p] === 'function'; }
 /** Sub pages (/vldc/projects/<id>…) are records, not modules: no module hero. */
-export function renderPage(p: string) { currentPage = p; render[p](); if (location.pathname.split('/').filter(Boolean).length <= 2) addVisualHero(p); }
+/** Nhiệm vụ / Dự án is a work surface headed by its flow bar, so it gets no module hero either. */
+export function renderPage(p: string) { currentPage = p; render[p](); if (p !== 'projects' && location.pathname.split('/').filter(Boolean).length <= 2) addVisualHero(p); }
 export function getShellBadges() {
  const shared = workflowBadges(current);
  const tasks = ownerTasks().filter(t => !['Hoàn thành', 'Đã duyệt'].includes(t.status)).length + shared.tasks;

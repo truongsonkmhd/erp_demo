@@ -1,17 +1,17 @@
 import Sortable from "sortablejs"
 import { escapeHtml as esc, formatDate, jsCall } from "./html"
-import { ROLE_TITLES, childrenOf, isClosed, isPendingProposal, isVisible, isWork, rolledUpProgress } from "./rules"
+import { ROLE_TITLES, allowedActions, isClosed, isPendingProposal, isVisible, isWork, rolledUpProgress, type WorkAction } from "./rules"
 import { workflowStore as store } from "./repository"
 import type { WorkItem, WorkStatus } from "./types"
 import {
   PROJECT_COLUMNS, PROPOSAL_COLUMNS, boardColumns, dropTargets, initials, moveHint, quickFilter, swimlanes, transitionFor,
   type BoardColumn, type Column, type QuickFilter, type Swimlane,
 } from "./boardCore"
-import { DIRECTIVE_STATUS_FILTERS, TYPE_LABELS, directiveExportRows, filterDirectives, type DirectiveStatusFilter } from "./directiveList"
-import { canCreateTaskIn, canPropose, detailHtml, directiveLabels, offlineBanner, run, showsProposals, workflowPerms, workflowRole } from "./views"
-import { approvalOf, canCreateProject, isProjectApprover } from "../data/projectCore"
-import { localToday } from "../data/dates"
-import { ROLE_PROFILES, unitCodeOf, unitName, type UnitCode } from "../data/org"
+import { DIRECTIVE_STATUS_FILTERS, directiveExportRows, filterDirectives, type DirectiveStatusFilter } from "./directiveList"
+import { canCreateTaskIn, canPropose, crumbsHtml, detailHtml, directiveLabels, run, showsProposals, workflowPerms, workflowRole } from "./views"
+import { PROJECT_LOZENGE, approvalOf, canCreateProject, isProjectApprover, projectStateOf } from "../data/projectCore"
+import { localToday, vnDate } from "../data/dates"
+import { ROLE_PROFILES } from "../data/org"
 import type { Project } from "../data/types"
 
 /**
@@ -24,13 +24,16 @@ type Shell = { go(path: string): void; openModal(title: string, html: string): v
 let shell: Shell = { go() {}, openModal() {}, closeModal() {} }
 
 export type BoardTab = "board" | "danh-sach"
-export const PROPOSAL_BASE = "projects/de-xuat"
+/** Luồng Nhiệm vụ (cấp dưới tạo, xin cấp trên duyệt) inside the Nhiệm vụ / Dự án menu, beside the projects. */
+export const PROPOSAL_BASE = "projects/nhiem-vu"
 
 /** A project, or the proposals space: where its pages live, its columns and the work it shows the role. */
 type Space = { key: string; base: string; title: string; sub: string; columns: Column[]; project?: Project; items(): WorkItem[] }
 
-type ViewState = { query: string; filter: QuickFilter; who: string; wbs: string; lane: Swimlane; status: DirectiveStatusFilter; collapsed: Set<string> }
-const freshView = (): ViewState => ({ query: "", filter: "", who: "", wbs: "", lane: "none", status: "", collapsed: new Set() })
+/** Status filter of the Nhiệm vụ flow: all (the default) or one state. */
+type TaskFilter = TaskState | "all"
+type ViewState = { query: string; filter: QuickFilter; who: string; wbs: string; lane: Swimlane; status: DirectiveStatusFilter; task: TaskFilter | "" }
+const freshView = (): ViewState => ({ query: "", filter: "", who: "", wbs: "", lane: "none", status: "", task: "" })
 /** Filters belong to one space: opening another project starts clean. */
 let view = freshView()
 let viewKey = ""
@@ -52,16 +55,12 @@ function enterSpace(space: Space, tab: BoardTab) {
   current = { space, tab }
 }
 
-/** "Chủ trì: Đoàn ĐVL Mặt đất • Phối hợp: Đoàn ĐVL Biển • Chủ nhiệm …". */
-function unitsLine(p: Project): string {
-  const main = unitCodeOf(p.unit)
-  const co = (p.coUnits ?? []).filter((u) => u !== main).map((u) => unitName(u as UnitCode))
-  return `Chủ trì: ${p.unit}${co.length ? ` • Phối hợp: ${co.join(", ")}` : ""} • Chủ nhiệm ${p.leadRole ? roleTitle(p.leadRole) : "–"}`
-}
+/** "VLDC-2027-001 · Đoàn ĐVL Mặt đất · Hạn 30/11/2027". */
+const projectLine = (p: Project) => [p.id, p.unit, p.end ? `Hạn ${vnDate(p.end)}` : ""].filter(Boolean).join(" · ")
 
 function projectSpace(p: Project): Space {
   return {
-    key: p.id, base: projectBase(p.id), title: p.name, sub: unitsLine(p), columns: PROJECT_COLUMNS, project: p,
+    key: p.id, base: projectBase(p.id), title: p.name, sub: projectLine(p), columns: PROJECT_COLUMNS, project: p,
     items: () => {
       const all = store.items()
       return all.filter((x) => isWork(x) && x.project === p.id && isVisible(x, workflowRole(), all))
@@ -70,7 +69,7 @@ function projectSpace(p: Project): Space {
 }
 
 const proposalSpace = (): Space => ({
-  key: "de-xuat", base: PROPOSAL_BASE, title: "Nhiệm vụ đề xuất", sub: "Cấp dưới đề xuất, cấp trên trực tiếp duyệt rồi nghiệm thu • không bắt buộc thuộc dự án",
+  key: "nhiem-vu", base: PROPOSAL_BASE, title: "Nhiệm vụ", sub: "Cấp dưới tạo nhiệm vụ, xin cấp trên trực tiếp duyệt rồi nghiệm thu • không bắt buộc thuộc dự án",
   columns: PROPOSAL_COLUMNS,
   items: () => {
     const all = store.items()
@@ -79,8 +78,28 @@ const proposalSpace = (): Space => ({
 })
 
 /** The space's work after the search, quick filter, person and WBS item (the status filter only on the list). */
+type TaskState = "pending" | "doing" | "done" | "rejected"
+
+/** The four states of a Nhiệm vụ (older "Bị trả lại" / "Chờ duyệt" records count as waiting / under way). */
+function taskState(x: WorkItem): TaskState {
+  if (x.status === "Chờ duyệt đề xuất" || x.status === "Bị trả lại") return "pending"
+  if (x.status === "Hoàn thành") return "done"
+  return x.status === "Từ chối" ? "rejected" : "doing"
+}
+function taskMatches(x: WorkItem, f: TaskFilter): boolean {
+  return f === "all" || taskState(x) === f
+}
+const TASK_STATE_LABELS: Record<TaskState, string> = { pending: "Chờ duyệt", doing: "Đang thực hiện", done: "Hoàn thành", rejected: "Từ chối" }
+const TASK_FILTERS: [TaskFilter, string][] = [["all", "Tất cả"], ...(Object.entries(TASK_STATE_LABELS) as [TaskFilter, string][])]
+
+const taskFilterOf = (): TaskFilter => view.task || "all"
+
 function filteredItems(space: Space, tab: BoardTab): WorkItem[] {
   const all = store.items()
+  if (!space.project) {
+    const f = taskFilterOf()
+    return filterDirectives(space.items(), all, view.query, "", today(), directiveLabels).filter((x) => taskMatches(x, f))
+  }
   const status = tab === "danh-sach" ? view.status : ""
   let items = filterDirectives(space.items(), all, view.query, status, today(), directiveLabels)
   items = quickFilter(items, view.filter, workflowRole(), today())
@@ -93,17 +112,15 @@ const filtering = () => !!(view.query.trim() || view.filter || view.who || view.
 
 // ---------- Small parts
 
-const TYPE_ICONS: Record<WorkItem["type"], string> = { directive: "⚑", task: "↳", proposal: "✎", payment: "₫" }
-const typeIcon = (x: WorkItem) => `<span class="vx-jira-type t-${x.type}" title="${esc(TYPE_LABELS[x.type])}">${TYPE_ICONS[x.type]}</span>`
-
-const PRIORITY: Record<string, [string, string]> = { Cao: ["↑", "high"], "Trung bình": ["=", "medium"], Thấp: ["↓", "low"] }
-const priorityIcon = (p: string) => `<span class="vx-jira-prio p-${PRIORITY[p]?.[1] ?? "medium"}" title="Ưu tiên ${esc(p)}">${PRIORITY[p]?.[0] ?? "="}</span>`
 
 const LOZENGE: Partial<Record<WorkStatus, string>> = {
   "Mới giao": "new", "Đang thực hiện": "doing", "Chờ duyệt": "review", "Hoàn thành": "done",
   "Chờ duyệt đề xuất": "proposed", "Bị trả lại": "returned", "Từ chối": "rejected",
 }
-const lozenge = (x: WorkItem) => `<span class="vx-jira-lozenge l-${LOZENGE[x.status] ?? "new"}">${esc(x.status === "Chờ duyệt" && x.type === "proposal" ? "Chờ nghiệm thu" : x.status)}</span>`
+const TASK_LOZENGE: Record<TaskState, string> = { pending: "proposed", doing: "doing", done: "done", rejected: "rejected" }
+const lozenge = (x: WorkItem) => x.type === "proposal"
+  ? `<span class="vx-jira-lozenge l-${TASK_LOZENGE[taskState(x)]}">${TASK_STATE_LABELS[taskState(x)]}</span>`
+  : `<span class="vx-jira-lozenge l-${LOZENGE[x.status] ?? "new"}">${esc(x.status)}</span>`
 
 const AVATAR_COLORS = 6
 function avatar(role: string, size = ""): string {
@@ -117,7 +134,6 @@ const dueBadge = (x: WorkItem) => {
   return `<span class="vx-jira-due${late ? " late" : ""}">${formatDate(x.due)}</span>`
 }
 
-const thinBar = (pct: number) => `<div class="vx-jira-bar"><i style="width:${Math.max(0, Math.min(100, pct))}%"></i></div>`
 
 /** WBS items of the space's project as [key, name]. */
 const wbsPairs = (space: Space): [string, string][] => (space.project?.wbs ?? []).map((w, i) => [w.id ?? String(i), w.name])
@@ -156,10 +172,12 @@ function approvalBanner(p: Project): string {
 function headerHtml(space: Space, tab: string): string {
   const create = space.project
     ? canCreateTaskIn(space.project) ? `<button class="btn btn-primary" ${jsCall("go", `${space.base}/giao-viec`)}>+ Tạo việc</button>` : ""
-    : canPropose() ? `<button class="btn btn-primary" ${jsCall("go", `${PROPOSAL_BASE}/moi`)}>+ Đề xuất nhiệm vụ</button>` : ""
+    : canPropose() ? `<button class="btn btn-primary" ${jsCall("go", `${PROPOSAL_BASE}/moi`)}>+ Tạo nhiệm vụ</button>` : ""
   const tabs = tabsOf(space).map(([slug, label]) => `<button class="vx-jira-tab${slug === tab ? " active" : ""}" ${jsCall("go", `${space.base}/${slug}`)}>${label}</button>`).join("")
-  return `${offlineBanner()}<div class="vx-jira-head"><div class="vx-jira-crumbs"><a href="javascript:void 0" ${jsCall("go", "projects")}>Dự án</a> / <span>${esc(space.project?.id ?? "Đề xuất")}</span></div>
-<div class="vx-jira-title"><span class="vx-jira-project-icon">${esc(initials(space.title))}</span><div style="flex:1;min-width:0"><h2>${esc(space.title)}</h2><div class="mini">${esc(space.sub)}</div></div>${create}</div>
+  const state = space.project ? ` <span class="vx-jira-lozenge l-${PROJECT_LOZENGE[projectStateOf(space.project)]}">${esc(projectStateOf(space.project))}</span>` : ""
+  const crumbs = space.project ? crumbsHtml([["Dự án", "projects"], [space.project.name]]) : crumbsHtml([["Nhiệm vụ / Dự án", "projects"], ["Nhiệm vụ"]])
+  return `<div class="vx-jira-head">${crumbs}
+<div class="vx-jira-title"><div style="flex:1;min-width:0"><h2>${esc(space.title)}${state}</h2><div class="mini">${esc(space.sub)}</div></div>${create}</div>
 ${space.project ? approvalBanner(space.project) : ""}<nav class="vx-jira-tabs">${tabs}</nav></div>`
 }
 
@@ -173,19 +191,13 @@ export function projectHeaderHtml(p: Project, tab: string): string {
   return headerHtml(space, tab)
 }
 
+/** Project toolbar: search; the list adds its status filter (on the board the columns are the states). */
 function toolbarHtml(space: Space, tab: BoardTab): string {
-  const owners = [...new Set(space.items().map((x) => x.owner))]
-  const people = owners.map((o) => `<button class="vx-jira-person${view.who === o ? " active" : ""}" ${jsCall("boardWho", o)}>${avatar(o)}</button>`).join("")
-  const quick: [QuickFilter, string][] = space.project
-    ? [["mine", "Việc của tôi"], ["review", "Chờ tôi duyệt"], ["overdue", "Quá hạn"]]
-    : [["review", "Chờ tôi duyệt"], ["proposed", "Đề xuất của tôi"], ["mine", "Việc của tôi"], ["overdue", "Quá hạn"]]
-  const chips = quick.map(([f, label]) => `<button class="vx-jira-chip${view.filter === f ? " active" : ""}" ${jsCall("boardFilter", f)}>${label}</button>`).join("")
-  const wbs = space.project ? `<select onchange="boardWbs(this.value)"><option value="">Mọi hạng mục</option>${wbsPairs(space).map(([k, n]) => `<option value="${esc(k)}"${k === view.wbs ? " selected" : ""}>${esc(n)}</option>`).join("")}</select>` : ""
-  const lane = tab === "board"
-    ? `<select onchange="boardLane(this.value)">${([["none", "Không nhóm"], ...(space.project ? [["wbs", "Nhóm theo hạng mục"]] : []), ["owner", "Nhóm theo người làm"]] as [Swimlane, string][]).map(([v, l]) => `<option value="${v}"${v === view.lane ? " selected" : ""}>${l}</option>`).join("")}</select>`
-    : `<select onchange="boardStatus(this.value)">${DIRECTIVE_STATUS_FILTERS.map(([v, l]) => `<option value="${v}"${v === view.status ? " selected" : ""}>${l}</option>`).join("")}</select><button class="btn btn-light" onclick="boardExport()">Xuất Excel</button>`
+  const list = tab === "board"
+    ? ""
+    : `<select onchange="boardStatus(this.value)">${DIRECTIVE_STATUS_FILTERS.map(([v, l]) => `<option value="${v}"${v === view.status ? " selected" : ""}>${v ? l : "Tất cả"}</option>`).join("")}</select>`
   const clear = filtering() ? '<button class="vx-jira-clear" onclick="boardClear()">Xoá lọc</button>' : ""
-  return `<div class="vx-jira-toolbar"><input id="vx-jira-q" class="vx-jira-search" placeholder="Tìm việc…" value="${esc(view.query)}" oninput="boardSearch(this.value)"><div class="vx-jira-people">${people}</div>${chips}${wbs}${lane}${clear}</div>`
+  return `<div class="vx-jira-toolbar"><input id="vx-jira-q" class="vx-jira-search" placeholder="Tìm việc…" value="${esc(view.query)}" oninput="boardSearch(this.value)">${list}${clear}</div>`
 }
 
 // ---------- Board
@@ -194,13 +206,10 @@ function cardHtml(x: WorkItem, space: Space, all: WorkItem[]): string {
   const role = workflowRole(), perms = workflowPerms()
   // Every card can be picked up; one the role cannot move shows a "not allowed" cursor and explains itself on drop.
   const locked = dropTargets(x, space.columns, role, perms, all, freeMoves(space)).length === 0
-  const kids = childrenOf(x.id, all)
-  const wbs = space.project ? wbsPairs(space).find(([k]) => k === x.wbsItem)?.[1] : x.project
-  const progress = x.status === "Đang thực hiện" || x.status === "Chờ duyệt" ? thinBar(rolledUpProgress(x, all)) : ""
   const late = !isClosed(x) && x.due < today()
   return `<div class="vx-jira-card${late ? " is-late" : ""}${locked ? " is-locked" : ""}" data-id="${esc(x.id)}"${locked ? ' title="Bạn chỉ kéo thả việc được giao cho mình – thả vào cột để xem ai được chuyển"' : ""} ${jsCall("boardSelect", x.id)}>
-<div class="vx-jira-card-title">${esc(x.title)}</div>${wbs ? `<span class="vx-jira-label">${esc(wbs)}</span>` : ""}${x.parentId ? `<div class="vx-jira-parent">↳ việc con của ${esc(x.parentId)}</div>` : ""}<div class="vx-jira-assignee">Giao cho <b>${esc(personOf(x.owner) || roleTitle(x.owner))}</b>${personOf(x.owner) ? ` · ${esc(roleTitle(x.owner))}` : ""}</div>${progress}
-<div class="vx-jira-card-foot">${typeIcon(x)}<span class="vx-jira-key">${esc(x.id)}</span>${priorityIcon(x.priority)}${kids.length ? `<span class="vx-jira-kids" title="Việc con">↳ ${kids.filter(isClosed).length}/${kids.length}</span>` : ""}<span style="flex:1"></span>${dueBadge(x)}${avatar(x.owner)}</div></div>`
+<div class="vx-jira-card-title">${esc(x.title)}</div>
+<div class="vx-jira-card-foot">${avatar(x.owner)}<span class="vx-jira-card-who">${esc(personOf(x.owner) || roleTitle(x.owner))}</span><span style="flex:1"></span>${dueBadge(x)}</div></div>`
 }
 
 function columnHtml(c: BoardColumn, space: Space, all: WorkItem[]): string {
@@ -212,7 +221,7 @@ function columnHtml(c: BoardColumn, space: Space, all: WorkItem[]): string {
 function boardHtml(space: Space, items: WorkItem[]): string {
   const all = store.items()
   const lanes = swimlanes(items, view.lane, { wbs: wbsPairs(space), owner: (r) => `${roleTitle(r)}${personOf(r) ? ` – ${personOf(r)}` : ""}` })
-  const empty = !space.items().length ? `<div class="vx-jira-empty">${space.project ? "Dự án chưa có việc giao." : "Chưa có nhiệm vụ đề xuất."}</div>` : ""
+  const empty = !space.items().length ? `<div class="vx-jira-empty">${space.project ? "Dự án chưa có việc giao." : "Chưa có nhiệm vụ."}</div>` : ""
   const rows = (lanes.length ? lanes : [{ key: "", title: "", items: [] }]).map((l) => {
     const head = l.title ? `<div class="vx-jira-lane"><b>${esc(l.title)}</b> <span class="mini">${l.items.length} việc</span></div>` : ""
     return `${head}<div class="vx-jira-board" style="--cols:${space.columns.length}">${boardColumns(l.items, space.columns, today()).map((c) => columnHtml(c, space, all)).join("")}</div>`
@@ -222,47 +231,28 @@ function boardHtml(space: Space, items: WorkItem[]): string {
 
 // ---------- List (backlog)
 
-const LIST_HEAD = "<tr><th></th><th>Mã</th><th>Nội dung</th><th>Trạng thái</th><th>Người làm</th><th>Hạn</th><th>Ưu tiên</th><th>Tiến độ</th></tr>"
+const LIST_HEAD = "<tr><th>Mã</th><th>Nội dung</th><th>Trạng thái</th><th>Người làm</th><th>Hạn</th><th>Tiến độ</th></tr>"
 
 function rowHtml(x: WorkItem, all: WorkItem[], depth: number): string {
   const indent = depth ? `<span class="vx-jira-indent" style="width:${depth * 18}px"></span>↳ ` : ""
-  return `<tr class="vx-jira-row" ${jsCall("boardSelect", x.id)}><td>${typeIcon(x)}</td><td class="vx-jira-key">${esc(x.id)}</td><td>${indent}${esc(x.title)}</td><td>${lozenge(x)}</td><td><span class="vx-jira-who">${avatar(x.owner)}<span>${esc(personOf(x.owner) || roleTitle(x.owner))}${personOf(x.owner) ? `<div class="mini">${esc(roleTitle(x.owner))}</div>` : ""}</span></span></td><td>${dueBadge(x)}</td><td>${priorityIcon(x.priority)}</td><td style="min-width:90px">${isPendingProposal(x) ? "–" : `${thinBar(rolledUpProgress(x, all))}<span class="mini">${rolledUpProgress(x, all)}%</span>`}</td></tr>`
+  return `<tr class="vx-jira-row" ${jsCall("boardSelect", x.id)}><td class="vx-jira-key">${esc(x.id)}</td><td>${indent}${esc(x.title)}</td><td>${lozenge(x)}</td><td>${esc(personOf(x.owner) || roleTitle(x.owner))}</td><td>${dueBadge(x)}</td><td>${isPendingProposal(x) ? "–" : `${rolledUpProgress(x, all)}%`}</td></tr>`
 }
 
 function treeHtml(roots: WorkItem[], items: WorkItem[], all: WorkItem[], depth: number): string {
   return roots.map((x) => rowHtml(x, all, depth) + treeHtml(items.filter((k) => k.parentId === x.id).sort((a, b) => a.due.localeCompare(b.due)), items, all, depth + 1)).join("")
 }
 
+/** Project work by deadline, sub-tasks under their parent (a flat list while searching or filtering). */
 function listHtml(space: Space, items: WorkItem[]): string {
   const all = store.items()
   const sorted = [...items].sort((a, b) => a.due.localeCompare(b.due))
-  if (!space.project || filtering()) {
-    const count = filtering() ? `<div class="mini" style="margin-bottom:6px">${items.length} / ${space.items().length} việc khớp</div>` : ""
-    return `${count}<table class="vx-jira-list">${LIST_HEAD}${sorted.map((x) => rowHtml(x, all, 0)).join("") || '<tr><td colspan="8" class="mini">Không có việc nào.</td></tr>'}</table>`
+  const empty = (text: string) => `<tr><td colspan="6" class="mini">${text}</td></tr>`
+  if (filtering()) {
+    const count = `<div class="mini" style="margin-bottom:6px">${items.length} / ${space.items().length} việc khớp</div>`
+    return `${count}<table class="vx-jira-list">${LIST_HEAD}${sorted.map((x) => rowHtml(x, all, 0)).join("") || empty("Không có việc nào.")}</table>`
   }
-  const t = today()
-  const giver = canCreateTaskIn(space.project)
   const roots = sorted.filter((x) => !x.parentId || !items.some((p) => p.id === x.parentId))
-  const keys = new Set(wbsPairs(space).map(([k]) => k))
-  const epic = (key: string, title: string, meta: string, action: string, members: WorkItem[]) => {
-    const open = !view.collapsed.has(key)
-    return `<tr class="vx-jira-epic"><td colspan="8"><div class="vx-jira-epic-row"><button class="vx-jira-chevron" ${jsCall("boardToggle", key)}>${open ? "▾" : "▸"}</button><span class="vx-jira-epic-name">${esc(title)}</span><span class="mini">${meta}</span><span style="flex:1"></span>${action}</div></td></tr>${open ? treeHtml(members, items, all, 0) : ""}`
-  }
-  const groups = (space.project.wbs ?? []).map((w, i) => {
-    const key = w.id ?? String(i)
-    const members = roots.filter((x) => x.wbsItem === key)
-    const late = !!w.end && w.end < t && w.progress < 100
-    const lateWork = members.some((x) => !isClosed(x) && x.due < t)
-    const sub = directiveLabels.subUnit(w.subUnit)
-    const meta = `${sub ? `${esc(sub)} • ` : ""}${w.weight ?? "–"}% trọng số • ${w.start ? formatDate(w.start) : ""} – ${w.end ? formatDate(w.end) : ""} • <b>${w.progress}%</b>${w.linkedWork ? " (tự tính)" : ""} • ${members.length} việc${late ? ' • <span class="vx-jira-due late">quá hạn</span>' : ""}`
-    const action = giver && w.progress < 100
-      ? `<button class="btn ${late || lateWork ? "btn-primary" : "btn-light"}" ${jsCall("go", `${space.base}/giao-viec?wbs=${encodeURIComponent(key)}`)}>${late || lateWork ? "Đôn đốc" : "+ Việc"}</button>`
-      : ""
-    return epic(key, w.name, meta, action, members)
-  })
-  const loose = roots.filter((x) => !x.wbsItem || !keys.has(x.wbsItem))
-  if (loose.length) groups.push(epic("__loose", "Chưa gắn hạng mục", `${loose.length} việc`, "", loose))
-  return `<table class="vx-jira-list">${LIST_HEAD}${groups.join("") || '<tr><td colspan="8" class="mini">Dự án chưa có hạng mục.</td></tr>'}</table>`
+  return `<table class="vx-jira-list">${LIST_HEAD}${treeHtml(roots, items, all, 0) || empty("Dự án chưa có việc giao.")}</table>`
 }
 
 // ---------- Issue panel and page
@@ -281,33 +271,67 @@ function panelHtml(space: Space, tab: BoardTab): string {
   const x = all.find((w) => w.id === id)
   if (!x || !isVisible(x, workflowRole(), all)) return ""
   const close = `${space.base}/${tab}`
-  return `<div class="vx-jira-backdrop" ${jsCall("go", close)}></div><aside class="vx-jira-drawer"><div class="vx-jira-drawer-head">${typeIcon(x)}<b>${esc(x.id)}</b><span class="mini">${esc(TYPE_LABELS[x.type])}</span><span style="flex:1"></span><button class="btn btn-light" ${jsCall("go", issuePath(x))}>Mở toàn trang</button><button class="btn btn-light" title="Đóng" ${jsCall("go", close)}>✕</button></div>
-<h3 class="vx-jira-issue-title">${esc(x.title)}</h3><div class="mini" style="margin-bottom:10px">${whereLine(x)}</div>${detailHtml(x)}</aside>`
+  return `<div class="vx-jira-backdrop" ${jsCall("go", close)}></div><aside class="vx-jira-drawer"><div class="vx-jira-drawer-head"><span class="mini">${esc(x.id)}</span>${lozenge(x)}<span style="flex:1"></span><button class="btn btn-light" ${jsCall("go", issuePath(x))}>Mở toàn trang</button><button class="btn btn-light" title="Đóng" ${jsCall("go", close)}>✕</button></div>
+<h3 class="vx-jira-issue-title">${esc(x.title)}</h3>${detailHtml(x, true)}</aside>`
 }
 
-/** Full page of one work item (or proposal): /projects/<id>/viec/<item> or /projects/de-xuat/<item>. */
+/** Full page of one work item (or proposal): /projects/<id>/viec/<item> or /projects/nhiem-vu/<item>. */
 export function issuePageHtml(id: string): string {
   const all = store.items()
   const x = all.find((w) => w.id === id)
-  const back = (path: string, label: string) => `<a href="javascript:void 0" ${jsCall("go", path)}>${esc(label)}</a>`
   if (!x || !isVisible(x, workflowRole(), all)) {
-    return `<div class="vx-jira-head"><div class="vx-jira-crumbs">${back("projects", "Dự án")}</div><div class="mini" style="margin-top:8px">Không tìm thấy việc ${esc(id)}.</div></div>`
+    return `<div class="vx-jira-head">${crumbsHtml([["Dự án", "projects"], [id]])}<div class="mini" style="margin-top:8px">Không tìm thấy việc ${esc(id)}.</div></div>`
   }
-  const space = x.type === "proposal" ? [back(PROPOSAL_BASE, "Đề xuất")] : x.project ? [back(projectBase(x.project), x.project)] : []
-  return `<div class="vx-jira-head"><div class="vx-jira-crumbs">${[back("projects", "Dự án"), ...space, `<span>${esc(x.id)}</span>`].join(" / ")}</div>
-<div class="vx-jira-title">${typeIcon(x)}<div style="flex:1;min-width:0"><h2>${esc(x.title)}</h2><div class="mini">${esc(TYPE_LABELS[x.type])} • ${whereLine(x)}</div></div>${lozenge(x)}</div></div>
-<div class="card">${detailHtml(x)}</div>`
+  // Dự án › <project> › <work>, or Nhiệm vụ › <task>.
+  const project = x.project ? directiveLabels.project(x.project).replace(`${x.project} – `, "") : ""
+  const levels: [string, string?][] = x.type === "proposal"
+    ? [["Nhiệm vụ", PROPOSAL_BASE], [x.id]]
+    : [["Dự án", "projects"], ...(x.project ? [[project, projectBase(x.project)] as [string, string]] : []), [x.id]]
+  return `<div class="vx-jira-head">${crumbsHtml(levels)}
+<div class="vx-jira-title"><div style="flex:1;min-width:0"><h2>${esc(x.title)} ${lozenge(x)}</h2>${x.project ? "" : `<div class="mini">${whereLine(x)}</div>`}</div></div></div>
+<div class="card">${detailHtml(x, true)}</div>`
 }
 
 // ---------- Spaces
 
 function bodyHtml(space: Space, tab: BoardTab): string {
   const items = filteredItems(space, tab)
-  return tab === "board" ? boardHtml(space, items) : listHtml(space, items)
+  if (tab === "board") return boardHtml(space, items)
+  return space.project ? listHtml(space, items) : taskListHtml(items)
+}
+
+// ---------- Luồng Nhiệm vụ: a list with the decisions on each row (the board is the other view)
+
+const QUICK: Partial<Record<WorkAction, string>> = { endorse: "Duyệt", reject: "Từ chối", submit: "Hoàn thành", resubmit: "Sửa", approve: "Nghiệm thu", return: "Trả lại" }
+
+/** The decisions the role can take on the row, as buttons that do not open the panel. */
+function quickButtons(x: WorkItem, all: WorkItem[]): string {
+  return allowedActions(x, workflowRole(), workflowPerms(), all).filter((a) => QUICK[a]).map((a) =>
+    `<button class="btn ${a === "endorse" || a === "approve" || a === "submit" ? "btn-primary" : "btn-light"} vx-quick" data-arg0="${esc(x.id)}" data-arg1="${a}" onclick="event.stopPropagation();taskQuickAct(this.dataset.arg0,this.dataset.arg1)">${QUICK[a]}</button>`,
+  ).join("")
+}
+
+function taskListHtml(items: WorkItem[]): string {
+  const all = store.items()
+  const rows = [...items].sort((a, b) => a.due.localeCompare(b.due)).map((x) => `<tr class="vx-jira-row" ${jsCall("boardSelect", x.id)}>
+<td class="vx-jira-key">${esc(x.id)}</td><td>${esc(x.title)}${x.project ? `<div class="mini">${esc(directiveLabels.project(x.project))}</div>` : ""}</td>
+<td><span class="vx-jira-who">${avatar(x.createdBy)}${esc(personOf(x.createdBy) || roleTitle(x.createdBy))}</span></td><td class="mini">${esc(roleTitle(x.approver ?? ""))}</td>
+<td>${dueBadge(x)}</td><td>${lozenge(x)}</td><td class="vx-quick-cell">${quickButtons(x, all)}</td></tr>`).join("")
+  return `<table class="vx-jira-list"><tr><th>Mã</th><th>Nhiệm vụ</th><th>Người tạo</th><th>Người duyệt</th><th>Hạn</th><th>Trạng thái</th><th></th></tr>${rows || '<tr><td colspan="7" class="mini">Không có nhiệm vụ nào ở mục này.</td></tr>'}</table>`
+}
+
+function taskSpaceHtml(space: Space, tab: BoardTab): string {
+  const f = taskFilterOf()
+  const items = space.items()
+  const create = canPropose() ? `<button class="btn btn-primary" ${jsCall("go", `${PROPOSAL_BASE}/moi`)}>+ Tạo nhiệm vụ</button>` : ""
+  const views = `<div class="vx-flow-view">${([["danh-sach", "Danh sách"], ["board", "Board"]] as [BoardTab, string][]).map(([t, l]) => `<button class="${t === tab ? "active" : ""}" ${jsCall("go", `${PROPOSAL_BASE}/${t}`)}>${l}</button>`).join("")}</div>`
+  const status = `<select class="vx-filter-select" onchange="taskFilter(this.value)">${TASK_FILTERS.map(([k, l]) => `<option value="${k}"${k === f ? " selected" : ""}>${l}</option>`).join("")}</select>`
+  return `${flowBarHtml("nhiem-vu", create)}<div class="vx-jira-toolbar"><input id="vx-jira-q" class="vx-jira-search" placeholder="Tìm nhiệm vụ…" value="${esc(view.query)}" oninput="boardSearch(this.value)">${status}${views}</div><div id="vx-jira-body">${bodyHtml(space, tab)}</div>${panelHtml(space, tab)}`
 }
 
 function spaceHtml(space: Space, tab: BoardTab): string {
   enterSpace(space, tab)
+  if (!space.project) return taskSpaceHtml(space, tab)
   return `${headerHtml(space, tab)}${toolbarHtml(space, tab)}<div id="vx-jira-body">${bodyHtml(space, tab)}</div>${panelHtml(space, tab)}`
 }
 
@@ -315,15 +339,38 @@ export const projectSpaceHtml = (p: Project, tab: BoardTab) => spaceHtml(project
 
 /** Proposals space (heads and staff; the leader approves from Công việc). */
 export function proposalSpaceHtml(tab: BoardTab): string {
-  if (!showsProposals()) return `<div class="vx-jira-head"><div class="vx-jira-crumbs"><a href="javascript:void 0" ${jsCall("go", "projects")}>Dự án</a></div><div class="mini" style="margin-top:8px">Lãnh đạo duyệt đề xuất từ menu Công việc.</div></div>`
+  if (!showsProposals()) return `<div class="vx-jira-head">${crumbsHtml([["Nhiệm vụ / Dự án", "projects"], ["Nhiệm vụ"]])}<div class="mini" style="margin-top:8px">Lãnh đạo duyệt đề xuất từ menu Công việc.</div></div>`
   return spaceHtml(proposalSpace(), tab)
 }
 
-/** Counts for the proposals row of the project directory. */
-export function proposalSummary(): { waiting: number; mine: number; total: number } {
-  const role = workflowRole()
-  const items = proposalSpace().items()
-  return { waiting: quickFilter(items, "review", role, today()).length, mine: items.filter((x) => x.createdBy === role).length, total: items.length }
+/**
+ * Bar heading the Nhiệm vụ / Dự án menu: a switch between its two flows, Dự án (work handed down: Phòng Kỹ thuật makes
+ * projects, the federation head approves them) and Nhiệm vụ (a subordinate asks its superior), then the flow's actions.
+ * The leader only hands work down, so it gets no switch.
+ */
+export function flowBarHtml(active: "du-an" | "nhiem-vu", actions = ""): string {
+  const seg = (key: string, path: string, label: string, hint: string, badge = "") =>
+    `<button class="${key === active ? "active" : ""}" title="${esc(hint)}" ${jsCall("go", path)}>${label}${badge}</button>`
+  const waiting = showsProposals() ? quickFilter(proposalSpace().items(), "review", workflowRole(), today()).length : 0
+  const flows = showsProposals()
+    ? `<div class="vx-flow-seg">${seg("du-an", "projects", "Dự án", "Cấp trên giao việc cho cấp dưới – Phòng Kỹ thuật lập dự án, Liên đoàn trưởng duyệt")}${seg("nhiem-vu", PROPOSAL_BASE, "Nhiệm vụ", "Cấp dưới tạo nhiệm vụ, xin cấp trên trực tiếp duyệt", waiting ? `<span class="vx-flow-count">${waiting}</span>` : "")}</div>`
+    : ""
+  return `<div class="vx-flow-bar">${flows}<span style="flex:1"></span>${actions}</div>`
+}
+
+/** Asks the reason of a return or a rejection, then runs it (a drop on the board, or a row button). */
+function askReason(item: WorkItem, action: WorkAction) {
+  const title = action === "reject" ? "Từ chối" : "Trả lại"
+  shell.openModal(`${title} • ${item.id}`, `<div class="mini" style="margin-bottom:8px">${esc(item.title)}</div><label>Lý do *</label><textarea id="vx-move-note" rows="3"></textarea><div class="toolbar" style="margin-top:10px"><button class="btn btn-primary" ${jsCall("boardConfirmMove", item.id, action)}>${title}</button><button class="btn btn-light" onclick="closeModal()">Hủy</button></div>`)
+}
+
+/** A decision taken from a row of the Nhiệm vụ list. */
+function taskQuickAct(id: string, action: WorkAction) {
+  const item = store.items().find((x) => x.id === id)
+  if (!item) return
+  if (action === "resubmit") return shell.go(`${PROPOSAL_BASE}/${encodeURIComponent(id)}/sua`)
+  if (action === "return" || action === "reject") return askReason(item, action)
+  void run(() => store.dispatch(id, action, {}, workflowRole(), workflowPerms()))
 }
 
 // ---------- Handlers
@@ -412,10 +459,7 @@ function dropOn(id: string, status: WorkStatus) {
     return
   }
   if (move.edit) return shell.go(`${PROPOSAL_BASE}/${encodeURIComponent(item.id)}/sua`)
-  if (move.needsNote) {
-    const title = move.action === "reject" ? "Từ chối đề xuất" : "Trả lại"
-    return shell.openModal(`${title} • ${item.id}`, `<div class="mini" style="margin-bottom:8px">${esc(item.title)}</div><label>Lý do *</label><textarea id="vx-move-note" rows="3"></textarea><div class="toolbar" style="margin-top:10px"><button class="btn btn-primary" ${jsCall("boardConfirmMove", item.id, move.action)}>${title}</button><button class="btn btn-light" onclick="closeModal()">Hủy</button></div>`)
-  }
+  if (move.needsNote) return askReason(item, move.action)
   if (move.action === "move") return void run(() => store.moveTo(item.id, status, role, free))
   void run(() => store.dispatch(item.id, move.action, {}, role, perms))
 }
@@ -441,7 +485,11 @@ async function boardExport() {
 export function installBoard(nextShell: Shell) {
   shell = nextShell
   Object.assign(window, {
-    boardConfirmMove, boardExport,
+    boardConfirmMove, boardExport, taskQuickAct,
+    taskFilter: (f: TaskFilter) => {
+      view.task = f
+      redrawAll()
+    },
     boardSelect: (id: string) => current && shell.go(`${current.space.base}/${current.tab}?selected=${encodeURIComponent(id)}`),
     /** Only the cards/rows re-render while typing, so the search box keeps focus. */
     boardSearch: (q: string) => {
@@ -471,11 +519,6 @@ export function installBoard(nextShell: Shell) {
     boardClear: () => {
       Object.assign(view, { query: "", filter: "", who: "", wbs: "", status: "" })
       redrawAll()
-    },
-    boardToggle: (key: string) => {
-      if (view.collapsed.has(key)) view.collapsed.delete(key)
-      else view.collapsed.add(key)
-      redraw()
     },
     /** "+ n việc cũ hơn": the list view with that status. */
     boardOlder: (status: WorkStatus) => {

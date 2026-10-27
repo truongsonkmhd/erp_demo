@@ -926,3 +926,78 @@
 .vldc-scope .vx-jira-parent { font-size: 10px; color: var(--muted); margin-bottom: 4px; }
 .vldc-scope .vx-note { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; margin-bottom: 8px; font-size: 12px; background: #fbfcfe; overflow-wrap: anywhere; }
 .vldc-scope .vx-note-head { margin-bottom: 4px; }
+
+/* Hai luồng của menu Nhiệm vụ / Dự án: thanh đầu trang với công tắc Dự án | Nhiệm vụ và nút của luồng */
+.vldc-scope .vx-flow-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.vldc-scope .vx-flow-seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; background: #fff; padding: 3px; gap: 2px; }
+.vldc-scope .vx-flow-seg button { border: 0; background: transparent; padding: 7px 16px; border-radius: 8px; font-weight: 700; color: var(--muted); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.vldc-scope .vx-flow-seg button:hover { color: var(--primary); }
+.vldc-scope .vx-flow-seg button.active { background: var(--primary); color: #fff; }
+.vldc-scope .vx-flow-count { background: #fff2d6; color: #8a6100; border-radius: 99px; padding: 0 7px; font-size: 11px; }
+.vldc-scope .vx-flow-seg button.active .vx-flow-count { background: #fff; color: var(--primary); }
+.vldc-scope .vx-flow-summary { margin: -4px 0 10px; }
+.vldc-scope .vx-flow-view { display: inline-flex; margin-left: auto; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.vldc-scope .vx-flow-view button { border: 0; background: #fff; padding: 6px 12px; font-size: 12px; font-weight: 600; color: var(--muted); cursor: pointer; }
+.vldc-scope .vx-flow-view button.active { background: #e5f1fc; color: #1765a3; }
+.vldc-scope .vx-jira-chip b { margin-left: 4px; font-weight: 800; }
+.vldc-scope .vx-quick-cell { white-space: nowrap; text-align: right; }
+.vldc-scope .vx-quick { padding: 5px 10px; font-size: 11px; margin-left: 4px; }
+
+
+/* Bộ lọc của menu Nhiệm vụ / Dự án: tìm kiếm và ô chọn trạng thái */
+.vldc-scope .vx-filter-select { width: auto; min-width: 230px; padding: 7px 10px; }
+.vldc-scope .vx-pj-late { color: var(--danger); font-weight: 700; white-space: nowrap; }
+.vldc-scope .vx-jira-card-who { color: var(--ink); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vldc-scope .vx-pj-tiles.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.vldc-scope .vx-pj-info { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 10px 0 6px; }
+.vldc-scope .vx-pj-info > div { display: flex; flex-direction: column; gap: 2px; }
+.vldc-scope .vx-pj-info span { color: var(--muted); font-size: 12px; }
+@media (max-width: 900px) { .vldc-scope .vx-pj-tiles.three, .vldc-scope .vx-pj-info { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* Đường dẫn các cấp ở đầu trang dự án / việc: Dự án › tên dự án › mã việc */
+.vldc-scope .vx-jira-crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; margin: 0 0 6px -8px; font-size: 14px; }
+.vldc-scope .vx-jira-crumbs .vx-crumb { padding: 4px 8px; border-radius: 6px; color: var(--primary); font-weight: 600; text-decoration: none; }
+.vldc-scope .vx-jira-crumbs a.vx-crumb:hover { background: #eef5ff; text-decoration: none; }
+.vldc-scope .vx-jira-crumbs .vx-crumb.current { color: var(--muted); font-weight: 500; }
+.vldc-scope .vx-jira-crumbs .vx-crumb-sep { color: var(--muted); font-size: 15px; }
+/* Trang lập / sửa dự án */
+.vldc-scope .vx-pj-formpage { display: flex; flex-direction: column; gap: 14px; margin-top: 14px; }
+.vldc-scope .vx-pj-section h4 { margin: 0 0 10px; }
+.vldc-scope .vx-pj-actions { display: flex; gap: 8px; }
+.vldc-scope .vx-pj-desc { margin: 4px 0 8px; }
+.vldc-scope .vx-pj-desc span { display: block; color: var(--muted); font-size: 12px; }
+.vldc-scope .vx-pj-desc div { white-space: pre-line; }
+/* Ô chọn nhiều đơn vị phối hợp (dạng select) */
+.vldc-scope .vx-multiselect { position: relative; }
+.vldc-scope .vx-multiselect summary { list-style: none; cursor: pointer; padding: 10px 36px 10px 14px; border: 1px solid var(--line); border-radius: 10px; background: #fff; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; position: relative; }
+.vldc-scope .vx-multiselect summary::-webkit-details-marker { display: none; }
+.vldc-scope .vx-multiselect summary::after { content: "▾"; position: absolute; right: 14px; top: 50%; transform: translateY(-50%); color: var(--muted); }
+.vldc-scope .vx-multiselect[open] summary { border-color: var(--primary); }
+.vldc-scope .vx-multiselect-list { position: absolute; z-index: 20; left: 0; right: 0; margin-top: 4px; padding: 6px; border: 1px solid var(--line); border-radius: 10px; background: #fff; box-shadow: 0 8px 24px rgba(7, 24, 38, .12); max-height: 260px; overflow: auto; }
+.vldc-scope .vx-multiselect-list label { display: flex; align-items: center; gap: 8px; margin: 0; padding: 8px 10px; border-radius: 6px; font-size: 14px; cursor: pointer; text-align: left; }
+.vldc-scope .vx-multiselect-list label:hover { background: #eef5ff; }
+.vldc-scope .vx-multiselect-list input[type="checkbox"] { width: auto; margin: 0; }
+/* Chi tiết việc (khung bên phải và trang đầy đủ): trường dạng lưới, ghi chú và lịch sử ở cột phải */
+.vldc-scope .vx-detail { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 24px; }
+.vldc-scope .vx-jira-drawer .vx-detail { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+.vldc-scope .vx-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 20px; }
+.vldc-scope .vx-detail-grid > div { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.vldc-scope .vx-detail-grid > div.full { grid-column: 1 / -1; }
+.vldc-scope .vx-detail-grid span:first-child { color: var(--muted); font-size: 12px; }
+.vldc-scope .vx-detail-grid b { font-weight: 600; overflow-wrap: anywhere; }
+.vldc-scope .vx-detail-progress { display: inline-block; width: 80px; height: 6px; margin-right: 8px; border-radius: 3px; background: var(--line); vertical-align: middle; overflow: hidden; }
+.vldc-scope .vx-detail-progress i { display: block; height: 100%; background: var(--primary); }
+.vldc-scope .vx-detail-side { border-left: 1px solid var(--line); padding-left: 20px; }
+.vldc-scope .vx-jira-drawer .vx-detail-side { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); padding-top: 14px; }
+.vldc-scope .vx-history-more summary { cursor: pointer; color: var(--primary); font-size: 13px; font-weight: 600; margin: 6px 0; }
+.vldc-scope .vx-jira-drawer-head .vx-jira-lozenge { margin-left: 8px; }
+@media (max-width: 900px) { .vldc-scope .vx-detail { grid-template-columns: minmax(0, 1fr); } .vldc-scope .vx-detail-side { border-left: 0; padding-left: 0; } }
+/* Công việc: mỗi dự án là một thư mục mở ra các việc; Nhiệm vụ đứng ngang hàng với dự án */
+.vldc-scope .vx-inbox-group-head.project { background: #f2f7fc; }
+.vldc-scope .vx-inbox-group-head .mini { font-weight: 500; margin-left: 4px; }
+.vldc-scope .vx-inbox-folder { margin-left: 18px; border-left: 2px solid var(--line); }
+.vldc-scope .vx-inbox-solo { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.vldc-scope .vx-inbox-solo .vx-inbox-row { border-bottom: 0; }
+.vldc-scope .vx-inbox-solo-tag { padding: 6px 10px 0; font-size: 11px; font-weight: 700; color: var(--primary); text-transform: uppercase; letter-spacing: .03em; }
+/* Công việc: 4 ô thống kê ở đầu trang (bấm vào để lọc) */
+.vldc-scope .vx-inbox-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 12px; }
+@media (max-width: 700px) { .vldc-scope .vx-inbox-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

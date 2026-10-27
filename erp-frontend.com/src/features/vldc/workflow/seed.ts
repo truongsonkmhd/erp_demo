@@ -113,13 +113,13 @@ export function buildSeed(today: string): WorkItem[] {
   act("CD-SEED-7", "accept", "truongdonvi")
   act("CD-SEED-7", "progress", "truongdonvi", { progress: 30 })
 
-  // Nhiệm vụ đề xuất: one waiting, one approved and under way, one returned for correction.
+  // Nhiệm vụ: one waiting for approval, one approved and under way, one rejected.
   proposal("DX-SEED-1", "chunhiem", "Đo bổ sung điểm kiểm tra lặp tuyến T5", 7, "VLDC-2027-001")
   proposal("DX-SEED-2", "hientruong", "Lập sổ tay an toàn thao tác thiết bị trên boong", 12)
   act("DX-SEED-2", "endorse", "bien")
   act("DX-SEED-2", "progress", "hientruong", { progress: 35, evidence: "Dàn ý và 3/8 chương" })
   proposal("DX-SEED-3", "kythuat", "Chuẩn hoá mẫu báo cáo kết quả đo sâu điện", 9)
-  act("DX-SEED-3", "return", "lanhdao", { note: "Nêu rõ phạm vi áp dụng và đơn vị phối hợp" })
+  act("DX-SEED-3", "reject", "lanhdao", { note: "Đã có mẫu báo cáo chung của Liên đoàn" })
 
   payment("PAY-SEED-1", "Thanh toán chi phí khảo sát đợt 2 – VLDC-2027-001", 245_000_000, 5)
   payment("PAY-SEED-2", "Chi phí đối chiếu, xác nhận công nợ HĐ-2026-031", 86_000_000, 4, "CD-SEED-3")

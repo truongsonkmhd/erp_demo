@@ -1,5 +1,5 @@
 import type { WorkItem, WorkNotice, WorkStatus } from "./types.ts"
-import { assignableRoles, canAssign, managesAllUnits, managesWorkOf, rolePosition, roleUnit } from "../data/access.ts"
+import { assignableRoles, canAssign, managesAllUnits, managesWorkOf, rolePosition, roleUnit, tierOf } from "../data/access.ts"
 
 /** The 13 business accounts seeded in tbl_user (admin acts through the "view as" role picker). */
 export const BUSINESS_ROLES = [
@@ -156,6 +156,16 @@ function hasOpenChildren(item: WorkItem, all: WorkItem[]): boolean {
   return childrenOf(item.id, all).some((kid) => kid.status !== "Hoàn thành")
 }
 
+/**
+ * Sub-tasks (việc con): the owner, or any unit head over the owner's unit, gives part of open work to its own staff,
+ * already while the work is new.
+ */
+function canSplit(item: WorkItem, role: string, perms: string[]): boolean {
+  if (!hasPerm(perms, DIRECTIVE_CREATE) || !delegatesOf(role).length) return false
+  if (item.status !== "Mới giao" && item.status !== "Đang thực hiện") return false
+  return item.owner === role || (tierOf(role) === "head" && managesWorkOf(role, item.owner))
+}
+
 function directiveActions(item: WorkItem, role: string, perms: string[], all: WorkItem[]): WorkAction[] {
   if (!hasPerm(perms, DIRECTIVE_UPDATE)) return []
   const actions: WorkAction[] = []
@@ -164,8 +174,8 @@ function directiveActions(item: WorkItem, role: string, perms: string[], all: Wo
   if (isOwner && item.status === "Đang thực hiện") {
     actions.push("progress")
     if (!hasOpenChildren(item, all)) actions.push("submit")
-    if (hasPerm(perms, DIRECTIVE_CREATE) && delegatesOf(role).length) actions.push("delegate")
   }
+  if (canSplit(item, role, perms)) actions.push("delegate")
   if (reviewerOf(item) === role && item.status === "Chờ duyệt") actions.push("approve", "return")
   // Notes: the parties, and every unit taking part in the item's project.
   if (parties(item).includes(role) || inProject(item, role)) actions.push("comment")
@@ -173,12 +183,17 @@ function directiveActions(item: WorkItem, role: string, perms: string[], all: Wo
 }
 
 /** A proposal while it waits for approval or correction; once approved it is worked like a directive. */
+/**
+ * Nhiệm vụ: Chờ duyệt → (the approver) Đang thực hiện or Từ chối; while it waits its creator may still correct it;
+ * once under way the creator reports it done (Hoàn thành) — there is no return for edits and no acceptance step.
+ * "Bị trả lại" only remains on older records, which their creator sends again.
+ */
 function proposalActions(item: WorkItem, role: string, perms: string[], all: WorkItem[]): WorkAction[] {
   if (!isPendingProposal(item)) return directiveActions(item, role, perms, all)
   if (!hasPerm(perms, DIRECTIVE_UPDATE)) return []
   const actions: WorkAction[] = []
-  if (item.status === "Chờ duyệt đề xuất" && item.approver === role) actions.push("endorse", "return", "reject")
-  if (item.status === "Bị trả lại" && item.owner === role) actions.push("resubmit")
+  if (item.status === "Chờ duyệt đề xuất" && item.approver === role) actions.push("endorse", "reject")
+  if ((item.status === "Chờ duyệt đề xuất" || item.status === "Bị trả lại") && item.createdBy === role) actions.push("resubmit")
   if (parties(item).includes(role)) actions.push("comment")
   return actions
 }
@@ -233,6 +248,8 @@ function applyDirectiveAction(item: WorkItem, action: WorkAction, input: ActionI
       return { item: withEntry({ ...item, progress, evidence }, role, action, now, [reviewerOf(item)], input.note || `Tiến độ ${progress}%`) }
     }
     case "submit": {
+      // A Nhiệm vụ has no acceptance step: reporting it done closes it (its approver is told).
+      if (item.type === "proposal") return { item: withEntry({ ...item, status: "Hoàn thành", progress: 100 }, role, action, now, [reviewerOf(item), ...item.cc], input.note) }
       const submitted = withEntry({ ...item, status: "Chờ duyệt", progress: 100 }, role, action, now, [reviewerOf(item)], input.note)
       submitted.history[submitted.history.length - 1].progressBefore = item.progress
       return { item: submitted }
@@ -289,13 +306,9 @@ export function applyAction(item: WorkItem, action: WorkAction, input: ActionInp
 function applyProposalAction(item: WorkItem, action: WorkAction, input: ActionInput, role: string, now: string): WorkItem {
   const proposer = item.createdBy
   switch (action) {
-    // Approved: the proposer carries it out like assigned work and the approver accepts the result.
+    // Approved: the proposer carries it out and reports it done itself.
     case "endorse":
       return withEntry({ ...item, status: "Đang thực hiện", owner: proposer }, role, action, now, [proposer, ...item.cc], input.note)
-    case "return": {
-      const note = requireText(input.note, "Vui lòng nhập lý do trả lại")
-      return withEntry({ ...item, status: "Bị trả lại", owner: proposer }, role, action, now, [proposer], note)
-    }
     case "reject": {
       const note = requireText(input.note, "Vui lòng nhập lý do từ chối")
       return withEntry({ ...item, status: "Từ chối", owner: proposer }, role, action, now, [proposer, ...item.cc], note)
@@ -343,7 +356,7 @@ export function createProposal(
  * the creator accepts the result). The caller says whether the role may create tasks there and who may own them.
  */
 export function createProjectTask(
-  input: { id: string; title: string; owner: string; project: string; wbsItem?: string; subUnit?: string; cc: string[]; due: string; priority: WorkItem["priority"]; description?: string },
+  input: { id: string; title: string; owner: string; project: string; wbsItem?: string; subUnit?: string; cc: string[]; due: string; priority: WorkItem["priority"]; complexity?: WorkItem["complexity"]; description?: string },
   role: string,
   access: { canCreate: boolean; owners: string[]; latest?: string },
   now: string,
@@ -357,6 +370,7 @@ export function createProjectTask(
   return newWorkItem({
     id: input.id, type: "directive", title, description: input.description, createdBy: role, owner: input.owner, project: input.project,
     ...(input.wbsItem ? { wbsItem: input.wbsItem } : {}), ...(input.subUnit ? { subUnit: input.subUnit } : {}),
+    ...(input.complexity ? { complexity: input.complexity } : {}),
     cc, status: "Mới giao", priority: input.priority, due,
   }, now, [input.owner, ...cc])
 }

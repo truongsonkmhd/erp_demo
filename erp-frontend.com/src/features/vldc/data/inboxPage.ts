@@ -1,21 +1,23 @@
 import { escapeHtml as esc, formatDate, jsCall } from "../workflow/html"
-import { assignmentInboxRows } from "./docAssignCore"
-import { topicReviewRows } from "./scienceCore"
 import { projectApprovalRows, projectCrRows, projectDeleteRows } from "./projectCore"
 import { workflowStore } from "../workflow/repository"
 import { localToday } from "./dates"
 import {
-  GROUP_LABELS, applyFilter, groupRows, inboxCounts, inboxRows, sortRows,
-  type InboxFilter, type InboxRow, type InboxScope, type InboxSort, type UrgencyGroup,
+  OTHER_GROUP, applyFilter, inboxCounts, inboxRows, inboxTree, sortRows,
+  type InboxFilter, type InboxRow, type InboxScope,
 } from "./inboxCore"
 import { vldcData } from "./registry"
 import { managesAllUnits } from "./access"
 
-/** Công việc (inbox): one urgency-ordered list of everything waiting on the role, with filter chips and search. */
+/**
+ * Công việc (inbox): everything waiting on the role, as folders: each project opens to its work, a Nhiệm vụ stands beside
+ * the projects, the rest is under "Việc khác"; a search box and one filter above, the most urgent first.
+ */
 
 type Ctx = { role(): string }
 
-const state = { filter: "mine" as InboxFilter, scope: "mine" as InboxScope, query: "", source: "", sort: "due" as InboxSort, collapsed: new Set<UrgencyGroup>(["later"]) }
+/** opened: the folders (project ids, "Việc khác") open; all start closed. */
+const state = { filter: "mine" as InboxFilter, scope: "mine" as InboxScope, query: "", opened: new Set<string>() }
 let ctx: Ctx = { role: () => "" }
 const today = () => localToday()
 const isLeader = () => managesAllUnits(ctx.role())
@@ -29,15 +31,17 @@ function withSubUnit(row: InboxRow): InboxRow {
   return sub ? { ...row, owner: `${row.owner} › ${sub.name}` } : row
 }
 
+/** Work items and project decisions only, both on the backend API (the Firebase task, document and topic lists are left out). */
 function rows(): InboxRow[] {
   const scope = isLeader() ? state.scope : "mine"
   return [
-    ...inboxRows(workflowStore.items(), vldcData.get("inboxTasks"), ctx.role(), scope, today()).map(withSubUnit),
-    ...assignmentInboxRows(vldcData.get("docAssignments"), ctx.role(), scope, today()),
-    ...topicReviewRows(vldcData.get("scienceTopics"), ctx.role(), today()),
-    ...projectApprovalRows(vldcData.get("projects"), ctx.role(), today()),
-    ...projectDeleteRows(vldcData.get("projects"), ctx.role(), today()),
-    ...projectCrRows(vldcData.get("projects"), ctx.role(), today()),
+    ...inboxRows(workflowStore.items(), [], ctx.role(), scope, today()).map(withSubUnit),
+    // Decisions on a project sit in its folder.
+    ...[
+      ...projectApprovalRows(vldcData.get("projects"), ctx.role(), today()),
+      ...projectDeleteRows(vldcData.get("projects"), ctx.role(), today()),
+      ...projectCrRows(vldcData.get("projects"), ctx.role(), today()),
+    ].map((r) => ({ ...r, project: r.id })),
   ]
 }
 
@@ -54,30 +58,45 @@ function rowHtml(r: InboxRow): string {
 </div>`
 }
 
+/** A folder's title: the project's name and code, or "Việc khác". */
+function folderTitle(key: string): string {
+  if (key === OTHER_GROUP) return "<b>Việc khác</b>"
+  const p = vldcData.get("projects").find((x) => x.id === key)
+  return `<b>${esc(p?.name ?? key)}</b> <span class="mini">${esc(key)}</span>`
+}
+
 function listHtml(): string {
   const t = today()
-  const visible = sortRows(applyFilter(rows(), state.filter, t, state.query, state.source), state.sort)
+  const visible = sortRows(applyFilter(rows(), state.filter, t, state.query), "due")
   if (!visible.length) return '<div class="mini" style="padding:18px 4px">Không có việc phù hợp bộ lọc.</div>'
-  const groups = groupRows(visible, t)
-  return (Object.keys(GROUP_LABELS) as UrgencyGroup[]).filter((g) => groups[g].length).map((g) => {
-    const open = !state.collapsed.has(g)
-    return `<div class="vx-inbox-group"><button class="vx-inbox-group-head ${g}" ${jsCall("inboxToggleGroup", g)}><span>${open ? "▾" : "▸"} ${GROUP_LABELS[g]}</span><span class="badge ${g === "overdue" ? "b-danger" : g === "today" ? "b-warn" : "b-info"}">${groups[g].length}</span></button>${open ? groups[g].map(rowHtml).join("") : ""}</div>`
+  // While searching every folder is open, so the matches show.
+  const searching = !!state.query.trim()
+  return inboxTree(visible).map((e) => {
+    if (e.kind === "row") return `<div class="vx-inbox-group vx-inbox-solo"><div class="vx-inbox-solo-tag">Nhiệm vụ</div>${rowHtml(e.row)}</div>`
+    const open = searching || state.opened.has(e.key)
+    const late = e.rows.filter((r) => r.overdue).length
+    return `<div class="vx-inbox-group"><button class="vx-inbox-group-head${e.key === OTHER_GROUP ? "" : " project"}" ${jsCall("inboxToggleGroup", e.key)}><span>${open ? "▾" : "▸"} ${folderTitle(e.key)}</span><span>${late ? `<span class="badge b-danger">${late} quá hạn</span> ` : ""}<span class="badge b-info">${e.rows.length} việc</span></span></button>${open ? `<div class="vx-inbox-folder">${e.rows.map(rowHtml).join("")}</div>` : ""}</div>`
   }).join("")
 }
 
+/** The filters of the list, in the one select (no counts): what waits on the role first. */
+const FILTERS: [InboxFilter, string][] = [["mine", "Cần tôi xử lý"], ["overdue", "Quá hạn"], ["today", "Đến hạn hôm nay"], ["cc", "Tôi phối hợp"], ["all", "Tất cả"]]
+
+/**
+ * At a glance: four counts (each also a filter), then search and the filter select (the leader also picks its own work or
+ * the whole federation), then the folders.
+ */
 function pageHtml(): string {
-  const t = today()
   const all = rows()
-  const c = inboxCounts(all, t)
-  const chip = (f: InboxFilter, label: string, n: number, cls: string) =>
+  const c = inboxCounts(all, today())
+  const tile = (f: InboxFilter, label: string, n: number, cls: string) =>
     `<button class="vx-inbox-chip ${cls}${state.filter === f ? " active" : ""}" ${jsCall("inboxFilter", f)}><b>${n}</b><span>${label}</span></button>`
-  const sources = [...new Set(all.map((r) => r.source))].map((s) => [s, all.filter((r) => r.source === s).length] as const).sort((a, b) => b[1] - a[1])
+  const tiles = `<div class="vx-inbox-chips vx-inbox-stats">${tile("mine", "Cần tôi xử lý", c.mine, "blue")}${tile("overdue", "Quá hạn", c.overdue, "red")}${tile("today", "Đến hạn hôm nay", c.today, "yellow")}${tile("cc", "Tôi phối hợp", c.cc, "gray")}</div>`
   const scope = isLeader()
-    ? `<div class="vx-inbox-scope">${(["mine", "all"] as InboxScope[]).map((s) => `<button class="${state.scope === s ? "active" : ""}" ${jsCall("inboxScope", s)}>${s === "mine" ? "Của tôi" : "Toàn Liên đoàn"}</button>`).join("")}</div>`
+    ? `<div class="vx-flow-view">${(["mine", "all"] as InboxScope[]).map((s) => `<button class="${state.scope === s ? "active" : ""}" ${jsCall("inboxScope", s)}>${s === "mine" ? "Của tôi" : "Toàn Liên đoàn"}</button>`).join("")}</div>`
     : ""
-  return `<div class="card vx-inbox-head"><div class="card-head"><div><h3>Công việc</h3><div class="mini">Chỉ đạo, việc được giao, hồ sơ thanh toán và tác vụ nghiệp vụ • cập nhật realtime</div></div>${scope}</div>
-<div class="vx-inbox-chips">${chip("mine", "Cần tôi xử lý", c.mine, "blue")}${chip("overdue", "Quá hạn", c.overdue, "red")}${chip("today", "Đến hạn hôm nay", c.today, "yellow")}${chip("cc", "Tôi phối hợp", c.cc, "gray")}${chip("all", "Tất cả", all.length, "gray")}</div>
-<div class="vx-inbox-toolbar"><input id="inboxq" placeholder="Tìm mã, nội dung, nguồn..." value="${esc(state.query)}" oninput="inboxSearch(this.value)"><select onchange="inboxSource(this.value)"><option value="">Tất cả nguồn</option>${sources.map(([s]) => `<option${s === state.source ? " selected" : ""}>${esc(s)}</option>`).join("")}</select><select onchange="inboxSort(this.value)"><option value="due"${state.sort === "due" ? " selected" : ""}>Sắp xếp: Hạn</option><option value="priority"${state.sort === "priority" ? " selected" : ""}>Sắp xếp: Ưu tiên</option></select></div></div>
+  const filter = `<select class="vx-filter-select" onchange="inboxFilter(this.value)">${FILTERS.map(([f, l]) => `<option value="${f}"${f === state.filter ? " selected" : ""}>${l}</option>`).join("")}</select>`
+  return `${tiles}<div class="vx-jira-toolbar"><input id="inboxq" class="vx-jira-search" placeholder="Tìm mã, nội dung…" value="${esc(state.query)}" oninput="inboxSearch(this.value)">${filter}${scope}</div>
 <div class="card"><div id="inboxList">${listHtml()}</div></div>`
 }
 
@@ -101,11 +120,9 @@ export function installInboxPage(render: Record<string, () => void>, nextCtx: Ct
     inboxFilter: (f: InboxFilter) => { state.filter = f; rerender() },
     // Switching to the whole federation shows everything; back to "mine" shows what awaits the leader.
     inboxScope: (s: InboxScope) => { state.scope = s; state.filter = s === "all" ? "all" : "mine"; rerender() },
-    inboxSource: (s: string) => { state.source = s; rerender() },
-    inboxSort: (s: InboxSort) => { state.sort = s; rerender() },
-    inboxToggleGroup: (g: UrgencyGroup) => {
-      if (state.collapsed.has(g)) state.collapsed.delete(g)
-      else state.collapsed.add(g)
+    inboxToggleGroup: (key: string) => {
+      if (state.opened.has(key)) state.opened.delete(key)
+      else state.opened.add(key)
       rerender()
     },
   })

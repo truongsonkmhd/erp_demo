@@ -10,7 +10,11 @@ import type { ChangeRequest, ChangeRequestKind, Project, ProjectApproval, Stored
  * paid payment dossiers, schedule figures from the project's dates.
  */
 
-export const PROJECT_STATUSES = ["Chuẩn bị", "Đang thực hiện", "Tạm dừng", "Nghiệm thu", "Hoàn thành"] as const
+/** The four states of a project. */
+export const PROJECT_STATUSES = ["Khởi tạo", "Đang thực hiện", "Tạm dừng", "Hoàn thành"] as const
+export type ProjectState = (typeof PROJECT_STATUSES)[number]
+/** Lozenge colour of each project state. */
+export const PROJECT_LOZENGE: Record<ProjectState, string> = { "Khởi tạo": "new", "Đang thực hiện": "doing", "Tạm dừng": "review", "Hoàn thành": "done" }
 export const CR_KINDS: ChangeRequestKind[] = ["Phạm vi", "Ngân sách", "Thời gian"]
 /**
  * Phòng Kỹ thuật creates projects and their tasks; the other units only view them and note on tasks. The unit is read
@@ -150,21 +154,21 @@ export const canSeeProject = (p: StoredProject, role: string) =>
   canCreateProject(role) || isProjectApprover(role) || (approvalOf(p) === "Đã duyệt" && isProjectMember(p, role))
 /** Tasks are created by Phòng Kỹ thuật, in approved projects only. */
 export const canCreateTask = (p: StoredProject, role: string) => canCreateProject(role) && approvalOf(p) === "Đã duyệt"
-/** Progress, milestones and change requests: Phòng Kỹ thuật and the project's lead (chủ nhiệm). */
-export const canUpdateProject = (p: StoredProject, role: string) => !isProjectApprover(role) && (canCreateProject(role) || p.leadRole === role)
+/** Progress, milestones and change requests: Phòng Kỹ thuật only (the other units, the lead included, view). */
+export const canUpdateProject = (_p: StoredProject, role: string) => canCreateProject(role) && !isProjectApprover(role)
 /**
- * Deleting a project takes two people: its creator asks (with a reason) and the federation head confirms. Its tasks are
- * not deleted with it: each belongs to whoever created it (Phòng Kỹ thuật, or the unit head for its sub-tasks), so the
- * project can only go once it has no task left.
+ * Deleting a project takes two people: Phòng Kỹ thuật, which creates and edits projects, asks (with a reason) and the
+ * federation head confirms. Its tasks are not deleted with it: each belongs to whoever created it (Phòng Kỹ thuật, or the
+ * unit head for its sub-tasks), so the project can only go once it has no task left.
  */
-export const canRequestDelete = (p: StoredProject, role: string) => !!p.createdBy && p.createdBy === role && !p.deleteRequest
+export const canRequestDelete = (p: StoredProject, role: string) => canUpdateProject(p, role) && !p.deleteRequest
 
 /** Why the project cannot go yet: it still has tasks, which only their creators delete ("" when it has none). */
 export const deleteBlocker = (liveWork: number) =>
   liveWork ? `Dự án còn ${liveWork} việc. Người tạo từng việc (Phòng Kỹ thuật, trưởng các phòng/đoàn với việc con) cần xoá việc của mình trước.` : ""
 
 export function requestDelete(p: StoredProject, role: string, reason: string, now: string, liveWork: number): StoredProject {
-  if (!canRequestDelete(p, role)) throw new Error("Chỉ người tạo dự án được đề nghị xoá")
+  if (!canRequestDelete(p, role)) throw new Error("Chỉ Phòng Kỹ thuật được đề nghị xoá dự án")
   if (deleteBlocker(liveWork)) throw new Error(deleteBlocker(liveWork))
   if (!reason.trim()) throw new Error("Vui lòng ghi lý do xoá dự án")
   const next: StoredProject = { ...p, deleteRequest: { by: role, at: now, reason: reason.trim() } }
@@ -212,7 +216,7 @@ export function projectDeleteRows(projects: StoredProject[], role: string, today
  * back to the approver; an approved or pending one keeps its state.
  */
 export function submitProject(prev: StoredProject | undefined, next: StoredProject, role: string): StoredProject {
-  if (!prev) return { ...next, createdBy: role, approval: "Chờ duyệt" }
+  if (!prev) return { ...next, createdBy: role, approval: "Chờ duyệt", status: "Khởi tạo" }
   if (approvalOf(prev) !== "Từ chối") return next
   const resubmitted: StoredProject = { ...next, approval: "Chờ duyệt" }
   delete resubmitted.approvalNote
@@ -224,7 +228,19 @@ export function submitProject(prev: StoredProject | undefined, next: StoredProje
 export function decideProject(p: StoredProject, decision: "Đã duyệt" | "Từ chối", note: string, now: string): StoredProject {
   if (approvalOf(p) !== "Chờ duyệt") throw new Error("Dự án không còn chờ duyệt")
   if (decision === "Từ chối" && !note.trim()) throw new Error("Vui lòng ghi lý do từ chối")
-  return { ...p, approval: decision, decidedAt: now, ...(note.trim() ? { approvalNote: note.trim() } : {}) }
+  // Approving starts the project (Khởi tạo → Đang thực hiện).
+  return { ...p, approval: decision, decidedAt: now, ...(decision === "Đã duyệt" ? { status: "Đang thực hiện" as const } : {}), ...(note.trim() ? { approvalNote: note.trim() } : {}) }
+}
+
+/**
+ * The project's state: Khởi tạo until the federation head approves it; older records map "Chuẩn bị" to Khởi tạo and
+ * "Nghiệm thu" (or no status) to Đang thực hiện.
+ */
+export function projectStateOf(p: StoredProject): ProjectState {
+  if (approvalOf(p) !== "Đã duyệt") return "Khởi tạo"
+  if (p.status === "Khởi tạo" || p.status === "Chuẩn bị") return "Khởi tạo"
+  if (p.status === "Tạm dừng" || p.status === "Hoàn thành") return p.status
+  return "Đang thực hiện"
 }
 
 /** Projects waiting for the approver, one inbox row each. */

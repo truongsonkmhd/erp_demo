@@ -1,5 +1,7 @@
 package com.xxxx.ddd.infrastructure.persistence.repository.work;
 
+import com.xxxx.ddd.domain.model.enums.work.MissionStatus;
+import java.util.List;
 import com.xxxx.ddd.domain.model.entity.work.Mission;
 import com.xxxx.ddd.domain.respository.work.MissionRepository;
 import com.xxxx.ddd.infrastructure.persistence.mapper.work.MissionJPAMapper;
@@ -21,4 +23,5 @@ public class MissionRepositoryImpl implements MissionRepository {
     public boolean existsByCode(String code) { return mapper.existsByCode(code); }
     public Mission save(Mission mission) { return mapper.save(mission); }
     public Page<Mission> search(Specification<Mission> spec, Pageable pageable) { return mapper.findAll(spec, pageable); }
+    public List<Mission> findOpen() { return mapper.findByIsDeletedFalseAndStatusIn(List.of(MissionStatus.PENDING, MissionStatus.IN_PROGRESS)); }
 }

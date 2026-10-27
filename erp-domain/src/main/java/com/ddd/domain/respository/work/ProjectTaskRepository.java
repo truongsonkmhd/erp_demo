@@ -18,4 +18,6 @@ public interface ProjectTaskRepository {
     List<ProjectTask> findByProjectId(Long projectId);
     /** Số việc chưa xoá của dự án (dự án chỉ xoá được khi bằng 0). */
     long countLiveByProjectId(Long projectId);
+    /** Việc chưa xoá và chưa xong của mọi dự án (menu Công việc). */
+    List<ProjectTask> findOpen();
 }

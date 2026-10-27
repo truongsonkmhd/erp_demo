@@ -1,5 +1,6 @@
 package com.xxxx.ddd.domain.respository.work;
 
+import java.util.List;
 import com.xxxx.ddd.domain.model.entity.work.Mission;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
@@ -12,4 +13,6 @@ public interface MissionRepository {
     boolean existsByCode(String code);
     Mission save(Mission mission);
     Page<Mission> search(Specification<Mission> spec, Pageable pageable);
+    /** Nhiệm vụ chưa xoá đang chờ duyệt hoặc đang thực hiện (menu Công việc). */
+    List<Mission> findOpen();
 }

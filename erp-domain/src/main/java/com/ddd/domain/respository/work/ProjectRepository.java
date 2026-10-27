@@ -1,5 +1,6 @@
 package com.xxxx.ddd.domain.respository.work;
 
+import java.util.List;
 import com.xxxx.ddd.domain.model.entity.work.Project;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
@@ -14,4 +15,6 @@ public interface ProjectRepository {
     boolean existsByCode(String code);
     Project save(Project project);
     Page<Project> search(Specification<Project> spec, Pageable pageable);
+    /** Dự án chưa xoá (menu Công việc). */
+    List<Project> findLive();
 }

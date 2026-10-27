@@ -1,5 +1,6 @@
 package com.xxxx.ddd.infrastructure.persistence.mapper.work;
 
+import com.xxxx.ddd.domain.model.enums.work.TaskStatus;
 import com.xxxx.ddd.domain.model.entity.work.ProjectTask;
 import java.util.List;
 import java.util.Optional;
@@ -11,4 +12,5 @@ public interface ProjectTaskJPAMapper extends JpaRepository<ProjectTask, Long>, 
     boolean existsByCode(String code);
     List<ProjectTask> findByProjectIdAndIsDeletedFalse(Long projectId);
     long countByProjectIdAndIsDeletedFalse(Long projectId);
+    List<ProjectTask> findByIsDeletedFalseAndStatusNot(TaskStatus status);
 }

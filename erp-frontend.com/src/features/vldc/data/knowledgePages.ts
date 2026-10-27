@@ -1,7 +1,7 @@
 import { escapeHtml as esc, jsCall } from "../workflow/html"
 import { projectsView } from "./projectView"
 import { subTabsHtml } from "./menuPolicy"
-import { ROLE_TITLES } from "../workflow/rules"
+import { ROLE_TITLES, isWork } from "../workflow/rules"
 import { workflowStore } from "../workflow/repository"
 import * as A from "./accountingMetrics"
 import { ACTION_LABELS } from "./audit"
@@ -174,7 +174,7 @@ function reportTable(def: ReportDef): string {
   const t = today()
   switch (def.source) {
     case "projects": return table(["Dự án", "Đơn vị", "Kỹ thuật", "Chi phí", "Dự báo"], projectsView().map((p) => `<tr><td>${esc(p.id)}</td><td>${esc(p.unit)}</td><td>${p.technical}%</td><td>${p.costUsed}%</td><td>${p.delayDays ? `+${p.delayDays} ngày` : "Đúng hạn"}</td></tr>`))
-    case "work_items": return table(["Mã", "Nội dung", "Chủ trì", "Hạn"], workflowStore.items().filter((x) => x.type !== "payment" && x.status !== "Hoàn thành" && x.due < t).map((x) => `<tr><td>${esc(x.id)}</td><td>${esc(x.title)}</td><td>${esc(ROLE_TITLES[x.owner] || x.owner)}</td><td>${vnDate(x.due)}</td></tr>`), "Không có việc quá hạn.")
+    case "work_items": return table(["Mã", "Nội dung", "Chủ trì", "Hạn"], workflowStore.items().filter((x) => isWork(x) && x.status !== "Hoàn thành" && x.due < t).map((x) => `<tr><td>${esc(x.id)}</td><td>${esc(x.title)}</td><td>${esc(ROLE_TITLES[x.owner] || x.owner)}</td><td>${vnDate(x.due)}</td></tr>`), "Không có việc quá hạn.")
     case "finance_lines": return table(["Dự án", "Hạng mục", "Dự toán", "Đã chi"], D("financeLines").map((l) => `<tr><td>${esc(l.project)}</td><td>${esc(l.item)}</td><td>${tr(l.budget)}</td><td>${tr(l.paid)}</td></tr>`))
     case "contracts": return table(["Hợp đồng", "Khách hàng", "Còn lại", "Tuổi nợ"], A.debtSummary(D("contracts"), "thu", t).debts.map((d) => `<tr><td>${esc(d.contract.id)}</td><td>${esc(d.contract.party)}</td><td>${tr(d.outstanding)}</td><td>${d.agingDays} ngày</td></tr>`))
     case "advances": return table(["Mã", "Người", "Còn lại", "Hạn"], A.advanceSummary(D("advances"), t).open.map((a) => `<tr><td>${esc(a.id)}</td><td>${esc(a.person)}</td><td>${tr(A.advanceRemaining(a))}</td><td>${vnDate(a.due)}</td></tr>`))

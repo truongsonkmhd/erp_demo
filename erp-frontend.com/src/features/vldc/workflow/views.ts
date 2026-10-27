@@ -1,4 +1,5 @@
 import { escapeHtml as esc, formatDate, formatMoney, formatTime, jsCall, statusBadge } from "./html"
+import { subTabsHtml } from "../data/menuPolicy"
 import { disbursementView, projectsView, spendView } from "../data/projectView"
 import {
   BUSINESS_ROLES,
@@ -7,15 +8,21 @@ import {
   allowedActions,
   blockedReason,
   childrenOf,
-  createDirective,
+  canDeleteWork,
+  createProjectTask,
   createPayment,
   delegatesOf,
   hasPerm,
+  approverOf,
+  createProposal,
   isAtRisk,
   isClosed,
+  isPendingProposal,
   isVisible,
+  isWork,
   notificationsFor,
   ownerInbox,
+  reviewerOf,
   rolledUpProgress,
   type WorkAction,
 } from "./rules"
@@ -28,17 +35,19 @@ import { cashSummary, debtSummary } from "../data/ledgerCore"
 import { performanceHtml, unitDetailHtml } from "./kpiViews"
 import { kpiUnits, rolesByUnit, unitKpis, unitOfRole } from "./kpi"
 import { vldcData } from "../data/registry"
-import { ROLE_PROFILES, roleUnitCode, rolesOfUnit, unitCodeOf } from "../data/org"
-import { managesAllUnits } from "../data/access"
+import { ROLE_PROFILES, roleUnitCode, rolesOfUnit, unitCodeOf, unitName, type UnitCode } from "../data/org"
+import { managesAllUnits, tierOf } from "../data/access"
+import { approvalOf, canCreateTask, projectUnits } from "../data/projectCore"
+import type { StoredProject } from "../data/types"
 import { subUnitOptions } from "../data/subUnitPage"
 
 export { escapeHtml, statusBadge } from "./html"
 
-type Shell = { show(page: string): void; openModal(title: string, html: string): void; closeModal(): void }
+type Shell = { show(page: string): void; go(path: string): void; rerender(): void; openModal(title: string, html: string): void; closeModal(): void }
 type Context = { role(): string; perms(): string[]; userName(): string }
 
 let ctx: Context = { role: () => "", perms: () => [], userName: () => "" }
-let shell: Shell = { show() {}, openModal() {}, closeModal() {} }
+let shell: Shell = { show() {}, go() {}, rerender() {}, openModal() {}, closeModal() {} }
 
 export const workflowPerms = () => ctx.perms()
 
@@ -52,17 +61,19 @@ const ACTION_LABELS: Record<WorkAction, string> = {
   submit: "Báo cáo hoàn thành",
   approve: "Duyệt đóng",
   return: "Trả lại",
-  comment: "Bình luận",
-  delegate: "Giao việc con",
+  comment: "Ghi chú",
+  delegate: "Tạo việc con",
   advance: "Chuyển bước tiếp",
   resubmit: "Trình lại",
+  endorse: "Duyệt đề xuất",
+  reject: "Từ chối",
+  move: "Chuyển trạng thái",
 }
 
 
 const today = () => new Date().toLocaleDateString("sv-SE")
 const newId = (prefix: string) => `${prefix}-${Date.now().toString(36).toUpperCase()}`
 const roleTitle = (role: string) => ROLE_TITLES[role] || role
-const currentPage = () => window.location.pathname.split("/").filter(Boolean).pop() || "dashboard"
 const content = () => document.getElementById("content")
 
 function riskBadge(item: WorkItem, all: WorkItem[]): string {
@@ -84,28 +95,8 @@ function openButton(item: WorkItem, label = "Mở"): string {
   return `<button class="btn btn-light" ${jsCall("wfOpen", item.id)}>${label}</button>`
 }
 
-function workCard(item: WorkItem, all: WorkItem[]): string {
-  return `<div class="directive-item">${statusBadge(item)}${riskBadge(item, all)}<h5>${esc(item.id)} • ${esc(item.title)}</h5><div class="directive-meta">${esc(roleTitle(item.owner))} • Hạn ${formatDate(item.due)}</div>${item.type === "payment" ? "" : progressBar(rolledUpProgress(item, all))}${openButton(item)}</div>`
-}
-
-function column(title: string, items: WorkItem[], all: WorkItem[]): string {
-  return `<div class="directive-col"><h4>${title}</h4>${items.map((x) => workCard(x, all)).join("") || '<div class="mini">Không có.</div>'}</div>`
-}
-
-function treeRows(roots: WorkItem[], visible: WorkItem[], all: WorkItem[], depth = 0): string {
-  return roots.map((item) => {
-    const kids = visible.filter((x) => x.parentId === item.id && x.type !== "payment")
-    const indent = depth ? `<span class="mini" style="padding-left:${depth * 18}px">↳ </span>` : ""
-    return `<tr><td><b>${esc(item.id)}</b></td><td>${indent}${esc(item.title)}${riskBadge(item, all)}</td><td>${esc(roleTitle(item.createdBy))}</td><td>${esc(roleTitle(item.owner))}</td><td>${item.cc.map((r) => esc(roleTitle(r))).join(", ")}</td><td>${statusBadge(item)}</td><td style="min-width:110px">${progressBar(rolledUpProgress(item, all))}</td><td>${formatDate(item.due)}</td><td>${openButton(item)}</td></tr>`
-      + treeRows(kids, visible, all, depth + 1)
-  }).join("")
-}
-
-/** Search and status filter of the Giao việc list (kept across realtime re-renders). */
-let dirQuery = ""
-let dirStatus: DirectiveStatusFilter = ""
-
-const directiveLabels: DirectiveLabels = {
+/** Names shown for role codes, tổ ids and project ids (search, export, cards). */
+export const directiveLabels: DirectiveLabels = {
   role: roleTitle,
   subUnit: (id) => (id ? vldcData.get("subUnits").find((s) => s.id === id)?.name ?? "" : ""),
   project: (id) => {
@@ -114,72 +105,24 @@ const directiveLabels: DirectiveLabels = {
   },
 }
 
-function visibleDirectives(): { visible: WorkItem[]; all: WorkItem[] } {
-  const all = store.items()
-  return { all, visible: all.filter((x) => x.type !== "payment" && isVisible(x, ctx.role(), all)) }
-}
 
-const filtered = (visible: WorkItem[], all: WorkItem[]) => filterDirectives(visible, all, dirQuery, dirStatus, today(), directiveLabels)
-
-/** The tree while nothing is searched; a flat list of the matches otherwise. */
-function directiveTableHtml(visible: WorkItem[], all: WorkItem[]): string {
-  const searching = !!(dirQuery.trim() || dirStatus)
-  const rows = searching
-    ? treeRows(filtered(visible, all).sort((a, b) => a.due.localeCompare(b.due)), [], all)
-    : treeRows(visible.filter((x) => !x.parentId || !visible.some((p) => p.id === x.parentId)).sort((a, b) => a.due.localeCompare(b.due)), visible, all)
-  const empty = searching ? "Không có việc nào khớp tìm kiếm." : "Chưa có việc nào trong phạm vi của bạn."
-  return `${searching ? `<div class="mini" style="margin-bottom:6px">${filtered(visible, all).length} / ${visible.length} việc khớp</div>` : ""}<table><tr><th>Mã</th><th>Nội dung</th><th>Người giao</th><th>Chủ trì</th><th>Phối hợp</th><th>Trạng thái</th><th>Tiến độ</th><th>Hạn</th><th></th></tr>${rows || `<tr><td colspan="9" class="mini">${empty}</td></tr>`}</table>`
-}
-
-function wfDirectiveSearch() {
-  dirQuery = inputValue("wf-dir-q")
-  dirStatus = inputValue("wf-dir-status") as DirectiveStatusFilter
-  const el = document.getElementById("wf-dir-table")
-  const { visible, all } = visibleDirectives()
-  if (el) el.innerHTML = directiveTableHtml(visible, all)
-}
-
-/** Excel file of the work shown (the search applies), by due date. */
-async function wfExportDirectives() {
-  const { visible, all } = visibleDirectives()
-  const rows = directiveExportRows(filtered(visible, all).sort((a, b) => a.due.localeCompare(b.due)), all, directiveLabels)
-  if (!rows.length) return alert("Không có việc nào để xuất.")
-  const XLSX = await import("xlsx")
-  const sheet = XLSX.utils.json_to_sheet(rows)
-  sheet["!cols"] = Object.keys(rows[0]).map((k) => ({ wch: k === "Nội dung" ? 50 : k === "Dự án" ? 34 : 18 }))
-  const book = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(book, sheet, "Giao việc")
-  XLSX.writeFile(book, `giao-viec-${today()}.xlsx`)
-}
-
-function renderDirectives() {
-  const all = store.items()
-  const role = ctx.role()
-  const perms = ctx.perms()
-  const visible = all.filter((x) => x.type !== "payment" && isVisible(x, role, all))
-  const open = visible.filter((x) => !isClosed(x))
-  const atRisk = open.filter((x) => isAtRisk(x, all, today()))
-  const waiting = visible.filter((x) => x.createdBy === role && x.status === "Chờ duyệt")
-  // The top of the organisation is never the owner: its first column follows the work it gave out that nobody has accepted yet.
-  const leader = managesAllUnits(role)
-  const mine = leader ? notYetAccepted(role, visible) : ownerInbox(role, all).filter((x) => x.type !== "payment")
-  // Giving work needs the permission and someone in the role's managed scope to give it to.
-  const canCreate = hasPerm(perms, "vldc-directives:create") && delegatesOf(role).length > 0
-  const canReset = leader || perms.includes("*")
-  const el = content()
-  if (!el) return
-  el.innerHTML = `${offlineBanner()}<div class="grid kpis"><div class="kpi"><div class="label">Đang mở</div><div class="value">${open.length}</div><div class="sub">Chỉ đạo & việc liên quan</div></div><div class="kpi"><div class="label">Nguy cơ trễ</div><div class="value">${atRisk.length}</div><div class="sub">≤ 2 ngày, &lt; 80%</div></div><div class="kpi"><div class="label">Chờ tôi duyệt</div><div class="value">${waiting.length}</div><div class="sub">Đã báo cáo hoàn thành</div></div><div class="kpi"><div class="label">Hoàn thành</div><div class="value">${visible.length - open.length}</div><div class="sub">Đã duyệt đóng</div></div></div>
- <div class="card" style="margin-top:14px"><div class="card-head"><div><h3>Giao việc</h3><div class="mini">Giao việc theo cấp, theo dõi tiến độ cuộn lên và duyệt kết quả</div></div><div>${canReset ? '<button class="btn btn-light" onclick="wfResetDemo()">Đặt lại dữ liệu demo</button> ' : ""}${canCreate ? '<button class="btn btn-primary" onclick="wfCreateDirective()">+ Giao việc</button>' : ""}</div></div>
- <div class="directive-board">${column(leader ? "Mới giao – chưa nhận" : "Tôi cần xử lý", mine, all)}${column("Chờ tôi duyệt", waiting, all)}${column("Nguy cơ trễ", atRisk, all)}</div></div>
- <div class="card" style="margin-top:14px"><div class="card-head"><h3>Cây chỉ đạo – việc được giao</h3><div class="vx-dir-tools"><input id="wf-dir-q" placeholder="Tìm mã, nội dung, đơn vị, tổ, dự án…" value="${esc(dirQuery)}" oninput="wfDirectiveSearch()"><select id="wf-dir-status" onchange="wfDirectiveSearch()">${DIRECTIVE_STATUS_FILTERS.map(([v, l]) => `<option value="${v}"${v === dirStatus ? " selected" : ""}>${l}</option>`).join("")}</select><button class="btn btn-light" onclick="wfExportDirectives()">Xuất Excel</button></div></div><div id="wf-dir-table">${directiveTableHtml(visible, all)}</div></div>`
-}
+/** The role the workflow acts as and its permission codes (for the board views). */
+export const workflowRole = () => ctx.role()
 
 function paymentStepper(item: WorkItem): string {
   const step = item.step ?? 0
   return `<div class="timeline">${PAYMENT_STEPS.map((s, i) => `<div>${i < step || item.status === "Đã chi" ? "✓" : i === step ? "▶" : "○"} <b>${esc(s.label)}</b> – ${esc(roleTitle(s.owner))}</div>`).join("")}</div>`
 }
 
-function detailHtml(item: WorkItem): string {
+/** "Cán bộ hiện trường – Nguyễn Đức Hải": the role and the person holding it. */
+const assignee = (role: string) => `${roleTitle(role)}${personOf(role) ? ` – ${personOf(role)}` : ""}`
+/** Unit a note was written for (recorded with it; older notes fall back to the writer's unit today). */
+const noteUnit = (h: { by: string; unit?: string }) => {
+  const code = h.unit ?? roleUnitCode(h.by)
+  return code ? unitName(code as UnitCode) : ""
+}
+
+export function detailHtml(item: WorkItem): string {
   const all = store.items()
   const role = ctx.role()
   const actions = allowedActions(item, role, ctx.perms(), all)
@@ -189,8 +132,10 @@ function detailHtml(item: WorkItem): string {
   const info = [
     metric("Loại", TYPE_LABELS[item.type]),
     metric("Trạng thái", statusBadge(item) + riskBadge(item, all)),
-    metric("Người giao / lập", esc(roleTitle(item.createdBy))),
-    metric(item.type === "payment" ? "Đang ở" : "Chủ trì", esc(roleTitle(item.owner))),
+    item.type === "proposal"
+      ? metric("Người đề xuất", esc(roleTitle(item.createdBy))) + metric("Người duyệt", esc(roleTitle(item.approver ?? "")))
+      : metric("Người giao / lập", esc(roleTitle(item.createdBy))),
+    item.type === "proposal" && isPendingProposal(item) ? "" : metric(item.type === "payment" ? "Đang ở" : "Người thực hiện", esc(assignee(item.owner))),
     metric("Phối hợp", item.cc.map((r) => esc(roleTitle(r))).join(", ") || "–"),
     metric("Hạn", formatDate(item.due)),
     item.type === "payment" ? metric("Số tiền", formatMoney(item.amount)) : metric("Tiến độ", `${rolledUpProgress(item, all)}%${childrenOf(item.id, all).length ? " (cuộn từ việc con)" : ""}`),
@@ -199,15 +144,25 @@ function detailHtml(item: WorkItem): string {
     item.description ? `<p>${esc(item.description)}</p>` : "",
   ].join("")
   const kidList = kids.length
-    ? `<h4 style="margin-top:12px">Việc con / hồ sơ liên quan</h4>${kids.map((k) => `<div class="alert"><span class="dot ${isClosed(k) ? "green" : "blue"}"></span><div><a href="javascript:void 0" ${jsCall("wfOpen", k.id)}><b>${esc(k.id)}</b> • ${esc(k.title)}</a><div class="mini">${esc(roleTitle(k.owner))} • ${esc(k.status)}${k.type === "payment" ? "" : ` • ${rolledUpProgress(k, all)}%`}</div></div></div>`).join("")}`
+    ? `<h4 style="margin-top:12px">Việc con / hồ sơ liên quan</h4>${kids.map((k) => `<div class="alert"><span class="dot ${isClosed(k) ? "green" : "blue"}"></span><div><a href="javascript:void 0" ${jsCall("wfOpen", k.id)}><b>${esc(k.id)}</b> • ${esc(k.title)}</a><div class="mini">Giao cho <b>${esc(assignee(k.owner))}</b> • ${esc(k.status)}${k.type === "payment" ? "" : ` • ${rolledUpProgress(k, all)}%`}</div></div></div>`).join("")}`
     : ""
-  const history = `<h4 style="margin-top:12px">Lịch sử xử lý</h4><div class="timeline">${[...item.history].reverse().map((h) => `<div><b>${formatTime(h.at)} • ${esc(roleTitle(h.by))}</b><br>${esc(ACTION_LABELS[h.action as WorkAction] || (h.action === "create" ? "Khởi tạo" : h.action))}${h.note ? `: ${esc(h.note)}` : ""}</div>`).join("")}</div>`
+  const notes = item.history.filter((h) => h.action === "comment")
+  const noteList = `<h4 style="margin-top:12px">Ghi chú (${notes.length})</h4>${notes.map((h) => `<div class="vx-note"><div class="vx-note-head"><b>${esc(h.byName || personOf(h.by) || roleTitle(h.by))}</b> <span class="mini">${esc(roleTitle(h.by))}${noteUnit(h) ? ` • ${esc(noteUnit(h))}` : ""} • ${formatTime(h.at)}</span></div><div>${esc(h.note ?? "")}</div></div>`).join("") || '<div class="mini">Chưa có ghi chú.</div>'}`
+  const history = `${item.type === "payment" ? "" : noteList}<h4 style="margin-top:12px">Lịch sử xử lý</h4><div class="timeline">${[...item.history].reverse().filter((h) => h.action !== "comment" || item.type === "payment").map((h) => `<div><b>${formatTime(h.at)} • ${esc(roleTitle(h.by))}</b><br>${esc(ACTION_LABELS[h.action as WorkAction] || (h.action === "create" ? "Khởi tạo" : h.action))}${h.note ? `: ${esc(h.note)}` : ""}</div>`).join("")}</div>`
   const form = actions.length
-    ? `<div class="form-grid" style="margin-top:12px">${actions.includes("progress") ? `<div><label>Tiến độ (%)</label><input id="wf-progress" type="number" min="0" max="100" value="${Number(item.progress) || 0}"></div><div><label>Minh chứng</label><input id="wf-evidence" value="${esc(item.evidence || "")}"></div>` : ""}<div class="full"><label>Ghi chú / lý do / bình luận</label><textarea id="wf-note" rows="2"></textarea></div></div><div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">${actions.map((a) => `<button class="btn ${a === "return" ? "btn-light" : "btn-primary"}" ${a === "delegate" ? jsCall("wfDelegate", item.id) : jsCall("wfAct", item.id, a)}>${ACTION_LABELS[a]}</button>`).join("")}</div>`
+    ? `<div class="form-grid" style="margin-top:12px">${actions.includes("progress") ? `<div><label>Tiến độ (%)</label><input id="wf-progress" type="number" min="0" max="100" value="${Number(item.progress) || 0}"></div><div><label>Minh chứng</label><input id="wf-evidence" value="${esc(item.evidence || "")}"></div>` : ""}<div class="full"><label>Ghi chú / lý do</label><textarea id="wf-note" rows="2"></textarea></div></div><div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">${actions.map((a) => actionButton(item, a)).join("")}</div>`
     : '<div class="mini" style="margin-top:12px">Bạn chỉ có quyền xem việc này ở trạng thái hiện tại.</div>'
+  const remove = canDeleteWork(item, role, all) ? `<button class="btn btn-danger" ${jsCall("wfDelete", item.id)}>Xoá việc</button>` : ""
   const blocked = blockedReason(item, role, all)
   const blockedNote = blocked ? `<div class="alert" style="margin-top:12px"><span class="dot yellow"></span><div>${esc(blocked)}</div></div>` : ""
-  return `<div class="grid twoeq"><div>${info}${kidList}${blockedNote}</div><div>${item.type === "payment" ? paymentStepper(item) : ""}${history}</div></div>${form}`
+  return `<div class="grid twoeq"><div>${info}${kidList}${blockedNote}</div><div>${item.type === "payment" ? paymentStepper(item) : ""}${history}</div></div>${form}${remove ? `<div class="toolbar" style="margin-top:14px;justify-content:flex-end">${remove}</div>` : ""}`
+}
+
+/** A returned proposal is corrected on its form page; the other actions run from the note box above. */
+function actionButton(item: WorkItem, a: WorkAction): string {
+  if (item.type === "proposal" && a === "resubmit") return `<button class="btn btn-primary" ${jsCall("go", `projects/de-xuat/${encodeURIComponent(item.id)}/sua`)}>Sửa và gửi lại</button>`
+  const handler = a === "delegate" ? jsCall("wfDelegate", item.id) : jsCall("wfAct", item.id, a)
+  return `<button class="btn ${a === "return" || a === "reject" ? "btn-light" : "btn-primary"}" ${handler}>${ACTION_LABELS[a]}</button>`
 }
 
 function inputValue(id: string): string {
@@ -218,11 +173,13 @@ function checkedValues(name: string): string[] {
   return Array.from(document.querySelectorAll<HTMLInputElement>(`input[name="${name}"]:checked`)).map((x) => x.value)
 }
 
-async function run(task: () => Promise<void>, onError?: () => void) {
+/** Runs a change; on success closes the modal and re-renders the page, or goes where `then` says. */
+export async function run(task: () => Promise<void>, onError?: () => void, then?: () => void) {
   try {
     await task()
     shell.closeModal()
-    shell.show(currentPage())
+    if (then) then()
+    else shell.rerender()
   } catch (error) {
     alert(error instanceof Error ? error.message : String(error))
     onError?.()
@@ -251,12 +208,15 @@ const priorityField = '<div><label>Mức ưu tiên</label><select id="wf-priorit
 function wfOpen(id: string) {
   const item = store.items().find((x) => x.id === id)
   if (!item) return alert(`Không tìm thấy ${id}`)
+  // Proposals and project work open as issue pages under Nhiệm vụ / Dự án; payments and older work keep the modal.
+  if (item.type === "proposal") return shell.go(proposalPath(item.id))
+  if (item.project && item.type !== "payment") return shell.go(`${projectPath(item.project)}/viec/${encodeURIComponent(item.id)}`)
   const sub = item.subUnit ? vldcData.get("subUnits").find((s) => s.id === item.subUnit) : undefined
   const project = item.project ? projectsView().find((p) => p.id === item.project) : undefined
   const wbs = project?.wbs.find((w, i) => (w.id ?? String(i)) === item.wbsItem)
   const where = [
     sub ? `Tổ / phòng thực hiện: <b>${esc(sub.name)}</b>` : "",
-    project ? `Dự án: <a href="javascript:void 0" ${jsCall("projectOpen", project.id)}><b>${esc(project.id)}</b></a>${wbs ? ` • hạng mục <b>${esc(wbs.name)}</b>` : ""}` : "",
+    project ? `Dự án: <a href="javascript:void 0" ${jsCall("go", projectPath(project.id))}><b>${esc(project.id)}</b></a>${wbs ? ` • hạng mục <b>${esc(wbs.name)}</b>` : ""}` : "",
   ].filter(Boolean).join(" • ")
   shell.openModal(`${TYPE_LABELS[item.type]} ${item.id}`, `<h3 style="margin-top:0">${esc(item.title)}</h3>${where ? `<div class="mini" style="margin:-6px 0 8px">${where}</div>` : ""}${detailHtml(item)}`)
 }
@@ -265,12 +225,16 @@ function wfAct(id: string, action: WorkAction) {
   const progressRaw = inputValue("wf-progress")
   void run(() => store.dispatch(id, action, {
     note: inputValue("wf-note"),
+    byName: ctx.userName(),
     progress: progressRaw === "" ? undefined : Number(progressRaw),
     evidence: inputValue("wf-evidence"),
   }, ctx.role(), ctx.perms()), () => {
-    // A validation error keeps what was typed; a stale modal (state changed elsewhere) is redrawn.
+    // A validation error keeps what was typed; a stale view (state changed elsewhere) is redrawn: the modal, or the
+    // issue panel / page the action was taken from.
     const current = store.items().find((x) => x.id === id)
-    if (!current || !allowedActions(current, ctx.role(), ctx.perms(), store.items()).includes(action)) wfOpen(id)
+    if (current && allowedActions(current, ctx.role(), ctx.perms(), store.items()).includes(action)) return
+    if (document.querySelector(".modal")) wfOpen(id)
+    else shell.rerender()
   })
 }
 
@@ -288,27 +252,34 @@ function wbsOptionsHtml(projectId: string, selected = ""): string {
   }).join("")}`
 }
 
-/** Optional project picker shared by the directive and payment forms; the directive form adds its WBS item. */
-function projectPicker(selected = "", withWbs = false, selectedWbs = ""): string {
+/** Project picker shared by the directive (required, with its WBS item), proposal and payment (optional) forms. */
+function projectPicker(selected = "", withWbs = false, selectedWbs = "", required = false): string {
   const wbs = withWbs ? `<div><label>Hạng mục dự án</label><select id="wf-wbs" onchange="wfWbsPicked()">${wbsOptionsHtml(selected, selectedWbs)}</select></div>` : ""
-  return `<div><label>Dự án</label><select id="wf-project"${withWbs ? ' onchange="wfProjectPicked(this.value)"' : ""}><option value="">– Không gắn dự án –</option>${projectsView().map((p) => `<option value="${esc(p.id)}"${p.id === selected ? " selected" : ""}>${esc(`${p.id} – ${p.name}`)}</option>`).join("")}</select></div>${wbs}`
+  return `<div><label>Dự án${required ? " *" : ""}</label><select id="wf-project"${withWbs ? ' onchange="wfProjectPicked(this.value)"' : ""}><option value="">${required ? "– Chọn dự án –" : "– Không gắn dự án –"}</option>${projectsView().map((p) => `<option value="${esc(p.id)}"${p.id === selected ? " selected" : ""}>${esc(`${p.id} – ${p.name}`)}</option>`).join("")}</select></div>${wbs}`
 }
 
-/** Who a directive for a project (or one of its WBS items) goes to: the item's tổ, else the project's tổ, else its unit. */
-function projectTarget(projectId: string, wbsId = ""): { sub?: string; unit?: string } {
-  const p = projectsView().find((x) => x.id === projectId)
-  if (!p) return {}
+/** Roles of the units taking part in the project: who its tasks can be given to (heads first within a unit). */
+function taskOwners(p: StoredProject): string[] {
+  const units = projectUnits(p)
+  const rank = (r: string) => (tierOf(r) === "head" ? 0 : 1)
+  return BUSINESS_ROLES.filter((r) => units.includes(roleUnitCode(r) ?? "")).sort((a, b) => rank(a) - rank(b))
+}
+
+/** Who a task of the project (or one of its WBS items) goes to by default: the item's tổ, else the project's tổ, else its main unit. */
+function projectTarget(p: StoredProject, wbsId = ""): { sub?: string; unit?: string } {
   const subId = p.wbs.find((w, i) => (w.id ?? String(i)) === wbsId)?.subUnit || p.subUnit
   const sub = subId ? vldcData.get("subUnits").find((s) => s.id === subId) : undefined
   return { sub: sub?.id, unit: sub?.unit ?? unitCodeOf(p.unit) }
 }
 
-const ownerOfUnit = (unit?: string) => (unit ? delegatesOf(ctx.role()).find((r) => rolesOfUnit(unit as never).includes(r)) : undefined)
+const ownerOfUnit = (owners: string[], unit?: string) => (unit ? owners.find((r) => rolesOfUnit(unit as never).includes(r)) : undefined)
 
-/** Picking a project / WBS item in the directive form moves the owner and tổ to the ones doing it. */
+/** Picking a WBS item in the task form moves the owner and tổ to the ones doing it. */
 function applyProjectTarget(projectId: string, wbsId = "") {
-  const { sub, unit } = projectTarget(projectId, wbsId)
-  const owner = ownerOfUnit(unit)
+  const p = projectsView().find((x) => x.id === projectId)
+  if (!p) return
+  const { sub, unit } = projectTarget(p, wbsId)
+  const owner = ownerOfUnit(taskOwners(p), unit)
   const ownerEl = document.getElementById("wf-owner") as HTMLSelectElement | null
   const subEl = document.getElementById("wf-sub") as HTMLSelectElement | null
   if (!owner || !ownerEl || !subEl) return
@@ -318,39 +289,122 @@ function applyProjectTarget(projectId: string, wbsId = "") {
   if (hint) hint.innerHTML = ownerUnitHint(owner)
 }
 
-function wfCreateDirective(presetSub = "", presetProject = "", presetWbs = "") {
-  const role = ctx.role()
-  const others = delegatesOf(role)
-  if (!others.length) return shell.openModal("Giao việc", '<div class="mini">Không có người nào thuộc phạm vi quản lý của bạn để giao việc.</div>')
-  const target = presetSub ? { sub: presetSub, unit: vldcData.get("subUnits").find((s) => s.id === presetSub)?.unit } : projectTarget(presetProject, presetWbs)
-  const owner = ownerOfUnit(target.unit) || others[0]
-  const sub = target.sub ? vldcData.get("subUnits").find((s) => s.id === target.sub) : undefined
-  shell.openModal("Giao việc", `<div class="form-grid"><div class="full"><label>Nội dung chỉ đạo</label><textarea id="wf-title" rows="2"></textarea></div><div><label>Người chủ trì (theo đơn vị)</label><select id="wf-owner" onchange="wfSubOptions(this.value)">${roleOptions(others, owner)}</select><div class="mini" id="wf-owner-unit" style="margin-top:4px">${ownerUnitHint(owner)}</div></div><div><label>Tổ / phòng thực hiện</label><select id="wf-sub">${subOptionsHtml(owner, sub?.id)}</select></div>${projectPicker(presetProject, true, presetWbs)}<div><label>Hạn hoàn thành</label><input id="wf-due" type="date" min="${today()}"></div>${priorityField}<div class="full"><label>Kết quả / minh chứng yêu cầu</label><input id="wf-desc"></div><div class="full"><label>Phối hợp</label>${ccBoxes(BUSINESS_ROLES.filter((r) => r !== role))}</div></div><button class="btn btn-primary" style="margin-top:10px" onclick="wfSubmitDirective()">Giao việc</button>`)
+const projectPath = (id: string) => `projects/${encodeURIComponent(id)}`
+const proposalPath = (id: string) => `projects/de-xuat/${encodeURIComponent(id)}`
+const backLink = (path: string, label: string) => `<a class="vx-back" href="javascript:void 0" ${jsCall("go", path)}>← ${esc(label)}</a>`
+const pageHead = (back: string, title: string, sub = "") => `<div class="card vx-subpage-head">${back}<h3 style="margin:6px 0 2px">${esc(title)}</h3>${sub ? `<div class="mini">${sub}</div>` : ""}</div>`
+
+/** Tạo việc opens as a page of the project (optionally for one WBS item); without a project, the projects to pick from. */
+function wfCreateDirective(_presetSub = "", presetProject = "", presetWbs = "") {
+  shell.go(presetProject ? `${projectPath(presetProject)}/giao-viec${presetWbs ? `?wbs=${encodeURIComponent(presetWbs)}` : ""}` : "projects/giao-viec")
 }
 
-function wfSubmitDirective() {
+/** The role may create tasks in this project (Phòng Kỹ thuật, approved project). */
+export const canCreateTaskIn = (p: StoredProject) => canCreateTask(p, ctx.role())
+
+/**
+ * Form page of a project task (Phòng Kỹ thuật): the owner is a role of a unit taking part; without a project, the
+ * approved projects to create it in.
+ */
+export function directiveFormHtml(presetProject = "", presetWbs = ""): string {
+  const role = ctx.role()
+  const project = presetProject ? projectsView().find((p) => p.id === presetProject) : undefined
+  if (!presetProject) {
+    const ps = projectsView().filter((p) => canCreateTask(p, role))
+    const rows = ps.map((p) => `<div class="alert vx-cap-pick" ${jsCall("go", `${projectPath(p.id)}/giao-viec`)}><span class="dot green"></span><div><b>${esc(p.id)} – ${esc(p.name)}</b><div class="mini">${esc(p.unit)}</div></div></div>`).join("")
+    return pageHead(backLink("projects", "Nhiệm vụ / Dự án"), "Tạo việc", "Chọn dự án (đã được phê duyệt) để tạo việc.") + `<div class="card">${rows || '<div class="mini">Bạn không có dự án nào để tạo việc.</div>'}</div>`
+  }
+  const back = project ? backLink(projectPath(project.id), `${project.id} – ${project.name}`) : backLink("projects", "Nhiệm vụ / Dự án")
+  if (!project) return pageHead(back, "Tạo việc") + `<div class="card mini">Không tìm thấy dự án ${esc(presetProject)}.</div>`
+  if (!canCreateTask(project, role)) {
+    const why = approvalOf(project) === "Đã duyệt" ? "Chỉ Phòng Kỹ thuật tạo việc trong dự án." : "Dự án chưa được Liên đoàn trưởng phê duyệt."
+    return pageHead(back, "Tạo việc") + `<div class="card mini">${why}</div>`
+  }
+  const owners = taskOwners(project)
+  if (!owners.length) return pageHead(back, "Tạo việc") + '<div class="card mini">Dự án chưa có phòng thực hiện.</div>'
+  const target = projectTarget(project, presetWbs)
+  const owner = ownerOfUnit(owners, target.unit) || owners[0]
+  const sub = target.sub ? vldcData.get("subUnits").find((s) => s.id === target.sub) : undefined
+  const done = projectPath(project.id)
+  return `${pageHead(back, "Tạo việc", "Việc giao cho một phòng tham gia dự án; Phòng Kỹ thuật duyệt kết quả. Các phòng tham gia xem và ghi chú.")}
+<div class="card"><div class="form-grid"><div class="full"><label>Nội dung công việc *</label><textarea id="wf-title" rows="2"></textarea></div><div><label>Dự án</label><input type="hidden" id="wf-project" value="${esc(project.id)}"><div class="vx-fixed-field"><b>${esc(project.id)}</b> – ${esc(project.name)}</div></div><div><label>Hạng mục dự án</label><select id="wf-wbs" onchange="wfWbsPicked()">${wbsOptionsHtml(project.id, presetWbs)}</select></div><div><label>Người chủ trì (phòng tham gia) *</label><select id="wf-owner" onchange="wfSubOptions(this.value)">${roleOptions(owners, owner)}</select><div class="mini" id="wf-owner-unit" style="margin-top:4px">${ownerUnitHint(owner)}</div></div><div><label>Tổ / phòng thực hiện</label><select id="wf-sub">${subOptionsHtml(owner, sub?.id)}</select></div><div><label>Hạn hoàn thành *</label><input id="wf-due" type="date" min="${today()}"${project.end ? ` max="${esc(project.end)}"` : ""}></div>${priorityField}<div class="full"><label>Kết quả / minh chứng yêu cầu</label><input id="wf-desc"></div><div class="full"><label>Phối hợp</label>${ccBoxes(owners.filter((r) => r !== role))}</div></div>
+<div class="toolbar" style="margin-top:12px"><button class="btn btn-primary" ${jsCall("wfSubmitDirective", done)}>Tạo việc</button><button class="btn btn-light" ${jsCall("go", done)}>Hủy</button></div></div>`
+}
+
+function wfSubmitDirective(done: string) {
+  const project = projectsView().find((p) => p.id === inputValue("wf-project"))
   void run(async () => {
-    const item = createDirective({
+    if (!project) throw new Error("Không tìm thấy dự án")
+    const item = createProjectTask({
       id: newId("CD"),
       title: inputValue("wf-title"),
       owner: inputValue("wf-owner"),
       subUnit: inputValue("wf-sub") || undefined,
-      project: inputValue("wf-project") || undefined,
+      project: project.id,
       wbsItem: inputValue("wf-wbs") || undefined,
       cc: checkedValues("wf-cc"),
       due: inputValue("wf-due"),
       priority: inputValue("wf-priority") as WorkItem["priority"],
       description: inputValue("wf-desc") || undefined,
-    }, ctx.role(), ctx.perms(), new Date().toISOString())
+    }, ctx.role(), { canCreate: canCreateTask(project, ctx.role()), owners: taskOwners(project), latest: project.end }, new Date().toISOString())
     await store.add(item)
-  })
+  }, undefined, () => shell.go(done))
+}
+
+/** Deletes a task (its creator only), after confirmation; from its page, back to the project. */
+function wfDelete(id: string) {
+  const item = store.items().find((x) => x.id === id)
+  if (!item || !confirm(`Xoá việc ${item.id} • ${item.title}?`)) return
+  const onPage = window.location.pathname.includes(`/viec/${encodeURIComponent(id)}`) || window.location.pathname.endsWith(`/de-xuat/${encodeURIComponent(id)}`)
+  const back = item.type === "proposal" ? "projects/de-xuat" : item.project ? projectPath(item.project) : ""
+  void run(() => store.remove(id, ctx.role()), undefined, onPage && back ? () => shell.go(back) : undefined)
+}
+
+// ---------- Nhiệm vụ đề xuất: a subordinate proposes, its closest superior approves.
+
+/** Heads and staff see the proposal flow; the leader only hands work down (it approves proposals from Công việc). */
+export const showsProposals = () => tierOf(ctx.role()) !== "leader"
+
+/** The role may propose: not the leader, it has a superior and may work on tasks. */
+export const canPropose = () => showsProposals() && hasPerm(ctx.perms(), "vldc-directives:update") && !!approverOf(ctx.role())
+
+/** Form page of a new proposal, or of a returned one to correct and send again. */
+export function proposalFormHtml(id = ""): string {
+  const role = ctx.role()
+  const back = backLink(id ? proposalPath(id) : "projects", id ? id : "Nhiệm vụ / Dự án")
+  const item = id ? store.items().find((x) => x.id === id && x.type === "proposal") : undefined
+  if (id && (!item || !allowedActions(item, role, ctx.perms(), store.items()).includes("resubmit"))) {
+    return pageHead(back, "Sửa đề xuất") + '<div class="card mini">Đề xuất này không ở trạng thái được sửa.</div>'
+  }
+  const approver = item?.approver ?? approverOf(role)
+  if (!item && !canPropose()) return pageHead(back, "Đề xuất nhiệm vụ") + '<div class="card mini">Bạn không có cấp trên để duyệt đề xuất.</div>'
+  const returned = item ? [...item.history].reverse().find((h) => h.action === "return") : undefined
+  const priority = item?.priority ?? "Trung bình"
+  return `${pageHead(back, item ? `Sửa đề xuất ${item.id}` : "Đề xuất nhiệm vụ", `Người duyệt: <b>${esc(roleTitle(approver ?? ""))}</b>${personOf(approver ?? "") ? ` – ${esc(personOf(approver ?? ""))}` : ""} (cấp trên trực tiếp)`)}
+${returned?.note ? `<div class="alert" style="margin-bottom:12px"><span class="dot yellow"></span><div><b>Lý do trả lại</b><div class="mini">${esc(returned.note)}</div></div></div>` : ""}
+<div class="card"><div class="form-grid"><div class="full"><label>Tên nhiệm vụ *</label><input id="wf-title" value="${esc(item?.title ?? "")}"></div><div class="full"><label>Nội dung, lý do, kết quả dự kiến</label><textarea id="wf-desc" rows="3">${esc(item?.description ?? "")}</textarea></div>${projectPicker(item?.project ?? "")}<div><label>Hạn hoàn thành *</label><input id="wf-due" type="date" min="${today()}" value="${esc(item?.due ?? "")}"></div><div><label>Mức ưu tiên</label><select id="wf-priority">${["Cao", "Trung bình", "Thấp"].map((p) => `<option${p === priority ? " selected" : ""}>${p}</option>`).join("")}</select></div>${item ? '<div class="full"><label>Giải trình khi gửi lại</label><textarea id="wf-note" rows="2"></textarea></div>' : `<div class="full"><label>Phối hợp</label>${ccBoxes(BUSINESS_ROLES.filter((r) => r !== role && r !== approver))}</div>`}</div>
+<div class="toolbar" style="margin-top:12px"><button class="btn btn-primary" ${jsCall("wfSubmitProposal", id)}>${item ? "Gửi lại" : "Gửi đề xuất"}</button><button class="btn btn-light" ${jsCall("go", id ? proposalPath(id) : "projects")}>Hủy</button></div></div>`
+}
+
+function wfSubmitProposal(id: string) {
+  const fields = { title: inputValue("wf-title"), description: inputValue("wf-desc"), due: inputValue("wf-due"), project: inputValue("wf-project") }
+  const newIdValue = id || newId("DX")
+  void run(async () => {
+    if (id) {
+      await store.dispatch(id, "resubmit", { note: inputValue("wf-note"), proposal: fields }, ctx.role(), ctx.perms())
+      return
+    }
+    await store.add(createProposal({
+      id: newIdValue, ...fields, project: fields.project || undefined, priority: inputValue("wf-priority") as WorkItem["priority"], cc: checkedValues("wf-cc"),
+    }, ctx.role(), ctx.perms(), new Date().toISOString()))
+  }, undefined, () => shell.go(proposalPath(newIdValue)))
 }
 
 function wfDelegate(id: string) {
   const item = store.items().find((x) => x.id === id)
   if (!item) return
   const subs = delegatesOf(ctx.role())
-  shell.openModal(`Giao việc con • ${item.id}`, `<div class="mini">Thuộc: ${esc(item.title)}</div><div class="form-grid" style="margin-top:8px"><div class="full"><label>Nội dung công việc</label><textarea id="wf-title" rows="2"></textarea></div><div><label>Giao cho</label><select id="wf-owner">${roleOptions(subs)}</select></div><div><label>Hạn hoàn thành</label><input id="wf-due" type="date" min="${today()}" max="${esc(item.due)}" value="${esc(item.due)}"></div>${priorityField}<div class="full"><label>Mô tả</label><input id="wf-desc"></div></div><button class="btn btn-primary" style="margin-top:10px" ${jsCall("wfSubmitDelegate", item.id)}>Giao việc</button>`)
+  shell.openModal(`Tạo việc con • ${item.id}`, `<div class="mini">Thuộc: ${esc(item.title)}</div><div class="form-grid" style="margin-top:8px"><div class="full"><label>Nội dung công việc *</label><textarea id="wf-title" rows="2"></textarea></div><div><label>Giao cho nhân viên *</label><select id="wf-owner">${roleOptions(subs)}</select></div><div><label>Hạn hoàn thành</label><input id="wf-due" type="date" min="${today()}" max="${esc(item.due)}" value="${esc(item.due)}"></div>${priorityField}<div class="full"><label>Mô tả</label><input id="wf-desc"></div></div><button class="btn btn-primary" style="margin-top:10px" ${jsCall("wfSubmitDelegate", item.id)}>Tạo việc con</button>`)
 }
 
 function wfSubmitDelegate(id: string) {
@@ -416,7 +470,7 @@ function markRead(role: string, ...noticeIds: string[]) {
 
 function unreadNotices(role: string) {
   const read = readIds(role)
-  return notificationsFor(role, store.items()).filter((n) => !read.has(n.id))
+  return notificationsFor(role, store.allItems()).filter((n) => !read.has(n.id))
 }
 
 /** The role's workflow notices with their read state, for the notification dialog (all of them, so it matches the badge). */
@@ -447,6 +501,15 @@ function inboxBlock(limit?: number): string {
   const items = ownerInbox(ctx.role(), store.items())
   const shown = limit ? items.slice(0, limit) : items
   return `<div class="card" style="margin-bottom:14px"><div class="card-head"><div><h3>Việc của tôi (luồng liên tài khoản)</h3><div class="mini">Chỉ đạo, việc được giao và hồ sơ thanh toán đang chờ bạn xử lý • đồng bộ realtime</div></div><span class="badge ${items.length ? "b-danger" : "b-ok"}">${items.length} việc</span></div>${inboxTable(shown)}${limit && items.length > limit ? `<div class="mini" style="margin-top:8px"><a href="javascript:void 0" onclick="show('action')">Xem tất cả ${items.length} việc</a></div>` : ""}</div>`
+}
+
+function noticesBlock(): string {
+  const role = ctx.role()
+  const read = readIds(role)
+  const notices = notificationsFor(role, store.allItems()).slice(0, 30)
+  const unread = notices.filter((n) => !read.has(n.id)).length
+  const rows = notices.map((n) => `<div class="alert" style="cursor:pointer${read.has(n.id) ? ";opacity:.6" : ""}" ${jsCall("wfNotice", n.id, n.itemId)}><span class="dot ${read.has(n.id) ? "green" : "red"}"></span><div><b>${esc(n.title)}</b><div class="mini">${esc(n.body)} • ${formatTime(n.at)}</div></div></div>`).join("")
+  return `<div class="card" style="margin-bottom:14px"><div class="card-head"><div><h3>Thông báo luồng công việc</h3><div class="mini">Giao việc, báo cáo, duyệt, trả lại, chuyển bước hồ sơ</div></div><span class="badge ${unread ? "b-danger" : "b-ok"}">${unread} chưa đọc</span></div>${rows || '<div class="mini">Chưa có thông báo.</div>'}</div>`
 }
 
 function paymentsBlock(): string {
@@ -485,7 +548,7 @@ function commandHeatmap() {
 function wfNotice(id: string, itemId: string) {
   markRead(ctx.role(), id)
   if (store.items().some((x) => x.id === itemId)) wfOpen(itemId)
-  else shell.show(currentPage())
+  else shell.rerender()
 }
 
 function wrap(render: Record<string, () => void>, page: string, extra: () => string) {
@@ -497,10 +560,10 @@ function wrap(render: Record<string, () => void>, page: string, extra: () => str
   }
 }
 
-/** Replaces the mock directives page, adds workflow blocks to other pages and exposes inline handlers. */
+/** Adds workflow blocks to other pages and exposes inline handlers (Giao việc lives in each project's page). */
 export function installWorkflow(render: Record<string, () => void>, nextShell: Shell) {
   shell = nextShell
-  render.directives = renderDirectives
+  wrap(render, "notifications", noticesBlock)
   wrap(render, "payments", paymentsBlock)
   // The leader gets a purpose-built dashboard instead of the stacked legacy demo blocks.
   const unitDashboard = render.dashboard
@@ -540,8 +603,8 @@ export function installWorkflow(render: Record<string, () => void>, nextShell: S
     if (el) el.innerHTML = performanceHtml(store.items(), ctx.role(), today())
   }
   Object.assign(window, {
-    wfOpen, wfAct, wfCreateDirective, wfSubmitDirective, wfDelegate, wfSubmitDelegate,
-    wfCreatePayment, wfSubmitPayment, wfResetDemo, wfNotice, wfUnitKpi, wfDirectiveSearch, wfExportDirectives,
+    wfOpen, wfAct, wfCreateDirective, wfSubmitDirective, wfDelegate, wfSubmitDelegate, wfSubmitProposal, wfDelete,
+    wfCreatePayment, wfSubmitPayment, wfResetDemo, wfNotice, wfUnitKpi,
     createDirective: wfCreateDirective,
     wfCreateDirectiveFor: (subId: string) => wfCreateDirective(subId),
     wfCreateDirectiveForProject: (projectId: string) => wfCreateDirective("", projectId),

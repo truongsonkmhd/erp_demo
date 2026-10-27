@@ -45,11 +45,13 @@ const cap = () => D('orgStats')[0] || {};
 
 type ShellBridge = {
   show: (page: string) => void;
+  go: (path: string) => void;
+  rerender: () => void;
   openModal: (title: string, html: string) => void;
   closeModal: () => void;
   refresh: () => void;
 };
-let shell: ShellBridge = { show() {}, openModal() {}, closeModal() {}, refresh() {} };
+let shell: ShellBridge = { show() {}, go() {}, rerender() {}, openModal() {}, closeModal() {}, refresh() {} };
 export function connectShell(bridge: ShellBridge) { shell = bridge; }
 
 // Role profiles (title, unit, person) come from the backend via data/org; this is a live reference.
@@ -63,6 +65,9 @@ const visualMap={assistant:['field-visual','AI Knowledge Workspace','Tìm kiếm
 function addVisualHero(p){let cfg=visualMap[p];if(!cfg||p==='dashboard')return;let c=document.getElementById('content');if(!c||c.querySelector('.module-hero'))return;let h=document.createElement('div');h.className='module-hero '+cfg[0];h.innerHTML='<div><div class="hero-tag">VLDC DIGITAL WORKPLACE</div><h2>'+cfg[1]+'</h2><p>'+cfg[2]+'</p></div><div class="hero-tag">'+(pages[p]?.[0]||'Nghiệp vụ')+'</div>';c.prepend(h)}
 // Navigation is owned by the React store; PageHost calls render[p]() + addVisualHero(p).
 function show(p){currentPage=p;shell.show(p)}
+/** Sub page of a page, e.g. go('projects/VLDC-2027-001'). */
+function go(path){shell.go(path)}
+function rerender(){shell.rerender()}
 const render={
 dashboard(){document.getElementById('content').innerHTML=baseDashboardHtml()},
 assistant(){document.getElementById('content').innerHTML=`
@@ -360,7 +365,8 @@ export function getRoles(): Record<string, Role> { return roles; }
 export function openNotices() { openNoticeCenter(); }
 export function getPageMeta(p: string): [string, string] | undefined { return pages[p]; }
 export function hasPage(p: string): boolean { return typeof render[p] === 'function'; }
-export function renderPage(p: string) { currentPage = p; render[p](); addVisualHero(p); }
+/** Sub pages (/vldc/projects/<id>…) are records, not modules: no module hero. */
+export function renderPage(p: string) { currentPage = p; render[p](); if (location.pathname.split('/').filter(Boolean).length <= 2) addVisualHero(p); }
 export function getShellBadges() {
  const shared = workflowBadges(current);
  const tasks = ownerTasks().filter(t => !['Hoàn thành', 'Đã duyệt'].includes(t.status)).length + shared.tasks;
@@ -393,6 +399,6 @@ installCapabilityPage(render, { role: () => current, openModal, closeModal });
 installDocAssign({ role: () => current, openModal, closeModal });
 installSciencePage(render, { role: () => current, openModal, closeModal });
 installSubUnitPage(render, { role: () => current, openModal, closeModal });
-installProjectPage(render, { role: () => current, openModal, closeModal });
+installProjectPage(render, { role: () => current, openModal, closeModal, go, rerender });
 installLedgerPages(render, { role: () => current, openModal, closeModal });
-installWorkflow(render, { show, openModal, closeModal });
+installWorkflow(render, { show, go, rerender, openModal, closeModal });

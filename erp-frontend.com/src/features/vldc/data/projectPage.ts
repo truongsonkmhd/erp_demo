@@ -1,22 +1,28 @@
 import { escapeHtml as esc, formatBillion, formatMillion, jsCall } from "../workflow/html"
-import { ROLE_TITLES, isClosed } from "../workflow/rules"
+import { ROLE_TITLES } from "../workflow/rules"
+import { directiveFormHtml, proposalFormHtml, showsProposals } from "../workflow/views"
+import { PROPOSAL_BASE, installBoard, issuePageHtml, mountBoard, projectHeaderHtml, projectSpaceHtml, proposalSpaceHtml, proposalSummary } from "../workflow/boardViews"
+import { tierOf } from "./access"
 import { workflowStore } from "../workflow/repository"
 import { localToday, vnDate } from "./dates"
 import * as M from "./metrics"
 import { ROLE_PROFILES, UNIT_DEFS, unitCodeOf } from "./org"
 import { kpi, kpis } from "./pages"
 import {
-  CR_KINDS, PROJECT_APPROVER, PROJECT_STATUSES, addChangeRequest, canCreateProject, canUpdateProject, decideChangeRequest,
-  isOverrun, projectProblems, toggleMilestone, updateWbs, wbsRemovalProblems,
+  CR_KINDS, PROJECT_APPROVER, PROJECT_STATUSES, addChangeRequest, approvalOf, canCreateProject, canRequestDelete, cancelDeleteRequest, canSeeProject, canUpdateProject,
+  decideChangeRequest, decideDelete, decideProject, deleteBlocker, isOverrun, requestDelete, isProjectApprover, projectProblems, submitProject, toggleMilestone, updateWbs, wbsRemovalProblems,
 } from "./projectCore"
 import { projectWork, projectsView } from "./projectView"
 import { vldcData } from "./registry"
 import { resolveUnitChoice, unitChoiceGroups, wbsSubUnitChoices } from "./subUnitCore"
 import type { ChangeRequestKind, Milestone, Project, ProjectStatus, StoredProject, WbsItem } from "./types"
 
-/** Nhiệm vụ / Dự án: projects created on screen, figures computed from WBS, finance lines, payments and dates. */
+/**
+ * Nhiệm vụ / Dự án in the style of Jira: a directory of projects (figures computed from WBS, finance lines, payments and
+ * dates) and of the proposals space; each project has Board / Danh sách (workflow/boardViews.ts) and Tổng quan (here).
+ */
 
-type Ctx = { role(): string; openModal(title: string, html: string): void; closeModal(): void }
+type Ctx = { role(): string; openModal(title: string, html: string): void; closeModal(): void; go(path: string): void }
 
 const content = () => document.getElementById("content")
 const value = (id: string, root: ParentNode = document) => ((root.querySelector(`#${id}`) as HTMLInputElement | null)?.value ?? "").trim()
@@ -40,75 +46,108 @@ export function installProjectPage(render: Record<string, () => void>, ctx: Ctx)
   const stored = (id: string) => vldcData.get("projects").find((p) => p.id === id)
   const computed = (id: string) => projectsView().find((p) => p.id === id)
 
+  const projectPath = (id: string) => `projects/${encodeURIComponent(id)}`
+
+  /** Projects the role sees: all for Phòng Kỹ thuật and the approver; approved ones its unit takes part in for the others. */
+  const myProjects = () => projectsView().filter((p) => canSeeProject(p, ctx.role()))
+  const approvalBadge = (p: StoredProject) =>
+    approvalOf(p) === "Chờ duyệt" ? ' <span class="badge b-warn">Chờ duyệt</span>' : approvalOf(p) === "Từ chối" ? ' <span class="badge b-danger">Không duyệt</span>' : ""
+
+  const initialsOf = (name: string) => name.split(/\s+/).filter(Boolean).slice(-2).map((w) => w[0]).join("").toUpperCase()
+  const icon = (name: string) => `<span class="vx-jira-project-icon sm">${esc(initialsOf(name))}</span>`
+
+  /** Directory of the spaces: the proposals space first (heads and staff), then the projects; KPIs for leader and heads. */
   function pageHtml(): string {
-    const ps = projectsView()
+    const role = ctx.role()
+    const ps = myProjects()
+    const staff = tierOf(role) === "staff"
     const m = M.projectMetrics(ps, vldcData.get("risks"))
-    const rows = ps.map((p) => `<tr class="vx-staff-row" ${jsCall("projectOpen", p.id)}><td><b>${esc(p.id)}</b><div class="mini">${esc(p.status ?? "")}</div></td><td>${esc(p.name)}<div class="mini">${esc(p.unit)}${subName(p.subUnit) ? ` • ${esc(subName(p.subUnit))}` : ""} • Chủ nhiệm ${esc(roleTitle(p.leadRole))}</div></td>
-<td><div class="vx-plan-nums"><b>${p.technical}%</b>${p.plannedPct == null ? "" : `<span class="mini">cần ${p.plannedPct}%</span>`}</div>${bar(p.technical)}</td>
-<td><div class="vx-plan-nums"><b>${p.costUsed}%</b><span class="mini">${formatBillion(p.spent)} / ${formatBillion(p.budget)}</span></div>${bar(p.costUsed, isOverrun(p) ? "var(--danger)" : "var(--warn)")}${isOverrun(p) ? '<span class="badge b-danger">lệch</span>' : ""}</td>
-<td>${delayBadge(p)}${p.end ? `<div class="mini">hạn ${esc(vnDate(p.end))}</div>` : ""}</td><td class="mini">${p.workOpen} việc đang mở${p.workOverdue ? ` • <span style="color:var(--danger)">${p.workOverdue} quá hạn</span>` : ""}<br>${p.upcomingMilestones} mốc / 30 ngày${p.changeRequestsPending ? `<br><span class="badge b-warn">${p.changeRequestsPending} CR chờ duyệt</span>` : ""}</td></tr>`).join("")
-    return `${kpis(
+    const head = staff ? "" : kpis(
       kpi("Nhiệm vụ", m.count, `${m.late} có dự báo trễ`),
       kpi("Milestone sắp tới", m.milestones, "Trong 30 ngày"),
       kpi("Risk đang mở", m.openRisks, `${m.highRisks} mức cao`),
       kpi("Change Request", m.changeRequests, `${m.changeRequestsPending} chờ duyệt`),
-    )}<div class="card" style="margin-top:14px"><div class="card-head"><div><h3>Danh mục nhiệm vụ / dự án</h3><div class="mini">Tiến độ = trung bình có trọng số các hạng mục • Chi phí = đã chi / ngân sách • Dự báo trễ theo tốc độ thực hiện</div></div><div class="toolbar"><button class="btn btn-light" onclick="show('finance')">Tài chính dự án</button>${canCreateProject(ctx.role()) ? `<button class="btn btn-primary" ${jsCall("projectForm", "")}>+ Dự án</button>` : ""}</div></div>
-<div class="vx-staff-table"><table><tr><th>Mã</th><th>Dự án</th><th>Tiến độ kỹ thuật</th><th>Chi phí đã dùng</th><th>Dự báo</th><th>Việc / mốc / CR</th></tr>${rows || '<tr><td colspan="6" class="mini">Chưa có dự án.</td></tr>'}</table></div></div>`
+    )
+    const sum = showsProposals() ? proposalSummary() : undefined
+    const pinned = sum
+      ? `<tr class="vx-staff-row vx-jira-pinned" ${jsCall("go", `${PROPOSAL_BASE}/board`)}><td>${icon("Đề xuất")}</td><td><b>Nhiệm vụ đề xuất</b><div class="mini">ĐX • Cấp dưới đề xuất, cấp trên trực tiếp duyệt</div></td><td colspan="3" class="mini">${sum.waiting ? `<span class="badge b-warn">${sum.waiting} chờ tôi duyệt</span> ` : ""}${sum.mine} đề xuất của tôi • ${sum.total} trong phạm vi</td><td></td></tr>`
+      : ""
+    const rows = ps.map((p) => `<tr class="vx-staff-row" ${jsCall("go", projectPath(p.id))}><td>${icon(p.name)}</td><td><b>${esc(p.name)}</b>${approvalBadge(p)}<div class="mini">${esc(p.id)} • ${esc(p.unit)}${subName(p.subUnit) ? ` • ${esc(subName(p.subUnit))}` : ""} • Chủ nhiệm ${esc(roleTitle(p.leadRole))}</div></td>
+<td><div class="vx-plan-nums"><b>${p.technical}%</b>${p.plannedPct == null ? "" : `<span class="mini">cần ${p.plannedPct}%</span>`}</div>${bar(p.technical)}</td>
+<td><div class="vx-plan-nums"><b>${p.costUsed}%</b><span class="mini">${formatBillion(p.spent)} / ${formatBillion(p.budget)}</span></div>${bar(p.costUsed, isOverrun(p) ? "var(--danger)" : "var(--warn)")}${isOverrun(p) ? '<span class="badge b-danger">lệch</span>' : ""}</td>
+<td>${delayBadge(p)}${p.end ? `<div class="mini">hạn ${esc(vnDate(p.end))}</div>` : ""}</td><td class="mini">${p.workOpen} việc đang mở${p.workOverdue ? ` • <span style="color:var(--danger)">${p.workOverdue} quá hạn</span>` : ""}<br>${p.upcomingMilestones} mốc / 30 ngày${p.changeRequestsPending ? `<br><span class="badge b-warn">${p.changeRequestsPending} CR chờ duyệt</span>` : ""}</td></tr>`).join("")
+    const empty = !rows && !pinned ? '<tr><td colspan="6" class="mini">Chưa có dự án.</td></tr>' : ""
+    const tools = `${staff ? "" : `<button class="btn btn-light" onclick="show('finance')">Tài chính dự án</button>`}${canCreateProject(role) ? `<button class="btn btn-primary" ${jsCall("projectForm", "")}>+ Dự án</button>` : ""}`
+    return `${head}<div class="card" style="margin-top:14px"><div class="card-head"><div><h3>${staff ? "Không gian làm việc" : "Dự án"}</h3><div class="mini">Bấm vào dự án để mở Board, Danh sách và Tổng quan • Tiến độ = trung bình có trọng số các hạng mục • Chi phí = đã chi / ngân sách</div></div><div class="toolbar">${tools}</div></div>
+<div class="vx-staff-table"><table><tr><th></th><th>Dự án</th><th>Tiến độ kỹ thuật</th><th>Chi phí đã dùng</th><th>Dự báo</th><th>Việc / mốc / CR</th></tr>${pinned}${rows}${empty}</table></div></div>`
+  }
+
+  /**
+   * Nhiệm vụ / Dự án and its sub pages, read from the address: /projects (directory), /projects/<id>[/board|/danh-sach|
+   * /tong-quan|/giao-viec?wbs=|/viec/<item>], /projects/giao-viec (pick a project), /projects/de-xuat[/board|/danh-sach|/moi|<item>|<item>/sua];
+   * ?selected=<item> opens the issue panel on a board or list.
+   */
+  function pageFor(): string {
+    const [first = "", second = "", third = ""] = window.location.pathname.split("/").filter(Boolean).slice(2).map(decodeURIComponent)
+    const query = new URLSearchParams(window.location.search)
+    if (!first) return pageHtml()
+    if (first === "giao-viec") return directiveFormHtml()
+    if (first === "de-xuat") {
+      if (!second || second === "board" || second === "danh-sach") return proposalSpaceHtml(second === "danh-sach" ? "danh-sach" : "board")
+      if (second === "moi") return proposalFormHtml()
+      return third === "sua" ? proposalFormHtml(second) : issuePageHtml(second)
+    }
+    // Work is opened by whoever may see it, also staff that do not follow the whole project.
+    if (second === "viec") return issuePageHtml(third)
+    if (second === "giao-viec") return directiveFormHtml(first, query.get("wbs") ?? "")
+    const p = myProjects().find((x) => x.id === first)
+    if (!p) return `<div class="vx-jira-head"><div class="vx-jira-crumbs"><a href="javascript:void 0" ${jsCall("go", "projects")}>Dự án</a></div><div class="mini" style="margin-top:8px">Không tìm thấy dự án ${esc(first)}.</div></div>`
+    const tab = second || "board"
+    if (tab === "board" || tab === "danh-sach") return projectSpaceHtml(p, tab)
+    return projectHeaderHtml(p, "tong-quan") + projectOverviewHtml(p)
   }
 
   function rerender() {
     const el = content()
-    if (el) el.innerHTML = pageHtml()
+    if (!el) return
+    el.innerHTML = pageFor()
+    // A board (if this page has one) gets its drag and drop.
+    mountBoard()
   }
   render.projects = rerender
+  installBoard({ go: ctx.go, openModal: ctx.openModal, closeModal: ctx.closeModal })
 
-  // ---------- Hồ sơ dự án
   function projectOpen(id: string) {
-    const p = computed(id)
-    if (!p) return alert(`Không tìm thấy dự án ${id}`)
+    ctx.go(projectPath(id))
+  }
+
+  /** Tổng quan tab: figures, plan actions, milestones, change requests, payments, finance, links and log. */
+  function projectOverviewHtml(p: Project): string {
     const role = ctx.role()
     const today = localToday()
-    const work = workflowStore.items().filter((x) => x.project === p.id)
-    const wbsName = (id?: string) => (id ? p.wbs.find((w, i) => (w.id ?? String(i)) === id)?.name ?? "" : "")
-    const directives = work.filter((x) => x.type !== "payment")
-    const payments = work.filter((x) => x.type === "payment")
+    const payments = workflowStore.items().filter((x) => x.project === p.id && x.type === "payment")
     const lines = vldcData.get("financeLines").filter((l) => l.project === p.id)
     const contracts = vldcData.get("contracts").filter((c) => c.projectId === p.id)
     const files = vldcData.get("dmsFiles").filter((f) => f.projectId === p.id)
     const risks = vldcData.get("risks").filter((r) => r.project === p.id && r.open)
     const events = vldcData.get("calendarEvents").filter((e) => e.project === p.id)
     const canEdit = canCreateProject(role), canUpdate = canUpdateProject(p, role)
-    const wbs = p.wbs.map((w, i) => {
-      const key = w.id ?? String(i)
-      const late = w.end && w.end < today && w.progress < 100
-      const assigned = work.filter((x) => x.wbsItem === key && x.type === "directive")
-      const lateWork = assigned.filter((x) => !isClosed(x) && x.due < today).length
-      const action = role === PROJECT_APPROVER && w.progress < 100
-        ? `<button class="btn ${late || lateWork ? "btn-primary" : "btn-light"}" ${jsCall("wfCreateDirectiveForWbs", p.id, key)}>${late || lateWork ? "Đôn đốc" : "Giao việc"}</button>`
-        : ""
-      return `<tr><td><b>${esc(w.name)}</b>${subName(w.subUnit) ? `<div class="mini">${esc(subName(w.subUnit))}</div>` : ""}</td><td>${w.weight ?? "–"}%<div class="mini">${w.tasks ?? 0} việc</div></td><td class="mini">${w.start ? esc(vnDate(w.start)) : ""} – ${w.end ? esc(vnDate(w.end)) : ""}</td><td><div class="vx-plan-nums"><b>${w.progress}%</b>${late ? '<span class="badge b-danger">quá hạn</span>' : ""}</div>${bar(w.progress, late ? "var(--danger)" : "var(--primary)")}${w.linkedWork ? '<div class="mini">tự tính từ việc giao</div>' : ""}</td>
-<td class="mini">${assigned.length ? `${assigned.length} việc${lateWork ? ` • <span style="color:var(--danger)">${lateWork} quá hạn</span>` : ""}` : "–"}</td><td>${action}</td></tr>`
-    }).join("")
     const ms = (p.milestones ?? []).map((m) => `<div class="alert"><span class="dot ${m.doneAt ? "green" : m.due < today ? "red" : "yellow"}"></span><div style="flex:1"><b>${esc(m.name)}</b><div class="mini">Hạn ${esc(vnDate(m.due))}${m.doneAt ? ` • đạt ${esc(vnDate(m.doneAt.slice(0, 10)))}` : ""}</div></div>${canUpdate ? `<button class="btn btn-light" ${jsCall("projectMilestone", p.id, m.id)}>${m.doneAt ? "Bỏ đánh dấu" : "Đã đạt"}</button>` : ""}</div>`).join("") || '<div class="mini">Chưa có mốc.</div>'
-    const crs = (p.crs ?? []).map((c) => `<div class="alert"><span class="dot ${c.status === "Đã duyệt" ? "green" : c.status === "Từ chối" ? "red" : "yellow"}"></span><div style="flex:1"><b>${esc(c.kind)}: ${esc(c.content)}</b><div class="mini">${esc(roleTitle(c.by))} • ${esc(vnDate(c.at.slice(0, 10)))} • ${esc(c.status)}${c.newEnd ? ` • hạn mới ${esc(vnDate(c.newEnd))}` : ""}${c.newBudget ? ` • ngân sách mới ${formatBillion(c.newBudget)}` : ""}${c.note ? ` • ${esc(c.note)}` : ""}</div></div>${c.status === "Chờ duyệt" && role === PROJECT_APPROVER ? `<button class="btn btn-ok" ${jsCall("projectCrDecide", p.id, c.id, "Đã duyệt")}>Duyệt</button><button class="btn btn-light" ${jsCall("projectCrDecide", p.id, c.id, "Từ chối")}>Từ chối</button>` : ""}</div>`).join("") || '<div class="mini">Chưa có yêu cầu thay đổi.</div>'
+    const crs = (p.crs ?? []).map((c) => `<div class="alert"><span class="dot ${c.status === "Đã duyệt" ? "green" : c.status === "Từ chối" ? "red" : "yellow"}"></span><div style="flex:1"><b>${esc(c.kind)}: ${esc(c.content)}</b><div class="mini">${esc(roleTitle(c.by))} • ${esc(vnDate(c.at.slice(0, 10)))} • ${esc(c.status)}${c.newEnd ? ` • hạn mới ${esc(vnDate(c.newEnd))}` : ""}${c.newBudget ? ` • ngân sách mới ${formatBillion(c.newBudget)}` : ""}${c.note ? ` • ${esc(c.note)}` : ""}</div></div>${c.status === "Chờ duyệt" && isProjectApprover(role) ? `<button class="btn btn-ok" ${jsCall("projectCrDecide", p.id, c.id, "Đã duyệt")}>Duyệt</button><button class="btn btn-light" ${jsCall("projectCrDecide", p.id, c.id, "Từ chối")}>Từ chối</button>` : ""}</div>`).join("") || '<div class="mini">Chưa có yêu cầu thay đổi.</div>'
     const list = (items: string[], empty: string) => items.join("") || `<div class="mini">${empty}</div>`
     const actions = [
       canEdit ? `<button class="btn btn-light" ${jsCall("projectForm", p.id)}>Sửa dự án</button>` : "",
-      canUpdate ? `<button class="btn btn-primary" ${jsCall("projectProgressForm", p.id)}>Cập nhật tiến độ</button>` : "",
+      canUpdate ? `<button class="btn btn-light" ${jsCall("projectProgressForm", p.id)}>Cập nhật tiến độ</button>` : "",
       canUpdate ? `<button class="btn btn-light" ${jsCall("projectCrForm", p.id)}>Đề xuất thay đổi</button>` : "",
-      role === PROJECT_APPROVER ? `<button class="btn btn-light" ${jsCall("wfCreateDirectiveForProject", p.id)}>Giao việc cho dự án</button>` : "",
+      canRequestDelete(p, role) ? `<button class="btn btn-danger" ${jsCall("projectRequestDelete", p.id)}>Đề nghị xoá dự án</button>` : "",
     ].join("")
-    ctx.openModal(`Hồ sơ dự án • ${p.id}`, `<h3 style="margin:0 0 4px">${esc(p.name)}</h3><div class="mini">${esc(p.unit)}${subName(p.subUnit) ? ` • ${esc(subName(p.subUnit))}` : ""} • Chủ nhiệm ${esc(roleTitle(p.leadRole))} • ${esc(p.status ?? "")}${p.start && p.end ? ` • ${esc(vnDate(p.start))} – ${esc(vnDate(p.end))}` : ""}</div>
-${actions ? `<div class="toolbar" style="margin:10px 0">${actions}</div>` : ""}
+    return `<div class="card"><div class="card-head"><div class="mini">${esc(p.status ?? "")}${p.start && p.end ? ` • ${esc(vnDate(p.start))} – ${esc(vnDate(p.end))}` : ""}${subName(p.subUnit) ? ` • ${esc(subName(p.subUnit))}` : ""}</div>${actions ? `<div class="toolbar">${actions}</div>` : ""}</div>
 <div class="vx-pj-tiles"><div><span>Tiến độ kỹ thuật</span><b>${p.technical}%</b>${p.plannedPct == null ? "" : `<small>cần đạt ${p.plannedPct}% hôm nay</small>`}</div><div><span>Chi phí đã dùng</span><b>${p.costUsed}%</b><small>${formatBillion(p.spent)} / ${formatBillion(p.budget)}</small></div><div><span>Dự báo</span><b>${p.delayDays ? `Trễ ${p.delayDays} ngày` : "Đúng hạn"}</b><small>${p.overdueWbs} hạng mục quá hạn</small></div><div><span>Việc giao</span><b>${p.workOpen} đang mở</b><small>${p.workOverdue} quá hạn • ${p.workPending} chờ duyệt</small></div><div><span>Mốc 30 ngày</span><b>${p.upcomingMilestones}</b><small>${p.changeRequestsPending} CR chờ duyệt</small></div></div>
-${p.start ? "" : '<div class="mini" style="margin:6px 0">Dự án nhập trước khi có lập kế hoạch: số liệu là số cũ, bấm "Sửa dự án" để nhập ngày và hạng mục.</div>'}
-<h4>Hạng mục (WBS)</h4><div class="mini" style="margin-bottom:6px">Trọng số tự tính theo số việc giao (gồm việc con) của từng hạng mục. Hạng mục đã có việc giao: tiến độ tự tính từ tiến độ các việc đó. Hạng mục chưa có việc: chủ nhiệm cập nhật % trực tiếp.</div><div class="vx-staff-table"><table><tr><th>Hạng mục</th><th>Trọng số</th><th>Thời gian</th><th>Tiến độ</th><th>Việc giao</th><th></th></tr>${wbs}</table></div>
-<div class="grid twoeq" style="margin-top:10px"><div><h4>Mốc</h4>${ms}</div><div><h4>Yêu cầu thay đổi</h4>${crs}</div></div>
-<div class="grid twoeq" style="margin-top:10px"><div><h4>Việc giao cho dự án (${directives.length})</h4>${list(directives.map((x) => `<div class="alert vx-cap-pick" ${jsCall("wfOpen", x.id)}><span class="dot ${isClosed(x) ? "green" : x.due < today ? "red" : "yellow"}"></span><div><b>${esc(x.title)}</b><div class="mini">${wbsName(x.wbsItem) ? `${esc(wbsName(x.wbsItem))} • ` : ""}${esc(roleTitle(x.owner))} • ${esc(x.status)} • ${x.progress}% • hạn ${esc(vnDate(x.due))}</div></div></div>`), "Chưa có việc giao gắn dự án.")}</div>
-<div><h4>Thanh toán (${payments.length})</h4>${list(payments.map((x) => `<div class="alert vx-cap-pick" ${jsCall("wfOpen", x.id)}><span class="dot ${x.status === "Đã chi" ? "green" : "yellow"}"></span><div><b>${esc(x.title)}</b><div class="mini">${((x.amount ?? 0) / 1e6).toLocaleString("vi-VN")} tr.đ • ${esc(x.status)}</div></div></div>`), "Chưa có hồ sơ thanh toán gắn dự án.")}</div></div>
-<div class="grid twoeq" style="margin-top:10px"><div><h4>Tài chính (cost center)</h4>${list(lines.map((l) => metric(esc(l.item), `${formatMillion(l.paid)} / ${formatMillion(l.budget)}`)), "Chưa có dòng tài chính.")}</div>
-<div><h4>Liên kết</h4>${list(contracts.map((c) => `<div class="alert vx-cap-pick" ${jsCall("contractDetail", c.id)}><span class="dot green"></span><div><b>Hợp đồng ${esc(c.id)}</b><div class="mini">${esc(c.name)}</div></div></div>`), "Chưa có hợp đồng.")}${files.length ? `<div class="alert vx-cap-pick" ${jsCall("projectFiles", p.id)}><span class="dot green"></span><div><b>${files.length} tài liệu DMS</b><div class="mini">Hồ sơ điện tử của dự án</div></div></div>` : ""}${risks.map((r) => `<div class="alert"><span class="dot red"></span><div><b>Rủi ro: ${esc(r.title)}</b><div class="mini">${esc(r.mitigation)}</div></div></div>`).join("")}${events.map((e) => `<div class="alert"><span class="dot yellow"></span><div><b>${esc(e.title)}</b><div class="mini">${esc(e.date)} ${esc(e.time)}</div></div></div>`).join("")}</div></div>
-${(p.log ?? []).length ? `<h4>Nhật ký cập nhật</h4><div class="timeline">${[...(p.log ?? [])].reverse().slice(0, 8).map((l) => `<div><b>${esc(vnDate(l.at.slice(0, 10)))} • ${esc(l.byName)}</b><br>${esc(l.note)}${l.changes.length ? `<div class="mini">${l.changes.map((c) => `${esc(c.name)}: ${c.from}% → ${c.to}%`).join(" • ")}</div>` : ""}</div>`).join("")}</div>` : ""}`)
+${p.start ? "" : '<div class="mini" style="margin-top:6px">Dự án nhập trước khi có lập kế hoạch: số liệu là số cũ, bấm "Sửa dự án" để nhập ngày và hạng mục.</div>'}</div>
+<div class="grid twoeq" style="margin-top:14px"><div class="card"><h4>Mốc</h4>${ms}</div><div class="card"><h4>Yêu cầu thay đổi</h4>${crs}</div></div>
+<div class="grid twoeq" style="margin-top:14px"><div class="card"><h4>Thanh toán (${payments.length})</h4>${list(payments.map((x) => `<div class="alert vx-cap-pick" ${jsCall("wfOpen", x.id)}><span class="dot ${x.status === "Đã chi" ? "green" : "yellow"}"></span><div><b>${esc(x.title)}</b><div class="mini">${((x.amount ?? 0) / 1e6).toLocaleString("vi-VN")} tr.đ • ${esc(x.status)}</div></div></div>`), "Chưa có hồ sơ thanh toán gắn dự án.")}<h4 style="margin-top:12px">Tài chính (cost center)</h4>${list(lines.map((l) => metric(esc(l.item), `${formatMillion(l.paid)} / ${formatMillion(l.budget)}`)), "Chưa có dòng tài chính.")}</div>
+<div class="card"><h4>Liên kết</h4>${list(contracts.map((c) => `<div class="alert vx-cap-pick" ${jsCall("contractDetail", c.id)}><span class="dot green"></span><div><b>Hợp đồng ${esc(c.id)}</b><div class="mini">${esc(c.name)}</div></div></div>`), "Chưa có hợp đồng.")}${files.length ? `<div class="alert vx-cap-pick" ${jsCall("projectFiles", p.id)}><span class="dot green"></span><div><b>${files.length} tài liệu DMS</b><div class="mini">Hồ sơ điện tử của dự án</div></div></div>` : ""}${risks.map((r) => `<div class="alert"><span class="dot red"></span><div><b>Rủi ro: ${esc(r.title)}</b><div class="mini">${esc(r.mitigation)}</div></div></div>`).join("")}${events.map((e) => `<div class="alert"><span class="dot yellow"></span><div><b>${esc(e.title)}</b><div class="mini">${esc(e.date)} ${esc(e.time)}</div></div></div>`).join("")}</div></div>
+${(p.log ?? []).length ? `<div class="card" style="margin-top:14px"><h4>Nhật ký cập nhật</h4><div class="timeline">${[...(p.log ?? [])].reverse().slice(0, 8).map((l) => `<div><b>${esc(vnDate(l.at.slice(0, 10)))} • ${esc(l.byName)}</b><br>${esc(l.note)}${l.changes.length ? `<div class="mini">${l.changes.map((c) => `${esc(c.name)}: ${c.from}% → ${c.to}%`).join(" • ")}</div>` : ""}</div>`).join("")}</div></div>` : ""}`
   }
 
   function projectFiles(id: string) {
@@ -134,16 +173,17 @@ ${(p.log ?? []).length ? `<h4>Nhật ký cập nhật</h4><div class="timeline">
 <div><label>Mã dự án *</label><input id="pj-id" value="${esc(p?.id ?? nextId)}"${p ? " disabled" : ""}></div>
 <div><label>Trạng thái</label><select id="pj-status">${PROJECT_STATUSES.map((s) => `<option${s === (p?.status ?? "Đang thực hiện") ? " selected" : ""}>${s}</option>`).join("")}</select></div>
 <div class="full"><label>Tên dự án *</label><input id="pj-name" value="${esc(p?.name ?? "")}"></div>
-<div><label>Đơn vị / tổ thực hiện *</label><select id="pj-unit" onchange="projectUnitChanged()">${unitChoiceGroups(vldcData.get("subUnits")).map((g) => `<optgroup label="${esc(g.name)}">${g.options.map((o) => `<option value="${esc(o.value)}"${o.value === unitValue ? " selected" : ""}>${esc(o.label)}</option>`).join("")}</optgroup>`).join("")}</select></div>
+<div><label>Phòng / đoàn thực hiện chính (tổ) *</label><select id="pj-unit" onchange="projectUnitChanged()">${unitChoiceGroups(vldcData.get("subUnits")).map((g) => `<optgroup label="${esc(g.name)}">${g.options.map((o) => `<option value="${esc(o.value)}"${o.value === unitValue ? " selected" : ""}>${esc(o.label)}</option>`).join("")}</optgroup>`).join("")}</select></div>
 <div><label>Chủ nhiệm</label><select id="pj-lead">${roles.map((r) => `<option value="${r}"${r === (p?.leadRole ?? "chunhiem") ? " selected" : ""}>${esc(roleTitle(r))} – ${esc(personOf(r))}</option>`).join("")}</select></div>
 <div><label>Ngân sách (tỷ đồng) *</label><input id="pj-budget" type="number" min="0" step="0.1" value="${p?.budget ?? ""}"></div>
 <div><label>Bắt đầu *</label><input id="pj-start" type="date" value="${esc(p?.start ?? localToday())}"></div>
-<div><label>Kết thúc *</label><input id="pj-end" type="date" value="${esc(p?.end ?? "")}"></div></div>
+<div><label>Kết thúc *</label><input id="pj-end" type="date" value="${esc(p?.end ?? "")}"></div>
+<div class="full"><label>Phòng / đoàn phối hợp thực hiện</label><div class="vx-cc-groups">${UNIT_DEFS.filter((u) => u.code !== "BLD").map((u) => `<label class="mini"><input type="checkbox" name="pj-co" value="${esc(u.code)}"${(p?.coUnits ?? []).includes(u.code) ? " checked" : ""}>${esc(u.name)}</label>`).join("")}</div><div class="mini" style="margin-top:4px">Sau khi Liên đoàn trưởng phê duyệt, phòng chính và các phòng phối hợp xem dự án, nhận việc và ghi chú vào việc.</div></div></div>
 <h4 style="margin-top:12px">Hạng mục (WBS)</h4><div class="mini" style="margin-bottom:6px">Trọng số không nhập: tự tính theo số việc giao (gồm việc con) của từng hạng mục; khi chưa giao việc, các hạng mục ngang nhau.</div><div class="vx-staff-table"><table id="pj-wbs" class="vx-pj-form"><thead><tr><th>Hạng mục</th><th>Bắt đầu</th><th>Kết thúc</th><th>Tổ thực hiện</th><th></th></tr></thead><tbody>${(p?.wbs.length ? p.wbs.map((w, i) => ({ ...w, id: w.id ?? String(i) })) : [undefined]).map((w) => wbsRow(w, unitValue || UNIT_DEFS[0].code)).join("")}</tbody></table></div>
 <button class="btn btn-light" onclick="projectAddRow('pj-wbs')">+ Hạng mục</button>
 <h4 style="margin-top:12px">Mốc</h4><div class="vx-staff-table"><table id="pj-ms" class="vx-pj-form"><thead><tr><th>Mốc</th><th>Hạn</th><th></th></tr></thead><tbody>${(p?.milestones ?? []).map((m) => msRow(m)).join("")}</tbody></table></div>
 <button class="btn btn-light" onclick="projectAddRow('pj-ms')">+ Mốc</button>
-<div style="margin-top:14px"><button class="btn btn-primary" ${jsCall("projectSave", p?.id ?? "")}>${p ? "Lưu thay đổi" : "Lập dự án"}</button></div>`)
+<div style="margin-top:14px"><button class="btn btn-primary" ${jsCall("projectSave", p?.id ?? "")}>${!p ? "Lập dự án và trình duyệt" : p.approval === "Từ chối" ? "Lưu và trình lại" : "Lưu thay đổi"}</button></div>`)
   }
 
   function projectSave(id: string) {
@@ -169,14 +209,88 @@ ${(p.log ?? []).length ? `<h4>Nhật ký cập nhật</h4><div class="timeline">
       id: prev?.id ?? value("pj-id"), name: value("pj-name"), unit: unit?.unitName ?? "", subUnit: unit?.subUnit ?? "",
       leadRole: value("pj-lead"), budget: Number(value("pj-budget")), start: value("pj-start"), end: value("pj-end"),
       status: value("pj-status") as ProjectStatus, wbs, milestones,
+      coUnits: [...document.querySelectorAll<HTMLInputElement>('input[name="pj-co"]:checked')].map((x) => x.value).filter((u) => u !== unitCodeOf(unit?.unitName)),
     }
-    if (!unit) return alert("Vui lòng chọn đơn vị thực hiện")
+    if (!unit) return alert("Vui lòng chọn phòng thực hiện chính")
     const problems = [...projectProblems(next, vldcData.get("projects"), !prev), ...(prev ? wbsRemovalProblems(prev, next, projectWork()) : [])]
     if (problems.length) return alert(problems.join("\n"))
-    void vldcData.save("projects", next)
-    if (!prev || prev.leadRole !== next.leadRole) notice(next.leadRole as string, `Dự án ${next.id}`, `Bạn là chủ nhiệm dự án "${next.name}".`, role)
+    const saved = submitProject(prev, next, role)
+    void vldcData.save("projects", saved)
+    if (approvalOf(saved) === "Chờ duyệt" && (!prev || approvalOf(prev) !== "Chờ duyệt")) {
+      notice(PROJECT_APPROVER, `Dự án ${saved.id} chờ phê duyệt`, `${roleTitle(role)} trình dự án "${saved.name}".`, role)
+    }
+    if (!prev || prev.leadRole !== saved.leadRole) notice(saved.leadRole as string, `Dự án ${saved.id}`, `Bạn là chủ nhiệm dự án "${saved.name}".`, role)
     ctx.closeModal()
-    rerender()
+    if (prev) rerender()
+    else ctx.go(projectPath(saved.id))
+  }
+
+  // ---------- Phê duyệt, xoá dự án
+  function projectDecide(id: string, decision: "Đã duyệt" | "Từ chối") {
+    const p = stored(id)
+    const role = ctx.role()
+    if (!p || !isProjectApprover(role)) return
+    const note = decision === "Từ chối" ? prompt("Lý do không phê duyệt") ?? "" : ""
+    if (decision === "Từ chối" && !note.trim()) return
+    try {
+      void vldcData.save("projects", decideProject(p, decision, note, new Date().toISOString()))
+      if (p.createdBy) notice(p.createdBy, `Dự án ${p.id}: ${decision === "Đã duyệt" ? "đã được phê duyệt" : "không được phê duyệt"}`, `${p.name}${note ? ` – ${note}` : ""}`, role)
+      rerender()
+    } catch (e) {
+      alert((e as Error).message)
+    }
+  }
+
+  /** Tasks still in the project (payment dossiers aside): each is deleted by its own creator before the project can go. */
+  const liveWork = (id: string) => workflowStore.items().filter((x) => x.project === id && x.type !== "payment").length
+
+  /** The creator asks to delete the project; the federation head confirms (projectConfirmDelete). */
+  function projectRequestDelete(id: string) {
+    const p = stored(id)
+    const role = ctx.role()
+    if (!p || !canRequestDelete(p, role)) return
+    const blocker = deleteBlocker(liveWork(id))
+    if (blocker) return alert(blocker)
+    const reason = prompt(`Lý do đề nghị xoá dự án ${p.id}`) ?? ""
+    if (!reason.trim()) return
+    try {
+      void vldcData.save("projects", requestDelete(p, role, reason, new Date().toISOString(), liveWork(id)))
+      notice(PROJECT_APPROVER, `Đề nghị xoá dự án ${p.id}`, `${roleTitle(role)} đề nghị xoá "${p.name}": ${reason.trim()}`, role)
+      rerender()
+    } catch (e) {
+      alert((e as Error).message)
+    }
+  }
+
+  function projectCancelDelete(id: string) {
+    const p = stored(id)
+    if (!p) return
+    try {
+      void vldcData.save("projects", cancelDeleteRequest(p, ctx.role()))
+      rerender()
+    } catch (e) {
+      alert((e as Error).message)
+    }
+  }
+
+  /** The federation head confirms the deletion (only of a project with no task left) or keeps the project, with a reason. */
+  function projectConfirmDelete(id: string, answer: string) {
+    const p = stored(id)
+    const role = ctx.role()
+    if (!p?.deleteRequest || !isProjectApprover(role)) return
+    const confirmed = answer === "yes"
+    if (confirmed && deleteBlocker(liveWork(id))) return alert(deleteBlocker(liveWork(id)))
+    if (confirmed && !confirm(`Xoá dự án ${p.id} • ${p.name}?`)) return
+    const note = confirmed ? "" : prompt("Lý do không xoá") ?? ""
+    if (!confirmed && !note.trim()) return
+    try {
+      void vldcData.save("projects", decideDelete(p, confirmed, note, role, new Date().toISOString(), liveWork(id)))
+      notice(p.deleteRequest.by, `Dự án ${p.id}: ${confirmed ? "đã xoá" : "không xoá"}`, confirmed ? `Liên đoàn trưởng đã xác nhận xoá "${p.name}".` : `Liên đoàn trưởng giữ lại "${p.name}": ${note.trim()}`, role)
+      if (confirmed) ctx.go("projects")
+      else rerender()
+    } catch (e) {
+      alert((e as Error).message)
+    }
   }
 
   // ---------- Tiến độ, mốc, yêu cầu thay đổi
@@ -238,7 +352,7 @@ ${(p.log ?? []).length ? `<h4>Nhật ký cập nhật</h4><div class="timeline">
   function projectCrDecide(id: string, crId: string, decision: "Đã duyệt" | "Từ chối") {
     const p = stored(id)
     const role = ctx.role()
-    if (!p || role !== PROJECT_APPROVER) return
+    if (!p || !isProjectApprover(role)) return
     const note = decision === "Từ chối" ? prompt("Lý do từ chối") ?? "" : ""
     try {
       void vldcData.save("projects", decideChangeRequest(p, crId, decision, note, new Date().toISOString()))
@@ -253,7 +367,7 @@ ${(p.log ?? []).length ? `<h4>Nhật ký cập nhật</h4><div class="timeline">
 
   Object.assign(window, {
     projectOpen, projectFiles, projectForm, projectSave, projectProgressForm, projectProgressSave, projectMilestone, projectCrForm,
-    projectCrSave, projectCrDecide,
+    projectCrSave, projectCrDecide, projectDecide, projectRequestDelete, projectCancelDelete, projectConfirmDelete,
     // Older pages open projects through projectDetail.
     projectDetail: projectOpen,
     /** Changing the project's unit narrows every WBS row's tổ list; a tổ no longer listed is cleared. */

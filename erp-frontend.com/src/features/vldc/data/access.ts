@@ -85,6 +85,14 @@ export function managesAllUnits(role: string): boolean {
   return managed.size > 0 && Object.keys(unitParent).every((u) => managed.has(u))
 }
 
+/**
+ * Tier of the role in the work flows, from its position and unit (not its name): the leader manages the whole
+ * organisation and only hands work down, a head manages a unit and both hands work down and proposes, staff manage
+ * nobody and only propose.
+ */
+export type Tier = "leader" | "head" | "staff"
+export const tierOf = (role: string): Tier => (managesAllUnits(role) ? "leader" : managedUnits(role).size ? "head" : "staff")
+
 /** The owner's work falls in the role's managed units. */
 export function managesWorkOf(role: string, owner: string): boolean {
   const unit = roleUnit(owner)

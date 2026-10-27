@@ -10,8 +10,10 @@ import lombok.EqualsAndHashCode;
 @EqualsAndHashCode(callSuper = true)
 public class MissionDetailDTO extends MissionSummaryDTO {
     private String content;
-    /** Thiết bị (id trong danh mục tài sản). */
+    /** Thiết bị (id trong danh mục thiết bị). */
     private List<Long> equipmentIds;
+    /** Thiết bị kèm mã, tên (để hiển thị). */
+    private List<EquipmentRefDTO> equipment;
     private List<PersonRefDTO> followers;
     private String evidence;
     /** Lý do từ chối. */

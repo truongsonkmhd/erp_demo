@@ -190,7 +190,7 @@ public class MyWorkAppServiceImpl implements MyWorkAppService {
         r.setReason(reason);
         r.setFrom(look.person(fromUserId));
         r.setDepartment(look.unit(unitId));
-        r.setLink("/vldc/projects/" + p.getCode());
+        r.setLink("projects/" + p.getCode());
         return r;
     }
 
@@ -211,7 +211,7 @@ public class MyWorkAppServiceImpl implements MyWorkAppService {
         r.setFrom(look.person(t.getCreatedBy()));
         r.setOwner(look.person(t.getAssigneeUserId()));
         r.setDepartment(look.unit(t.getDepartmentId()));
-        r.setLink("/vldc/projects/" + p.getCode() + "/viec/" + t.getCode());
+        r.setLink("projects/" + p.getCode() + "/viec/" + t.getCode());
         return r;
     }
 
@@ -232,7 +232,7 @@ public class MyWorkAppServiceImpl implements MyWorkAppService {
         r.setFrom(look.person(m.getProposerUserId()));
         r.setOwner(look.person(m.getStatus() == MissionStatus.PENDING ? m.getApproverUserId() : m.getProposerUserId()));
         r.setDepartment(look.unit(m.getDepartmentId()));
-        r.setLink("/vldc/projects/nhiem-vu/" + m.getCode());
+        r.setLink("projects/nhiem-vu/" + m.getCode());
         return r;
     }
 

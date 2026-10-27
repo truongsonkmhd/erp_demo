@@ -12,6 +12,7 @@ import com.xxxx.ddd.application.model.work.MissionSummaryDTO;
 import com.xxxx.ddd.application.model.work.PersonRefDTO;
 import com.xxxx.ddd.application.model.work.ProjectRefDTO;
 import com.xxxx.ddd.application.model.work.TaskCommentDTO;
+import com.xxxx.ddd.application.service.mission.EquipmentCatalog;
 import com.xxxx.ddd.application.service.mission.MissionAppService;
 import com.xxxx.ddd.application.service.mission.MissionRules;
 import com.xxxx.ddd.application.service.mission.MissionSpecs;
@@ -75,13 +76,15 @@ public class MissionAppServiceImpl implements MissionAppService {
     private final ProjectAccess projectAccess;
     private final WorkRoles roles;
     private final AuthorizationService authorization;
+    private final EquipmentCatalog catalog;
     private final CurrentActor actor;
     private final ApplicationEventPublisher events;
 
     public MissionAppServiceImpl(MissionRepository missions, MissionFollowerRepository followers, MissionCommentRepository comments,
                                  MissionActivityRepository activities, MissionEquipmentRepository equipment, ProjectRepository projects,
                                  UserRepository users, DepartmentRepository departments, ProjectAccess projectAccess, WorkRoles roles,
-                                 AuthorizationService authorization, CurrentActor actor, ApplicationEventPublisher events) {
+                                 AuthorizationService authorization, EquipmentCatalog catalog, CurrentActor actor,
+                                 ApplicationEventPublisher events) {
         this.missions = missions;
         this.followers = followers;
         this.comments = comments;
@@ -93,6 +96,7 @@ public class MissionAppServiceImpl implements MissionAppService {
         this.projectAccess = projectAccess;
         this.roles = roles;
         this.authorization = authorization;
+        this.catalog = catalog;
         this.actor = actor;
         this.events = events;
     }
@@ -277,10 +281,10 @@ public class MissionAppServiceImpl implements MissionAppService {
         m.setTitle(title).setDepartmentId(unit).setProjectId(p == null ? null : p.getId()).setDueDate(due).setContent(blankToNull(c.getContent()));
     }
 
-    /** Equipment (from the asset catalogue, no check until it is in MySQL) and followers. */
+    /** Equipment (from the equipment catalogue, each must exist) and followers. */
     private void saveLists(Mission m, SaveMissionCommand c, User me) {
         List<Long> devices = c.getEquipmentIds() == null ? List.of() : c.getEquipmentIds().stream().filter(Objects::nonNull).distinct().toList();
-        if (devices.stream().anyMatch(id -> id <= 0)) throw new IllegalArgumentException("Thiết bị không hợp lệ");
+        catalog.require(devices);
         equipment.replaceEquipment(m.getId(), devices);
         Set<Long> follow = new LinkedHashSet<>(c.getFollowerUserIds() == null ? List.of() : c.getFollowerUserIds());
         follow.remove(me.getId());
@@ -348,6 +352,7 @@ public class MissionAppServiceImpl implements MissionAppService {
         MissionDetailDTO dto = fillSummary(new MissionDetailDTO(), m, units, today);
         dto.setContent(m.getContent());
         dto.setEquipmentIds(equipment.findByMissionId(m.getId()).stream().map(MissionEquipment::getEquipmentId).toList());
+        dto.setEquipment(catalog.refsOf(dto.getEquipmentIds()));
         dto.setFollowers(followerIds(m).stream().map(this::personOf).filter(Objects::nonNull).toList());
         dto.setEvidence(m.getEvidence());
         dto.setDecisionNote(m.getDecisionNote());

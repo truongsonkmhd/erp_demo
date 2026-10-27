@@ -14,7 +14,7 @@ import { kpi, kpis, bar, metric, tr } from "./pages"
 import { vldcData } from "./registry"
 import { searchAll, type SearchHit } from "./search"
 import { ALL_SEARCH_GROUPS, searchSources, type SearchData } from "./searchSources"
-import { DMS_FOLDERS } from "./seed/knowledge"
+import { dmsStore } from "./dmsStore"
 import { ledgerStore } from "./ledgerStore"
 import type { AlertRule, DocTemplate, ReportDef } from "./types"
 import type { OutgoingDocument } from "../../../types/outgoingDocument"
@@ -42,7 +42,7 @@ const newId = (prefix: string) => `${prefix}-${Date.now().toString(36).toUpperCa
 
 function searchData(): SearchData {
   return {
-    dmsFiles: D("dmsFiles"), incomingDocuments: D("incomingDocuments"), outgoingDocuments: D("outgoingDocuments"), staffSkills: D("staffSkills"),
+    dmsFiles: dmsStore.files(), incomingDocuments: D("incomingDocuments"), outgoingDocuments: D("outgoingDocuments"), staffSkills: D("staffSkills"),
     equipment: D("equipment"), fixedAssets: D("fixedAssets"), projects: projectsView(), risks: D("risks"), contracts: ledgerStore.legacyContracts(),
     vouchers: D("vouchers"), advances: D("advances"), archiveRecords: D("archiveRecords"), geoDatasets: D("geoDatasets"),
   }
@@ -68,31 +68,9 @@ export function aiSearchHtml(query: string, groups: string[]): string {
 
 /** Index size shown on the AI workspace header. */
 export function aiStatsHtml(): string {
-  const docs = D("dmsFiles").length + D("incomingDocuments").length + D("outgoingDocuments").length + D("archiveRecords").length
+  const docs = dmsStore.files().length + D("incomingDocuments").length + D("outgoingDocuments").length + D("archiveRecords").length
   const stat = (n: number, label: string) => `<div class="ai-stat"><b>${n.toLocaleString("vi-VN")}</b><span>${label}</span></div>`
   return stat(docs, "Tài liệu & hồ sơ đã lập chỉ mục") + stat(D("staffSkills").length, "Hồ sơ năng lực nhân sự") + stat(D("equipment").length, "Thiết bị / tài sản")
-}
-
-// ---------- DMS ----------
-
-let dmsProject = ""
-function dms() {
-  const files = D("dmsFiles")
-  const m = K.dmsMetrics(files, today())
-  const projects = projectsView()
-  const pid = projects.some((p) => p.id === dmsProject) ? dmsProject : projects[0]?.id ?? ""
-  const options = projects.map((p) => `<option value="${esc(p.id)}"${p.id === pid ? " selected" : ""}>${esc(p.id)} – ${esc(p.name)}</option>`).join("")
-  const folders = K.folderCounts(files, pid, DMS_FOLDERS).map((f) => `<div class="folder" ${jsCall("folderOpen", pid, f.folder)}>📁 ${esc(f.folder)} <span class="mini">• ${f.count} tài liệu</span></div>`).join("")
-  const recent = [...files].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 5)
-  return `${kpis(
-    kpi("Tài liệu", m.files, `${m.projects} hồ sơ dự án • ${m.versions} phiên bản`),
-    kpi("Cập nhật 30 ngày", m.recent, "Có lịch sử phiên bản"),
-    kpi("Đang check-out", m.checkedOut, "Tránh sửa trùng"),
-    kpi("Chờ phân loại", m.untagged, "Thiếu metadata (tag)"),
-  )}${grid("two",
-    card("Hồ sơ điện tử theo dự án", `<select onchange="dmsSelectProject(this.value)" style="margin-bottom:10px">${options}</select>${folders}`, '<button class="btn btn-primary" onclick="uploadDoc()">+ Tải tài liệu</button>'),
-    card("Tìm kiếm tài liệu", `<input id="dmsq" placeholder="Ví dụ: đo từ, nghiệm thu, P-12"><button class="btn btn-primary" style="margin-top:8px" onclick="dmsSearch()">Tìm trong tên, thư mục, tag</button><div id="dmsResult" style="margin-top:12px">${recent.map((f) => `<div class="doc-card"><div><b>${esc(f.name)}</b><div class="doc-meta">${esc(f.format)} • v${f.version} • ${esc(f.projectId)} • ${vnDate(f.updatedAt)}</div></div>${btn("Mở", "openDmsFile", f.id)}</div>`).join("")}</div>`),
-  )}`
 }
 
 // ---------- Archive, geo, import, migration, data hub ----------
@@ -141,7 +119,7 @@ function migration() {
 }
 
 function qualityRows() {
-  const untagged = K.dmsMetrics(D("dmsFiles"), today()).untagged
+  const untagged = K.dmsMetrics(dmsStore.files(), today()).untagged
   const calib = D("equipment").filter((e) => !e.inspectionDue).length
   // Rules whose violations can be measured live use the live count.
   return D("dataQualityRules").map((r) => (r.scope === "DMS" ? { ...r, violations: untagged } : r.scope === "Thiết bị" ? { ...r, violations: calib } : r))
@@ -152,7 +130,7 @@ function datahub() {
   const cm = K.catalogMetrics(cats)
   const rules = qualityRows()
   const layers: [string, number, string][] = [
-    ["Tài liệu DMS", D("dmsFiles").length, "dms"], ["Văn bản đến / đi", D("incomingDocuments").length + D("outgoingDocuments").length, "documents"],
+    ["Tài liệu DMS", dmsStore.files().length, "dms"], ["Văn bản đến / đi", D("incomingDocuments").length + D("outgoingDocuments").length, "documents"],
     ["Hồ sơ lưu trữ", D("archiveRecords").length, "archive"], ["Dữ liệu địa vật lý", D("geoDatasets").length, "geodata"],
     ["Dự án", projectsView().length, "projects"], ["Thiết bị", D("equipment").length, "equipment"], ["Hợp đồng", ledgerStore.legacyContracts().length, "contracts"],
   ]
@@ -279,50 +257,6 @@ function actions(ctx: Ctx) {
   const rerender = (page: keyof typeof RENDERERS) => {
     const el = content()
     if (el) el.innerHTML = subTabsHtml(page) + RENDERERS[page]()
-  }
-
-  function folderOpen(projectId: string, folder: string) {
-    const files = D("dmsFiles").filter((f) => f.projectId === projectId && f.folder === folder)
-    open(`${projectId} • ${folder}`, table(["Tài liệu", "Định dạng", "Phiên bản", "Cập nhật", "Trạng thái", ""], files.map((f) => `<tr><td><b>${esc(f.name)}</b>${f.checkedOutBy ? `<div class="mini">Đang check-out: ${esc(f.checkedOutBy)}</div>` : ""}</td><td>${esc(f.format)}</td><td>v${f.version}</td><td>${vnDate(f.updatedAt)}</td><td>${badge(f.status, statusCls(f.status))}</td><td>${btn("Mở", "openDmsFile", f.id)}</td></tr>`), "Thư mục trống."))
-  }
-
-  function openDmsFile(id: string) {
-    const f = D("dmsFiles").find((x) => x.id === id)
-    if (!f) return
-    open(f.name, `${metric("Dự án", `<a href="javascript:void 0" ${jsCall("projectDetail", f.projectId)}>${esc(f.projectId)}</a>`)}${metric("Thư mục", esc(f.folder))}${metric("Định dạng / phiên bản", `${esc(f.format)} • v${f.version}`)}${metric("Cập nhật", `${vnDate(f.updatedAt)} • ${esc(f.author)}`)}${metric("Trạng thái", badge(f.status, statusCls(f.status)))}${metric("Tag", f.tags.length ? f.tags.map((t) => badge(t, "b-info")).join(" ") : badge("Chưa phân loại", "b-warn"))}<div class="toolbar" style="margin-top:10px"><button class="btn btn-primary" ${jsCall("toggleCheckout", f.id)}>${f.checkedOutBy ? "Check-in" : "Check-out để sửa"}</button></div>`)
-  }
-
-  function toggleCheckout(id: string) {
-    const f = D("dmsFiles").find((x) => x.id === id)
-    if (!f) return
-    const who = ROLE_TITLES[ctx.role()] || ctx.role()
-    const next = f.checkedOutBy ? { ...f, checkedOutBy: undefined, version: f.version + 1, updatedAt: today() } : { ...f, checkedOutBy: who }
-    void vldcData.save("dmsFiles", next)
-    openDmsFile(id)
-  }
-
-  function dmsSearch() {
-    const el = document.getElementById("dmsResult")
-    if (el) el.innerHTML = hitCards(searchAll(inputValue("dmsq"), searchSources(searchData(), ["docs"]).filter((s) => s.source === "dms"))) || '<div class="mini">Không tìm thấy tài liệu.</div>'
-  }
-
-  function dmsSelectProject(id: string) {
-    dmsProject = id
-    rerender("dms")
-  }
-
-  function uploadDoc() {
-    const projects = projectsView().map((p) => `<option>${esc(p.id)}</option>`).join("")
-    const folders = DMS_FOLDERS.map((f) => `<option>${esc(f)}</option>`).join("")
-    open("Tải tài liệu (lưu metadata)", `<div class="form-grid"><div class="full"><label>Tên tài liệu</label><input id="up-name"></div><div><label>Dự án</label><select id="up-project">${projects}</select></div><div><label>Thư mục</label><select id="up-folder">${folders}</select></div><div><label>Định dạng</label><select id="up-format"><option>PDF</option><option>DOCX</option><option>XLSX</option><option>TIFF</option></select></div><div><label>Tag (phân cách dấu phẩy)</label><input id="up-tags"></div></div><button class="btn btn-primary" style="margin-top:10px" onclick="saveUpload()">Lưu</button>`)
-  }
-
-  function saveUpload() {
-    const name = inputValue("up-name").trim()
-    if (!name) return alert("Vui lòng nhập tên tài liệu")
-    const tags = inputValue("up-tags").split(",").map((t) => t.trim()).filter(Boolean)
-    void vldcData.save("dmsFiles", { id: newId("DOC"), projectId: inputValue("up-project"), folder: inputValue("up-folder"), name, format: inputValue("up-format"), version: 1, updatedAt: today(), author: ROLE_TITLES[ctx.role()] || ctx.role(), status: "Draft", tags })
-    ctx.closeModal()
   }
 
   function archiveDetail(id: string) {
@@ -470,14 +404,14 @@ function actions(ctx: Ctx) {
   }
 
   return {
-    folderOpen, openDmsFile, toggleCheckout, dmsSearch, dmsSelectProject, uploadDoc, saveUpload, archiveDetail, archiveRecordModal, saveArchiveRecord,
+    archiveDetail, archiveRecordModal, saveArchiveRecord,
     geoDetail, geoDatasetModal, saveGeoDataset, validationQueueModal, resolveImport, migrationPlanModal, masterDataModal, cleaningModal,
     globalDataSearch, researchSearch, buildReport, scheduleReport, saveSchedule, toggleRule, ruleForm, saveRule, auditSearch, genSelect, generateDoc, saveGeneratedDraft,
   }
 }
 
 const RENDERERS: Record<string, () => string> = {
-  dms, archive, geodata, importdata, migration, datahub, reports, alerts: alertsPage, audit, generator,
+  archive, geodata, importdata, migration, datahub, reports, alerts: alertsPage, audit, generator,
 }
 
 /** Registers the pages and their modal/action handlers (inline handlers live on window). */

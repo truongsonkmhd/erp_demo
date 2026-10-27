@@ -10,6 +10,7 @@ import { workflowStore } from "@/features/vldc/workflow/repository"
 import { setWorkflowContext } from "@/features/vldc/workflow/views"
 import { WORKFLOW_PAGES } from "@/features/vldc/workflow/rules"
 import { vldcData } from "@/features/vldc/data/registry"
+import { dmsStore } from "@/features/vldc/data/dmsStore"
 import { ledgerStore } from "@/features/vldc/data/ledgerStore"
 import { setAuditActor } from "@/features/vldc/data/audit"
 import { applySignedInUser, loadOrgFromBackend } from "@/features/vldc/data/orgLoader"
@@ -50,6 +51,7 @@ function initialsOf(name: string) {
  * search...) keep patching that DOM between navigations.
  */
 const LEDGER_PAGES = new Set(["contracts", "debts", "cashin", "cashout", "dashboard", "accounting", "acctreports", "receivables", "payables", "vouchers", "projects", "finance", "alerts", "datahub"])
+const DMS_PAGES = new Set(["dms", "datahub", "assistant", "projects", "documents"])
 
 export default function VldcPage() {
   const { pageId = "dashboard" } = useParams()
@@ -104,6 +106,7 @@ export default function VldcPage() {
   useEffect(() => {
     workflowStarted ??= workflowStore.start()
     void vldcData.startAll()
+    void dmsStore.start()
     void ledgerStore.start()
     const onData = (shows: (page: string) => boolean) => () => {
       vldcActions.refresh()
@@ -117,11 +120,14 @@ export default function VldcPage() {
     }
     const offWorkflow = workflowStore.onChange(onData((page) => WORKFLOW_PAGES.has(page)))
     const offData = vldcData.onAnyChange((key) => onData((page) => (DATASETS[key].pages as readonly string[]).includes(page))())
+    // DMS lives on the backend (its own store): its pages and the ones listing project documents re-render on change.
+    const offDms = dmsStore.onChange(onData((page) => DMS_PAGES.has(page)))
     // Contracts and thu / chi live on the backend too; these pages show their figures.
     const offLedger = ledgerStore.onChange(onData((page) => LEDGER_PAGES.has(page)))
     return () => {
       offWorkflow()
       offData()
+      offDms()
       offLedger()
     }
   }, [])

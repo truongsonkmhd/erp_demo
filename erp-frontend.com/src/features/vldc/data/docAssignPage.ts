@@ -7,6 +7,7 @@ import {
 } from "./docAssignCore"
 import { ROLE_PROFILES } from "./org"
 import { vldcData } from "./registry"
+import { dmsStore } from "./dmsStore"
 import type { DocAssignment, ReplyResult } from "./types"
 
 /** Giao xử lý văn bản đến: the section inside the document modal, the assign form, and the recipient's reply. */
@@ -92,7 +93,7 @@ export function installDocAssign(ctx: Ctx) {
     const doc = vldcData.get("incomingDocuments").find((d) => d.id === docId)
     if (!doc || !canAssign(ctx.role())) return
     const roles = Object.keys(ROLE_TITLES).filter((r) => r !== ctx.role() && r !== "admin")
-    const dms = [...vldcData.get("dmsFiles")].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 8)
+    const dms = [...dmsStore.files()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 8)
     const due = doc.dueDate && doc.dueDate >= localToday() ? doc.dueDate : ""
     ctx.openModal(`Giao xử lý • ${doc.documentNumber}`, `<div class="mini" style="margin-bottom:10px">${esc(doc.summary)}</div><div class="form-grid">
 <div class="full"><label>Người nhận * (chọn một hoặc nhiều)</label><div class="vx-doc-roles">${roles.map((r) => `<label class="vx-news-check"><input type="checkbox" name="da-role" value="${esc(r)}"> ${esc(title(r))}</label>`).join("")}</div></div>

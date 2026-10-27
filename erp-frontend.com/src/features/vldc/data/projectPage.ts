@@ -14,6 +14,7 @@ import {
 } from "./projectCore"
 import { projectWork, projectsView } from "./projectView"
 import { vldcData } from "./registry"
+import { dmsStore } from "./dmsStore"
 import { resolveUnitChoice, unitChoiceGroups } from "./subUnitCore"
 import type { ChangeRequestKind, Project, ProjectStatus, StoredProject } from "./types"
 
@@ -136,7 +137,7 @@ export function installProjectPage(render: Record<string, () => void>, ctx: Ctx)
   /** Tổng quan tab: who and when (with editing and the delete request), three figures and the update log. */
   function projectOverviewHtml(p: Project): string {
     const role = ctx.role()
-    const files = vldcData.get("dmsFiles").filter((f) => f.projectId === p.id)
+    const files = dmsStore.files().filter((f) => f.projectId === p.id)
     const canEdit = canCreateProject(role)
     const actions = [
       canEdit ? `<button class="btn btn-light" ${jsCall("projectForm", p.id)}>Sửa dự án</button>` : "",
@@ -159,7 +160,7 @@ ${(p.log ?? []).length ? `<div class="card" style="margin-top:14px"><h4>Nhật k
   }
 
   function projectFiles(id: string) {
-    const files = vldcData.get("dmsFiles").filter((f) => f.projectId === id)
+    const files = dmsStore.files().filter((f) => f.projectId === id)
     ctx.openModal(`Tài liệu DMS • ${id}`, files.map((f) => `<div class="metric vx-cap-pick" ${jsCall("openDmsFile", f.id)}><span>${esc(f.name)}<br><small>${esc(f.folder)} • v${f.version}</small></span><b>${esc(f.status)}</b></div>`).join("") || '<div class="mini">Không có tài liệu.</div>')
   }
 

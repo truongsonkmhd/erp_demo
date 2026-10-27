@@ -51,7 +51,6 @@ export const DATASETS = {
   handoffs: { collection: "handoffs", seed: fl.handoffs, pages: ["handoff", "crossflow"] },
   incomingDocuments: { collection: "incoming_documents", shared: { firestore: "incoming_documents", local: "erp_incoming_documents_v1" }, seed: fl.incomingDocuments, pages: ["documents", "dashboard"] },
   outgoingDocuments: { collection: "outgoing_documents", shared: { firestore: "outgoing_documents", local: "erp_outgoing_documents_v1" }, seed: fl.outgoingDocuments, pages: ["documents", "dashboard"] },
-  dmsFiles: { collection: "dms_files", seed: kn.dmsFiles, pages: ["dms", "datahub", "assistant"] },
   archiveRecords: { collection: "archive_records", seed: kn.archiveRecords, pages: ["archive", "datahub", "assistant"] },
   geoDatasets: { collection: "geo_datasets", seed: kn.geoDatasets, pages: ["geodata", "datahub", "assistant"] },
   importJobs: { collection: "import_jobs", seed: gv.importJobs, pages: ["importdata", "datahub"] },

@@ -62,7 +62,7 @@ export const DATASETS = {
   reportCatalog: { collection: "report_catalog", seed: gv.reportCatalog, pages: ["reports"] },
   docTemplates: { collection: "doc_templates", seed: gv.docTemplates, pages: ["generator"] },
   subUnits: { collection: "sub_units", seed: su.subUnits, pages: ["units", "organization", "hr", "performance", "dashboard", "news"] },
-  scienceTopics: { collection: "science_topics", seed: sc.scienceTopics, pages: ["research", "action"] },
+  scienceTopics: { collection: "science_topics", api: true, seed: sc.scienceTopics, pages: ["research", "action"] },
   docAssignments: { collection: "doc_assignments", seed: da.docAssignments, pages: ["documents", "action", "dashboard"] },
   staffProfiles: { collection: "staff_profiles", seed: st.staffProfiles, pages: ["capability", "hr"] },
   news: { collection: "news", api: true, seed: nw.news, pages: ["news", "dashboard"] },

@@ -1099,3 +1099,8 @@
 /* Công việc: 4 ô thống kê ở đầu trang (bấm vào để lọc) */
 .vldc-scope .vx-inbox-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 12px; }
 @media (max-width: 700px) { .vldc-scope .vx-inbox-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* Attachments: a stored file is a download button; × drops it from the record in the form. */
+.vldc-scope button.vx-att-link { border: 0; cursor: pointer; color: var(--primary); font: inherit; font-size: 12px; }
+.vldc-scope button.vx-att-link:hover { text-decoration: underline; }
+.vldc-scope .vx-att-x { margin-left: 4px; border: 0; background: none; cursor: pointer; color: var(--danger); font-weight: 700; }
+.vldc-scope .vx-att-upload { margin-top: 10px; padding: 10px; border: 1px dashed var(--line); border-radius: 10px; }

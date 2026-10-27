@@ -127,4 +127,31 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   return parseResult<T>(response)
 }
 
+/** fetch with the Bearer token, retried once with a refreshed token on 401 (body sent as is, e.g. FormData). */
+async function authorizedFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  const send = (token: string | null) => {
+    const headers = new Headers(init.headers || {})
+    if (token) headers.set("Authorization", `Bearer ${token}`)
+    return fetch(`${API_BASE}${path}`, { ...init, headers }).catch(() => {
+      throw new ApiError("Thông báo lỗi hệ thống", 0)
+    })
+  }
+  const response = await send(getAccessToken())
+  if (response.status !== 401 || !getRefreshToken()) return response
+  const nextToken = await refreshAccessToken()
+  return nextToken ? send(nextToken) : response
+}
+
+/** multipart/form-data POST (the browser sets the boundary); returns the ResultMessage result. */
+export async function apiUpload<T>(path: string, form: FormData): Promise<T> {
+  return parseResult<T>(await authorizedFetch(path, { method: "POST", body: form }))
+}
+
+/** Private file behind the API, as a Blob (errors come back as ResultMessage JSON). */
+export async function apiDownload(path: string): Promise<Blob> {
+  const response = await authorizedFetch(path)
+  if (!response.ok) await parseResult<never>(response)
+  return response.blob()
+}
+
 export { API_BASE }

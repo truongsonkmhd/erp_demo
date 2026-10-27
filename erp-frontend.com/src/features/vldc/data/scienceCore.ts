@@ -1,12 +1,13 @@
 import { ROLE_TITLES } from "../workflow/rules.ts"
+import { managedUnits, roleUnit, rolePosition } from "./access.ts"
 import { addDays } from "./dates.ts"
 import { slaOf, type InboxRow } from "./inboxCore.ts"
 import { unitKey } from "./org.ts"
 import type { ScienceTopic, TopicReviewDecision } from "./types.ts"
 
 /**
- * Đề tài khoa học & đổi mới: active topics are private to their lead, members and the federation head;
- * the lead submits for acceptance and the head's approval makes the topic public ("Đã triển khai").
+ * Đề tài khoa học & đổi mới: topics in progress are seen by leadership (every unit) and by the people of their unit
+ * (heads and staff); the lead submits for acceptance and the head's approval makes the topic public ("Đã triển khai").
  */
 
 export const TOPIC_FIELDS = ["Địa vật lý", "Địa chất", "GIS – Bản đồ", "Thiết bị – Công nghệ", "Chuyển đổi số", "Quản lý"]
@@ -15,8 +16,23 @@ export const REVIEWER = "lanhdao"
 export const SOON_DAYS = 14
 
 export const isMember = (t: ScienceTopic, role: string) => t.leadRole === role || t.members.includes(role)
-export const canViewTopic = (t: ScienceTopic, role: string) => t.status === "Đã triển khai" || role === REVIEWER || isMember(t, role)
+/**
+ * Units whose topics in progress the role sees: leadership manages every unit, a unit head the unit (and its
+ * sub-units), staff their own unit.
+ */
+export function topicUnits(role: string): Set<string> {
+  const managed = managedUnits(role)
+  if (managed.size) return managed
+  const unit = roleUnit(role)
+  return new Set(unit ? [unit] : [])
+}
+export const seesAllUnits = (role: string) => role === REVIEWER || rolePosition(role)?.code === "LANH_DAO"
+/** Accepted topics are public; others are seen by leadership, by their unit, and by their own lead and members. */
+export const canViewTopic = (t: ScienceTopic, role: string) =>
+  t.status === "Đã triển khai" || seesAllUnits(role) || isMember(t, role) || topicUnits(role).has(t.unit)
 export const visibleTopics = (topics: ScienceTopic[], role: string) => topics.filter((t) => canViewTopic(t, role))
+/** Everyone who sees a topic may hand in documents until it is accepted (mirrors the backend's canWrite). */
+export const canAttachFiles = (t: ScienceTopic, role: string) => t.status !== "Đã triển khai" && canViewTopic(t, role)
 /** The federation head views and reviews topics only. */
 export const canCreateTopic = (role: string) => role !== REVIEWER
 export const canUpdateProgress = (t: ScienceTopic, role: string) => role !== REVIEWER && t.status === "Đang triển khai" && isMember(t, role)

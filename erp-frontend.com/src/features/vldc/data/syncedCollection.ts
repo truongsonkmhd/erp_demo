@@ -69,14 +69,25 @@ export function createSyncedCollection<T extends { id: string }>(
     return Promise.race([target.save(item), timeout]).finally(() => clearTimeout(timer))
   }
 
-  /** Optimistic: the change is visible immediately, then written to the active repo. */
+  /**
+   * Optimistic: the change is visible immediately, then written to the active repo. A row the server rejects
+   * (HTTP 4xx: invalid or not allowed) is rolled back and the error reaches the caller; only an unreachable or
+   * failing server switches to LocalStorage.
+   */
   async function write(changed: T[]) {
     const ids = new Set(changed.map((x) => x.id))
-    items = [...current().filter((x) => !ids.has(x.id)), ...changed]
+    const before = current()
+    items = [...before.filter((x) => !ids.has(x.id)), ...changed]
     emit()
     try {
       for (const item of changed) await saveWithTimeout(repo(), item)
     } catch (error) {
+      const status = (error as { status?: unknown } | null)?.status
+      if (typeof status === "number" && status >= 400 && status < 500) {
+        items = before
+        emit()
+        throw error
+      }
       if (mode === "offline") throw error
       await goOffline(error)
       for (const item of changed) await fallback.save(item)

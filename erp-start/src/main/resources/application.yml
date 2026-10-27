@@ -46,8 +46,34 @@ spring:
     locations: classpath:db/migration
     baseline-on-migrate: true
     baseline-version: 0
+  # Notification e-mails. Gmail: MAIL_HOST=smtp.gmail.com, MAIL_USERNAME=<account>, MAIL_PASSWORD=<App Password>.
+  # Empty MAIL_HOST = no e-mail is sent (the bell still works).
+  mail:
+    host: ${MAIL_HOST:}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail.smtp.auth: ${MAIL_SMTP_AUTH:true}
+      mail.smtp.starttls.enable: ${MAIL_STARTTLS:true}
+      mail.smtp.connectiontimeout: 10000
+      mail.smtp.timeout: 15000
+      mail.smtp.writetimeout: 15000
+
+notification:
+  zone: ${NOTIFICATION_ZONE:Asia/Ho_Chi_Minh}
+  fresh-hours: ${NOTIFICATION_FRESH_HOURS:24}
+  public-url: ${APP_PUBLIC_URL:http://localhost:8080}
+  mail-from: ${MAIL_FROM:}
+  calendar:
+    enabled: ${NOTIFICATION_CALENDAR_ENABLED:true}
+    poll-ms: ${NOTIFICATION_CALENDAR_POLL_MS:60000}
 
 management:
+  health:
+    # The mail server is optional; an unreachable or unset one must not mark the backend DOWN.
+    mail:
+      enabled: false
   endpoints:
     web:
       exposure:

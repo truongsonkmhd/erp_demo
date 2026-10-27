@@ -7,6 +7,8 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
 
+import java.time.LocalDateTime;
+
 /** Lịch làm việc entry (collection "calendar_events"). Date and time stay the strings the frontend sends. */
 @Getter
 @Setter
@@ -44,4 +46,8 @@ public class CalendarEvent extends BaseRecord {
 
     @Column(name = "sub_unit", length = 64)
     private String subUnit;
+
+    /** eventDate + eventTime as a value the reminder job can range-scan; null if they do not parse. */
+    @Column(name = "starts_at")
+    private LocalDateTime startsAt;
 }

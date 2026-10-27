@@ -39,6 +39,13 @@ services:
       MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       JWT_BASE64_SECRET: ${JWT_BASE64_SECRET:?set JWT_BASE64_SECRET in .env}
       FLYWAY_ENABLED: "true"
+      # Notification e-mails (optional): Gmail = smtp.gmail.com + an App Password. Empty MAIL_HOST disables e-mail.
+      MAIL_HOST: ${MAIL_HOST:-}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://localhost:${FRONTEND_PORT:-18088}}
     ports:
       - "${BACKEND_BIND:-127.0.0.1}:${BACKEND_PORT:-11124}:1122"
 

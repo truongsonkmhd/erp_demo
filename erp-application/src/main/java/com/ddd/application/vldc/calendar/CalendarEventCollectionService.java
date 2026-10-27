@@ -5,8 +5,14 @@ import com.xxxx.ddd.domain.model.entity.vldc.CalendarEvent;
 import com.xxxx.ddd.domain.respository.vldc.CalendarEventRepository;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.time.format.ResolverStyle;
+
 @Service
 public class CalendarEventCollectionService extends AbstractCollectionService<CalendarEventRow, CalendarEvent> {
+    private static final DateTimeFormatter STARTS_AT = DateTimeFormatter.ofPattern("dd/MM/uuuu HH:mm").withResolverStyle(ResolverStyle.STRICT);
 
     public CalendarEventCollectionService(CalendarEventRepository repository) {
         super(repository);
@@ -28,7 +34,17 @@ public class CalendarEventCollectionService extends AbstractCollectionService<Ca
                 .setOwner(row.getOwner())
                 .setLink(row.getLink())
                 .setNote(row.getNote())
-                .setSubUnit(row.getSubUnit());
+                .setSubUnit(row.getSubUnit())
+                .setStartsAt(startsAt(row.getDate(), row.getTime()));
+    }
+
+    /** dd/mm/yyyy + HH:mm[:ss]; the row is already validated, an impossible date (31/02) just gets no reminder. */
+    static LocalDateTime startsAt(String date, String time) {
+        try {
+            return LocalDateTime.parse(date + " " + time.substring(0, 5), STARTS_AT);
+        } catch (DateTimeParseException e) {
+            return null;
+        }
     }
 
     protected CalendarEventRow toRow(CalendarEvent event) {

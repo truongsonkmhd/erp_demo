@@ -9,7 +9,7 @@
  * Functions used by inline on* handlers are exposed on window at the bottom.
  */
 
-import { installWorkflow, workflowBadges, workflowPerms } from "@/features/vldc/workflow/views";
+import { installWorkflow, markWorkflowNoticesRead, workflowBadges, workflowNotices, workflowPerms } from "@/features/vldc/workflow/views";
 import { managesAllUnits } from "@/features/vldc/data/access";
 import { escapeHtml } from "@/features/vldc/workflow/html";
 import { vldcData } from "@/features/vldc/data/registry";
@@ -23,6 +23,7 @@ import { installActions } from "@/features/vldc/data/actions";
 import { installInboxPage } from "@/features/vldc/data/inboxPage";
 import { installPlansPage } from "@/features/vldc/data/plansPage";
 import { installNewsPage } from "@/features/vldc/data/newsPage";
+import { installNotificationSettingsPage } from "@/features/vldc/data/notificationSettingsPage";
 import { installCapabilityPage } from "@/features/vldc/data/capabilityPage";
 import { installDocAssign } from "@/features/vldc/data/docAssignPage";
 import { installSciencePage } from "@/features/vldc/data/sciencePage";
@@ -155,13 +156,13 @@ render.dashboard=function(){
 pages.today=['Hôm nay','Lịch, kế hoạch, thông báo và việc cần xử lý trong ngày'];
 pages.calendar=['Lịch làm việc','Lịch Liên đoàn, đơn vị, dự án và cá nhân theo tuần'];
 pages.plans=['Kế hoạch','Kế hoạch Liên đoàn → đơn vị → dự án → cá nhân'];
-pages.notifications=['Trung tâm thông báo','Thông báo chung, đơn vị, nghiệp vụ và cá nhân'];
+pages.notifications=['Quản lý thông báo','Chọn loại thông báo và nơi nhận: hệ thống, Gmail'];
 
 
 
 
 
-let calendarScope='all', noticeFilter='all', calendarOffset=0, calendarSync=false;
+let calendarScope='all', noticeView='all', calendarOffset=0, calendarSync=false;
 // Week navigation: 0 = this week; ±1 moves one week (0 resets).
 function setCalendarWeek(step){calendarOffset=step===0?0:calendarOffset+step;render.calendar()}
 function toggleCalendarSync(){calendarSync=!calendarSync;render.calendar()}
@@ -180,7 +181,6 @@ function scopeLabel(s){return s==='federation'?'Toàn Liên đoàn':s==='unit'?'
 function updateCommBadges(){ shell.refresh(); }
 // Inline handlers used to assign these globals directly; module scope needs setters.
 function setCalendarScope(s){calendarScope=s;render.calendar()}
-function setNoticeFilter(f){noticeFilter=f;render.notifications()}
 
 const CAL_DOW=['Thứ 2','Thứ 3','Thứ 4','Thứ 5','Thứ 6','Thứ 7','Chủ nhật'];
 const EV_ICON={date:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',time:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>'};
@@ -192,14 +192,32 @@ function eventDetail(id){
  const target=e.link&&e.link!=='calendar'?pages[e.link]?.[0]||'nghiệp vụ liên quan':'';
  openModal('Chi tiết lịch',`<div class="ev-detail ${e.scope}"><div class="ev-hero"><span class="ev-badge"><i></i>${scopeLabel(e.scope)}</span><h2>${escapeHtml(e.title)}</h2><div class="ev-when"><span>${EV_ICON.date}${dow}, ${e.date}</span><span>${EV_ICON.time}${e.time}</span></div></div><dl class="ev-meta">${meta.map(([k,v])=>`<div><dt>${k}</dt><dd>${escapeHtml(v)}</dd></div>`).join('')}</dl><section class="ev-note"><h4>Nội dung</h4>${e.note?`<p>${escapeHtml(e.note)}</p>`:'<p class="ev-none">Chưa có nội dung.</p>'}</section><div class="ev-actions"><button type="button" class="btn btn-light" onclick="eventReminder('${e.id}')">Tạo nhắc việc</button>${target?`<button type="button" class="btn btn-primary" onclick="closeModal();show('${e.link}')">Mở ${escapeHtml(target)} →</button>`:''}</div></div>`)
 }
+// Notification dialog (bell): general notices and workflow notices, newest first.
+function noticeEntries(){
+ const year=localToday().slice(0,4);
+ const general=myNotices().map(n=>({key:`${year}-${n.time.slice(3,5)}-${n.time.slice(0,2)}T${n.time.slice(6)}`,time:n.time,read:n.read,title:n.title,body:n.body,tag:scopeLabel(n.scope),tagCls:n.scope,high:n.priority==='Cao',open:`openNotice('${n.id}')`}));
+ const work=workflowNotices(current).map(n=>({key:n.at,time:`${n.at.slice(8,10)}/${n.at.slice(5,7)} ${n.at.slice(11,16)}`,read:n.read,title:n.title,body:n.body,tag:'Công việc',tagCls:'work',high:false,open:`closeModal();wfNotice('${n.id}','${n.itemId}')`}));
+ return general.concat(work).sort((a,b)=>b.key.localeCompare(a.key));
+}
+function openNoticeCenter(){
+ const all=noticeEntries(); const unread=all.filter(n=>!n.read).length; const list=noticeView==='unread'?all.filter(n=>!n.read):all;
+ const seg=(v,l,c)=>`<button type="button" class="${noticeView===v?'active':''}" aria-pressed="${noticeView===v}" onclick="setNoticeView('${v}')">${l}<b>${c}</b></button>`;
+ const item=n=>`<button type="button" class="nc-item${n.read?'':' unread'}" onclick="${n.open}"><span class="nc-dot" aria-hidden="true"></span><span class="nc-body"><span class="nc-top"><span class="nc-tag ${n.tagCls}">${n.tag}</span>${n.high?'<span class="nc-tag high">Ưu tiên cao</span>':''}<span class="nc-time">${n.time}</span></span><span class="nc-title">${escapeHtml(n.title)}</span><span class="nc-text">${escapeHtml(n.body)}</span></span></button>`;
+ openModal('Thông báo',`<div class="nc-panel"><div class="nc-bar"><div class="nc-seg" role="group" aria-label="Lọc thông báo">${seg('all','Tất cả',all.length)}${seg('unread','Chưa đọc',unread)}</div><div class="nc-tools">${unread?'<button type="button" class="nc-link" onclick="markAllNotices()">Đánh dấu tất cả đã đọc</button>':''}<button type="button" class="btn btn-primary" onclick="publishNoticeModal()">+ Phát hành</button></div></div><div class="nc-list">${list.map(item).join('')||`<div class="nc-empty">${noticeView==='unread'?'Bạn đã đọc hết thông báo.':'Chưa có thông báo.'}</div>`}</div></div>`);
+}
+function setNoticeView(v){noticeView=v;openNoticeCenter()}
+function markAllNotices(){myNotices().filter(n=>!n.read).forEach(n=>readNotice(n.id));markWorkflowNoticesRead(current);updateCommBadges();openNoticeCenter()}
+function openNotice(id){
+ const n=readNotice(id);if(!n)return;updateCommBadges();
+ const target=n.link&&n.link!=='notifications'?pages[n.link]?.[0]||'nội dung liên quan':'';
+ openModal('Chi tiết thông báo',`<div class="ev-detail nc-detail ${n.scope}"><div class="ev-hero"><span class="ev-badge"><i></i>${scopeLabel(n.scope)}</span>${n.priority==='Cao'?'<span class="nc-tag high">Ưu tiên cao</span>':''}<h2>${escapeHtml(n.title)}</h2><div class="ev-when"><span>${EV_ICON.time}${n.time}</span></div></div><section class="ev-note"><h4>Nội dung</h4><p>${escapeHtml(n.body)}</p></section><div class="ev-actions"><button type="button" class="btn btn-light" onclick="openNoticeCenter()">← Tất cả thông báo</button>${target?`<button type="button" class="btn btn-primary" onclick="closeModal();show('${n.link}')">Mở ${escapeHtml(target)} →</button>`:''}</div></div>`)
+}
 function readNotice(id){const n=D('notices').find(x=>x.id===id);if(n&&!(n.readBy||[]).includes(current))save('notices',{...n,readBy:[...(n.readBy||[]),current]});return n}
-function markNotice(id){readNotice(id);updateCommBadges();render.notifications();}
-function openNotice(id){const n=readNotice(id);if(!n)return;updateCommBadges();openModal(n.title,`<p>${n.body}</p><div class="metric"><span>Phạm vi</span><b>${scopeLabel(n.scope)}</b></div><div class="metric"><span>Thời điểm</span><b>${n.time}</b></div><div class="metric"><span>Mức ưu tiên</span><b>${n.priority}</b></div><div class="toolbar" style="margin-top:12px"><button class="btn btn-primary" onclick="closeModal();show('${n.link}')">Mở nội dung liên quan</button><button class="btn btn-light" onclick="closeModal();render.notifications()">Đánh dấu đã đọc</button></div>`)}
 
 render.today=function(){
  const ev=myEvents().filter(x=>x.date===todayVN()).sort((a,b)=>a.time.localeCompare(b.time));
  const notices=myNotices().filter(x=>!x.read).slice(0,5); const tasks=ownerTasks().slice(0,5);
- document.getElementById('content').innerHTML=`<div class="grid kpis"><div class="kpi"><div class="label">Lịch hôm nay</div><div class="value">${ev.length}</div><div class="sub">Cuộc họp / mốc / công tác</div></div><div class="kpi"><div class="label">Việc cần xử lý</div><div class="value">${tasks.length}</div><div class="sub">Theo Unified Task Inbox</div></div><div class="kpi"><div class="label">Thông báo chưa đọc</div><div class="value">${myNotices().filter(x=>!x.read).length}</div><div class="sub">Theo đúng phạm vi của bạn</div></div><div class="kpi"><div class="label">Kế hoạch đang theo dõi</div><div class="value">${myPlans().length}</div><div class="sub">Liên đoàn / đơn vị / dự án / cá nhân</div></div></div><div class="comm-top" style="margin-top:14px"><div class="card"><div class="card-head"><h3>Lịch hôm nay • ${todayVN()}</h3><button class="btn btn-light" onclick="show('calendar')">Mở lịch</button></div>${ev.map(e=>`<div class="agenda-item"><div class="agenda-time">${e.time}</div><div><b>${escapeHtml(e.title)}</b><div class="mini">${scopeLabel(e.scope)} • ${escapeHtml(e.project!=='-'?e.project:scopedUnitLabel(e,D('subUnits')))}</div></div><button class="btn btn-light" onclick="eventDetail('${e.id}')">Mở</button></div>`).join('')||'<div class="mini">Không có lịch hôm nay.</div>'}</div><div class="card"><div class="card-head"><h3>Thông báo mới</h3><button class="btn btn-light" onclick="show('notifications')">Xem tất cả</button></div>${notices.map(n=>`<div class="notice-item ${n.read?'':'notice-unread'}" onclick="openNotice('${n.id}')"><b>${n.title}</b><div class="mini">${n.body}</div><div class="notice-meta">${scopeLabel(n.scope)} • ${n.time}</div></div>`).join('')}</div></div><div class="grid twoeq" style="margin-top:14px"><div class="card"><div class="card-head"><h3>Việc cần xử lý</h3><button class="btn btn-primary" onclick="show('action')">Mở Công việc</button></div><table><tr><th>Mã</th><th>Nội dung</th><th>SLA</th></tr>${tasks.map(t=>`<tr><td><b>${t.id}</b></td><td>${t.title}</td><td><span class="badge ${t.overdue?'b-danger':'b-info'}">${t.sla}</span></td></tr>`).join('')||'<tr><td colspan="3">Không có việc trực tiếp.</td></tr>'}</table></div><div class="card"><div class="card-head"><h3>Kế hoạch sắp tới</h3><button class="btn btn-light" onclick="show('plans')">Mở kế hoạch</button></div>${myPlans().slice(0,4).map(p=>`<div class="metric"><span>${p.title}<br><small>${p.period}</small></span><b>${p.progress}%</b></div>`).join('')}</div></div>`;
+ document.getElementById('content').innerHTML=`<div class="grid kpis"><div class="kpi"><div class="label">Lịch hôm nay</div><div class="value">${ev.length}</div><div class="sub">Cuộc họp / mốc / công tác</div></div><div class="kpi"><div class="label">Việc cần xử lý</div><div class="value">${tasks.length}</div><div class="sub">Theo Unified Task Inbox</div></div><div class="kpi"><div class="label">Thông báo chưa đọc</div><div class="value">${myNotices().filter(x=>!x.read).length}</div><div class="sub">Theo đúng phạm vi của bạn</div></div><div class="kpi"><div class="label">Kế hoạch đang theo dõi</div><div class="value">${myPlans().length}</div><div class="sub">Liên đoàn / đơn vị / dự án / cá nhân</div></div></div><div class="comm-top" style="margin-top:14px"><div class="card"><div class="card-head"><h3>Lịch hôm nay • ${todayVN()}</h3><button class="btn btn-light" onclick="show('calendar')">Mở lịch</button></div>${ev.map(e=>`<div class="agenda-item"><div class="agenda-time">${e.time}</div><div><b>${escapeHtml(e.title)}</b><div class="mini">${scopeLabel(e.scope)} • ${escapeHtml(e.project!=='-'?e.project:scopedUnitLabel(e,D('subUnits')))}</div></div><button class="btn btn-light" onclick="eventDetail('${e.id}')">Mở</button></div>`).join('')||'<div class="mini">Không có lịch hôm nay.</div>'}</div><div class="card"><div class="card-head"><h3>Thông báo mới</h3><button class="btn btn-light" onclick="openNoticeCenter()">Xem tất cả</button></div>${notices.map(n=>`<div class="notice-item ${n.read?'':'notice-unread'}" onclick="openNotice('${n.id}')"><b>${n.title}</b><div class="mini">${n.body}</div><div class="notice-meta">${scopeLabel(n.scope)} • ${n.time}</div></div>`).join('')}</div></div><div class="grid twoeq" style="margin-top:14px"><div class="card"><div class="card-head"><h3>Việc cần xử lý</h3><button class="btn btn-primary" onclick="show('action')">Mở Công việc</button></div><table><tr><th>Mã</th><th>Nội dung</th><th>SLA</th></tr>${tasks.map(t=>`<tr><td><b>${t.id}</b></td><td>${t.title}</td><td><span class="badge ${t.overdue?'b-danger':'b-info'}">${t.sla}</span></td></tr>`).join('')||'<tr><td colspan="3">Không có việc trực tiếp.</td></tr>'}</table></div><div class="card"><div class="card-head"><h3>Kế hoạch sắp tới</h3><button class="btn btn-light" onclick="show('plans')">Mở kế hoạch</button></div>${myPlans().slice(0,4).map(p=>`<div class="metric"><span>${p.title}<br><small>${p.period}</small></span><b>${p.progress}%</b></div>`).join('')}</div></div>`;
 };
 
 const CAL_SCOPES=[['all','Tất cả'],['federation','Liên đoàn'],['unit','Đơn vị'],['project','Dự án'],['personal','Cá nhân']];
@@ -224,19 +242,13 @@ render.plans=function(){
  document.getElementById('content').innerHTML=`<div class="grid kpis"><div class="kpi"><div class="label">Kế hoạch Liên đoàn</div><div class="value">${ps.filter(x=>x.level==='Liên đoàn').length}</div><div class="sub">Mục tiêu cấp cao</div></div><div class="kpi"><div class="label">Kế hoạch đơn vị</div><div class="value">${ps.filter(x=>x.level==='Đơn vị').length}</div><div class="sub">Theo phòng/đơn vị</div></div><div class="kpi"><div class="label">Kế hoạch dự án</div><div class="value">${ps.filter(x=>x.level==='Dự án').length}</div><div class="sub">Gắn milestone và WBS</div></div><div class="kpi"><div class="label">Kế hoạch cá nhân</div><div class="value">${ps.filter(x=>x.level==='Cá nhân').length}</div><div class="sub">Sinh đầu việc cá nhân</div></div></div><div class="grid two" style="margin-top:14px"><div class="card"><div class="card-head"><h3>Cây kế hoạch liên thông</h3><button class="btn btn-primary" onclick="addPlanModal()">+ Tạo kế hoạch</button></div><div class="plan-tree">${ps.map(p=>`<div class="plan-node"><div class="card-head"><div><b>${p.id} • ${p.title}</b><div class="mini">${p.level} • ${p.period} • Chủ trì: ${p.owner}</div></div><span class="badge ${p.status==='Có nguy cơ'?'b-danger':'b-info'}">${p.status}</span></div><div class="progress"><i style="width:${p.progress}%"></i></div><div class="mini" style="margin-top:5px">Tiến độ ${p.progress}% • Kế hoạch cấp trên: ${p.parent}</div></div>`).join('')}</div></div><div class="card"><h3>Nguyên tắc quản trị kế hoạch</h3><div class="alert"><span class="dot blue"></span><div><b>Kế hoạch cấp trên → cấp dưới</b><div class="mini">Mục tiêu Liên đoàn được phân rã xuống đơn vị, dự án và cá nhân.</div></div></div><div class="alert"><span class="dot green"></span><div><b>Mỗi đầu việc có owner + deadline</b><div class="mini">Các đầu việc cần thực hiện sẽ tự sinh vào Unified Task Inbox.</div></div></div><div class="alert"><span class="dot yellow"></span><div><b>Kế hoạch gắn thực tế</b><div class="mini">So sánh Plan vs Actual vs Forecast và cảnh báo lệch kế hoạch.</div></div></div><div class="alert"><span class="dot red"></span><div><b>Thay đổi phải có phê duyệt</b><div class="mini">Điều chỉnh mục tiêu, deadline hoặc nguồn lực được ghi audit.</div></div></div></div></div><div class="card" style="margin-top:14px"><h3>Chi tiết nội dung kế hoạch</h3><table><tr><th>Kế hoạch</th><th>Cấp</th><th>Mục tiêu / đầu việc</th><th>Tiến độ</th><th>Trạng thái</th></tr>${ps.map(p=>`<tr><td><b>${p.title}</b><div class="mini">${p.id}</div></td><td>${p.level}</td><td>${p.items.join('<br>')}</td><td>${p.progress}%</td><td><span class="badge ${p.status==='Có nguy cơ'?'b-danger':'b-info'}">${p.status}</span></td></tr>`).join('')}</table></div>`;
 };
 
-render.notifications=function(){
- let ns=myNotices(); if(noticeFilter==='unread')ns=ns.filter(x=>!x.read);if(noticeFilter==='high')ns=ns.filter(x=>x.priority==='Cao');if(['federation','unit','project','personal'].includes(noticeFilter))ns=ns.filter(x=>x.scope===noticeFilter);
- document.getElementById('content').innerHTML=`<div class="grid kpis"><div class="kpi"><div class="label">Chưa đọc</div><div class="value">${myNotices().filter(x=>!x.read).length}</div><div class="sub">Thông báo liên quan đến bạn</div></div><div class="kpi"><div class="label">Ưu tiên cao</div><div class="value">${myNotices().filter(x=>x.priority==='Cao').length}</div><div class="sub">Cần chú ý</div></div><div class="kpi"><div class="label">Toàn Liên đoàn</div><div class="value">${myNotices().filter(x=>x.scope==='federation').length}</div><div class="sub">Thông tin chung</div></div><div class="kpi"><div class="label">Nghiệp vụ / cá nhân</div><div class="value">${myNotices().filter(x=>x.scope==='project'||x.scope==='personal').length}</div><div class="sub">Có thể mở thẳng hồ sơ</div></div></div><div class="grid two" style="margin-top:14px"><div class="card"><div class="card-head"><h3>Thông báo của tôi</h3><button class="btn btn-primary" onclick="publishNoticeModal()">+ Phát hành thông báo</button></div><div class="toolbar" style="margin-bottom:10px"><button class="btn btn-light" onclick="setNoticeFilter('all')">Tất cả</button><button class="btn btn-light" onclick="setNoticeFilter('unread')">Chưa đọc</button><button class="btn btn-light" onclick="setNoticeFilter('high')">Ưu tiên cao</button><button class="btn btn-light" onclick="setNoticeFilter('unit')">Đơn vị</button><button class="btn btn-light" onclick="setNoticeFilter('project')">Dự án</button></div>${ns.map(n=>`<div class="notice-item ${n.read?'':'notice-unread'}"><div class="card-head"><div><b>${n.title}</b><div class="notice-meta">${scopeLabel(n.scope)} • ${n.time}</div></div><span class="badge ${n.priority==='Cao'?'b-danger':'b-info'}">${n.priority}</span></div><div class="mini">${n.body}</div><div class="toolbar" style="margin-top:8px"><button class="btn btn-light" onclick="openNotice('${n.id}')">Mở</button>${!n.read?`<button class="btn btn-ok" onclick="markNotice('${n.id}')">Đã đọc</button>`:''}</div></div>`).join('')||'<div class="mini">Không có thông báo theo bộ lọc.</div>'}</div><div class="card"><h3>Phân loại thông báo</h3><div class="metric"><span>Thông báo chung Liên đoàn</span><b>${myNotices().filter(x=>x.scope==='federation').length}</b></div><div class="metric"><span>Phòng/đơn vị</span><b>${myNotices().filter(x=>x.scope==='unit').length}</b></div><div class="metric"><span>Dự án / nghiệp vụ</span><b>${myNotices().filter(x=>x.scope==='project').length}</b></div><div class="metric"><span>Cá nhân</span><b>${myNotices().filter(x=>x.scope==='personal').length}</b></div><h3 style="margin-top:18px">Cơ chế liên thông</h3><div class="alert"><span class="dot blue"></span><div><b>Thông báo → Hồ sơ</b><div class="mini">Bấm thông báo mở trực tiếp dự án, hợp đồng, chứng từ hoặc tác vụ.</div></div></div><div class="alert"><span class="dot green"></span><div><b>Lịch → Reminder</b><div class="mini">Nhắc trước theo cấu hình cá nhân.</div></div></div><div class="alert"><span class="dot yellow"></span><div><b>Kế hoạch → Tác vụ</b><div class="mini">Đầu việc được sinh vào Unified Task Inbox.</div></div></div></div></div>`;
- updateCommBadges();
-};
-
 const _dashboardV62=render.dashboard;
 render.dashboard=function(){
  _dashboardV62();
  const target=document.getElementById('content'); if(!target)return;
  const ev=myEvents().filter(x=>x.date===todayVN()).sort((a,b)=>a.time.localeCompare(b.time));
  const unread=myNotices().filter(x=>!x.read);
- target.insertAdjacentHTML('afterbegin',`<div class="grid twoeq" style="margin-bottom:14px"><div class="card"><div class="card-head"><div><h3>Lịch & Kế hoạch hôm nay</h3><div class="mini">Tổng hợp theo phạm vi của ${roles[current].title}</div></div><button class="btn btn-light" onclick="show('today')">Mở Hôm nay</button></div>${ev.slice(0,3).map(e=>`<div class="agenda-item"><div class="agenda-time">${e.time}</div><div><b>${escapeHtml(e.title)}</b><div class="mini">${scopeLabel(e.scope)} • ${escapeHtml(e.project!=='-'?e.project:scopedUnitLabel(e,D('subUnits')))}</div></div><button class="btn btn-light" onclick="eventDetail('${e.id}')">Mở</button></div>`).join('')||'<div class="mini">Không có lịch hôm nay.</div>'}<div class="toolbar" style="margin-top:8px"><button class="btn btn-primary" onclick="show('calendar')">📅 Xem lịch</button><button class="btn btn-light" onclick="show('plans')">Kế hoạch</button></div></div><div class="card"><div class="card-head"><div><h3>Thông báo mới</h3><div class="mini">${unread.length} thông báo chưa đọc</div></div><button class="btn btn-light" onclick="show('notifications')">Xem tất cả</button></div>${unread.slice(0,4).map(n=>`<div class="notice-item notice-unread" onclick="openNotice('${n.id}')"><b>${n.title}</b><div class="notice-meta">${scopeLabel(n.scope)} • ${n.time}</div></div>`).join('')||'<div class="mini">Không có thông báo mới.</div>'}</div></div>`);
+ target.insertAdjacentHTML('afterbegin',`<div class="grid twoeq" style="margin-bottom:14px"><div class="card"><div class="card-head"><div><h3>Lịch & Kế hoạch hôm nay</h3><div class="mini">Tổng hợp theo phạm vi của ${roles[current].title}</div></div><button class="btn btn-light" onclick="show('today')">Mở Hôm nay</button></div>${ev.slice(0,3).map(e=>`<div class="agenda-item"><div class="agenda-time">${e.time}</div><div><b>${escapeHtml(e.title)}</b><div class="mini">${scopeLabel(e.scope)} • ${escapeHtml(e.project!=='-'?e.project:scopedUnitLabel(e,D('subUnits')))}</div></div><button class="btn btn-light" onclick="eventDetail('${e.id}')">Mở</button></div>`).join('')||'<div class="mini">Không có lịch hôm nay.</div>'}<div class="toolbar" style="margin-top:8px"><button class="btn btn-primary" onclick="show('calendar')">📅 Xem lịch</button><button class="btn btn-light" onclick="show('plans')">Kế hoạch</button></div></div><div class="card"><div class="card-head"><div><h3>Thông báo mới</h3><div class="mini">${unread.length} thông báo chưa đọc</div></div><button class="btn btn-light" onclick="openNoticeCenter()">Xem tất cả</button></div>${unread.slice(0,4).map(n=>`<div class="notice-item notice-unread" onclick="openNotice('${n.id}')"><b>${n.title}</b><div class="notice-meta">${scopeLabel(n.scope)} • ${n.time}</div></div>`).join('')||'<div class="mini">Không có thông báo mới.</div>'}</div></div>`);
  updateCommBadges();
 };
 
@@ -344,6 +356,8 @@ render.dashboard=function(){
 export type Role = { name: string; title: string; unit: string; avatar: string };
 
 export function getRoles(): Record<string, Role> { return roles; }
+/** Bell in the top bar. */
+export function openNotices() { openNoticeCenter(); }
 export function getPageMeta(p: string): [string, string] | undefined { return pages[p]; }
 export function hasPage(p: string): boolean { return typeof render[p] === 'function'; }
 export function renderPage(p: string) { currentPage = p; render[p](); addVisualHero(p); }
@@ -361,7 +375,7 @@ export function getShellBadges() {
 
 // Functions referenced from inline on* attributes inside the HTML templates.
 Object.assign(window, {
- render, show, openModal, closeModal, tab, aiFill, aiRun, toggleAiSource, openTaskSource, eventDetail, markNotice, openNotice, setCalendarScope, setNoticeFilter, openUnit, setCalendarWeek, toggleCalendarSync
+ render, show, openModal, closeModal, tab, aiFill, aiRun, toggleAiSource, openTaskSource, eventDetail, openNotice, openNoticeCenter, setNoticeView, markAllNotices, setCalendarScope, openUnit, setCalendarWeek, toggleCalendarSync
 });
 
 // Shared cross-account workflow (directives, delegated tasks, payment dossiers) backed by Firestore.
@@ -374,6 +388,7 @@ installActions({ role: () => current, openModal, closeModal });
 installInboxPage(render, { role: () => current });
 installPlansPage(render, { role: () => current, openModal, closeModal });
 installNewsPage(render, { role: () => current, perms: workflowPerms, openModal, closeModal });
+installNotificationSettingsPage(render);
 installCapabilityPage(render, { role: () => current, openModal, closeModal });
 installDocAssign({ role: () => current, openModal, closeModal });
 installSciencePage(render, { role: () => current, openModal, closeModal });

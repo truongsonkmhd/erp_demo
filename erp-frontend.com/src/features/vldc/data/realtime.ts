@@ -1,4 +1,7 @@
-/** Tells a collection's watchers that the backend changed it, so they re-fetch (backend: /topic/vldc/{collection}). */
+/**
+ * Tells a collection's watchers that the backend changed it, so they re-fetch (backend: /topic/vldc/{collection}).
+ * A key starting with "/" is a raw destination instead, e.g. the per-user "/user/queue/notifications".
+ */
 export type ChangeFeed = { watch(collection: string, onChange: () => void): () => void }
 
 /** The part of @stomp/stompjs Client this feed uses; injected so tests need no socket. */
@@ -11,7 +14,7 @@ export type StompClientLike = {
 }
 export type StompClientConfig = { brokerURL: string; reconnectDelay: number; beforeConnect: () => void; onConnect: () => void }
 
-const topicOf = (collection: string) => `/topic/vldc/${collection}`
+const topicOf = (collection: string) => (collection.startsWith("/") ? collection : `/topic/vldc/${collection}`)
 
 /** ws(s)://<api host>/ws, or the page's own host when the API base is empty (nginx/Vite proxy /ws). */
 export function socketUrl(apiBase: string, location: { protocol: string; host: string }): string {

@@ -19,7 +19,7 @@ import {
   rolledUpProgress,
   type WorkAction,
 } from "./rules"
-import type { WorkItem } from "./types"
+import type { WorkItem, WorkNotice } from "./types"
 import { DIRECTIVE_STATUS_FILTERS, TYPE_LABELS, directiveExportRows, filterDirectives, notYetAccepted, type DirectiveLabels, type DirectiveStatusFilter } from "./directiveList"
 import { workflowStore as store } from "./repository"
 import { leaderDashboardHtml, type CashFigures, type OrgFigures } from "./leaderDashboard"
@@ -404,9 +404,9 @@ function readIds(role: string): Set<string> {
   }
 }
 
-function markRead(role: string, id: string) {
+function markRead(role: string, ...noticeIds: string[]) {
   const ids = readIds(role)
-  ids.add(id)
+  noticeIds.forEach((id) => ids.add(id))
   try {
     localStorage.setItem(readKey(role), JSON.stringify([...ids]))
   } catch {
@@ -417,6 +417,16 @@ function markRead(role: string, id: string) {
 function unreadNotices(role: string) {
   const read = readIds(role)
   return notificationsFor(role, store.items()).filter((n) => !read.has(n.id))
+}
+
+/** The role's workflow notices with their read state, for the notification dialog (all of them, so it matches the badge). */
+export function workflowNotices(role: string): (WorkNotice & { read: boolean })[] {
+  const read = readIds(role)
+  return notificationsFor(role, store.items()).map((n) => ({ ...n, read: read.has(n.id) }))
+}
+
+export function markWorkflowNoticesRead(role: string) {
+  markRead(role, ...notificationsFor(role, store.items()).map((n) => n.id))
 }
 
 /** Counts added to the topbar badges by the engine's getShellBadges(). */
@@ -437,15 +447,6 @@ function inboxBlock(limit?: number): string {
   const items = ownerInbox(ctx.role(), store.items())
   const shown = limit ? items.slice(0, limit) : items
   return `<div class="card" style="margin-bottom:14px"><div class="card-head"><div><h3>Việc của tôi (luồng liên tài khoản)</h3><div class="mini">Chỉ đạo, việc được giao và hồ sơ thanh toán đang chờ bạn xử lý • đồng bộ realtime</div></div><span class="badge ${items.length ? "b-danger" : "b-ok"}">${items.length} việc</span></div>${inboxTable(shown)}${limit && items.length > limit ? `<div class="mini" style="margin-top:8px"><a href="javascript:void 0" onclick="show('action')">Xem tất cả ${items.length} việc</a></div>` : ""}</div>`
-}
-
-function noticesBlock(): string {
-  const role = ctx.role()
-  const read = readIds(role)
-  const notices = notificationsFor(role, store.items()).slice(0, 30)
-  const unread = notices.filter((n) => !read.has(n.id)).length
-  const rows = notices.map((n) => `<div class="alert" style="cursor:pointer${read.has(n.id) ? ";opacity:.6" : ""}" ${jsCall("wfNotice", n.id, n.itemId)}><span class="dot ${read.has(n.id) ? "green" : "red"}"></span><div><b>${esc(n.title)}</b><div class="mini">${esc(n.body)} • ${formatTime(n.at)}</div></div></div>`).join("")
-  return `<div class="card" style="margin-bottom:14px"><div class="card-head"><div><h3>Thông báo luồng công việc</h3><div class="mini">Giao việc, báo cáo, duyệt, trả lại, chuyển bước hồ sơ</div></div><span class="badge ${unread ? "b-danger" : "b-ok"}">${unread} chưa đọc</span></div>${rows || '<div class="mini">Chưa có thông báo.</div>'}</div>`
 }
 
 function paymentsBlock(): string {
@@ -500,7 +501,6 @@ function wrap(render: Record<string, () => void>, page: string, extra: () => str
 export function installWorkflow(render: Record<string, () => void>, nextShell: Shell) {
   shell = nextShell
   render.directives = renderDirectives
-  wrap(render, "notifications", noticesBlock)
   wrap(render, "payments", paymentsBlock)
   // The leader gets a purpose-built dashboard instead of the stacked legacy demo blocks.
   const unitDashboard = render.dashboard

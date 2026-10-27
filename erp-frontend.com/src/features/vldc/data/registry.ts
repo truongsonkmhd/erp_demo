@@ -2,6 +2,7 @@ import { Client } from "@stomp/stompjs"
 import { API_BASE, apiRequest } from "@/lib/api"
 import { getAccessToken } from "@/services/auth/tokenStorage"
 import { apiRepo } from "./apiRepo"
+import { projectsReadRepo } from "./projectsReadRepo"
 import { socketUrl, stompChangeFeed } from "./realtime"
 import { firestoreRepo, localRepo } from "./repos"
 import { createSyncedCollection, type SyncedCollection } from "./syncedCollection"
@@ -27,7 +28,8 @@ const collections = Object.fromEntries(
     const seed = () => (store.blank ? [] : (DATASETS[key].seed as (today: string) => { id: string }[])(localToday()))
     // Every user save is audited, except the audit trail itself.
     const onSaved = key === "auditEvents" ? undefined : (rows: { id: string }[]) => rows.forEach((row) => auditEvent(store.firestore, row))
-    const primary = store.api ? apiRepoFor(DATASETS[key].collection) : firestoreRepo(store.firestore)
+    // Projects are changed through the project API's actions; here they are only read.
+    const primary = key === "projects" ? projectsReadRepo(apiRequest, changeFeed) : store.api ? apiRepoFor(DATASETS[key].collection) : firestoreRepo(store.firestore)
     return [key, createSyncedCollection(key, primary, localRepo(store.local), seed, { sharedSeed: store.shared, onSaved })]
   }),
 ) as unknown as Collections

@@ -26,8 +26,8 @@ import {
   rolledUpProgress,
   type WorkAction,
 } from "./rules"
-import type { WorkItem, WorkNotice } from "./types"
-import { DIRECTIVE_STATUS_FILTERS, TYPE_LABELS, directiveExportRows, filterDirectives, notYetAccepted, type DirectiveLabels, type DirectiveStatusFilter } from "./directiveList"
+import { COMPLEXITIES, type Complexity, type WorkItem, type WorkNotice } from "./types"
+import { TYPE_LABELS, type DirectiveLabels } from "./directiveList"
 import { workflowStore as store } from "./repository"
 import { leaderDashboardHtml, type CashFigures, type OrgFigures } from "./leaderDashboard"
 import { staffView } from "../data/staffView"
@@ -84,13 +84,6 @@ function progressBar(value: number): string {
   return `<div class="progress" style="margin:4px 0"><i style="width:${Math.max(0, Math.min(100, value))}%"></i></div><span class="mini">${value}%</span>`
 }
 
-/** Strip shown when Firestore is unreachable and data is browser-local. */
-export function offlineBanner(): string {
-  return store.mode() === "offline" || vldcData.offline()
-    ? '<div class="alert" style="margin-bottom:12px"><span class="dot yellow"></span><div><b>Đang chạy chế độ offline</b><div class="mini">Dữ liệu chỉ có trên máy này.</div></div></div>'
-    : ""
-}
-
 function openButton(item: WorkItem, label = "Mở"): string {
   return `<button class="btn btn-light" ${jsCall("wfOpen", item.id)}>${label}</button>`
 }
@@ -114,53 +107,74 @@ function paymentStepper(item: WorkItem): string {
   return `<div class="timeline">${PAYMENT_STEPS.map((s, i) => `<div>${i < step || item.status === "Đã chi" ? "✓" : i === step ? "▶" : "○"} <b>${esc(s.label)}</b> – ${esc(roleTitle(s.owner))}</div>`).join("")}</div>`
 }
 
-/** "Cán bộ hiện trường – Nguyễn Đức Hải": the role and the person holding it. */
-const assignee = (role: string) => `${roleTitle(role)}${personOf(role) ? ` – ${personOf(role)}` : ""}`
 /** Unit a note was written for (recorded with it; older notes fall back to the writer's unit today). */
 const noteUnit = (h: { by: string; unit?: string }) => {
   const code = h.unit ?? roleUnitCode(h.by)
   return code ? unitName(code as UnitCode) : ""
 }
 
-export function detailHtml(item: WorkItem): string {
+/** "Trần Quốc Hùng – Trưởng đơn vị": the person first, then the role. */
+const who = (role: string) => (personOf(role) ? `${personOf(role)} – ${roleTitle(role)}` : roleTitle(role))
+/** History entries shown before "Xem tất cả". */
+const HISTORY_SHOWN = 5
+
+/**
+ * The work's details: fields in a grid (label above value), its sub-tasks and actions on the left; notes on the right
+ * (a payment dossier shows its processing history there instead, latest first, the older ones folded). withHeader: the page or panel already shows
+ * the status and kind, so they are left out here.
+ */
+export function detailHtml(item: WorkItem, withHeader = false): string {
   const all = store.items()
   const role = ctx.role()
   const actions = allowedActions(item, role, ctx.perms(), all)
   const parent = item.parentId ? all.find((x) => x.id === item.parentId) : undefined
   const kids = all.filter((x) => x.parentId === item.id)
-  const metric = (label: string, value: string) => `<div class="metric"><span>${label}</span><b>${value}</b></div>`
+  const field = (label: string, value: string, full = false) => `<div${full ? ' class="full"' : ""}><span>${label}</span><b>${value}</b></div>`
+  const progress = rolledUpProgress(item, all)
+  const unit = directiveLabels.subUnit(item.subUnit) || (roleUnitCode(item.owner) ? unitName(roleUnitCode(item.owner) as UnitCode) : "")
   const info = [
-    metric("Loại", TYPE_LABELS[item.type]),
-    metric("Trạng thái", statusBadge(item) + riskBadge(item, all)),
+    withHeader ? "" : field("Loại", TYPE_LABELS[item.type]),
+    withHeader ? (riskBadge(item, all) ? field("Cảnh báo", riskBadge(item, all)) : "") : field("Trạng thái", statusBadge(item) + riskBadge(item, all)),
     item.type === "proposal"
-      ? metric("Người đề xuất", esc(roleTitle(item.createdBy))) + metric("Người duyệt", esc(roleTitle(item.approver ?? "")))
-      : metric("Người giao / lập", esc(roleTitle(item.createdBy))),
-    item.type === "proposal" && isPendingProposal(item) ? "" : metric(item.type === "payment" ? "Đang ở" : "Người thực hiện", esc(assignee(item.owner))),
-    metric("Phối hợp", item.cc.map((r) => esc(roleTitle(r))).join(", ") || "–"),
-    metric("Hạn", formatDate(item.due)),
-    item.type === "payment" ? metric("Số tiền", formatMoney(item.amount)) : metric("Tiến độ", `${rolledUpProgress(item, all)}%${childrenOf(item.id, all).length ? " (cuộn từ việc con)" : ""}`),
-    item.evidence ? metric("Minh chứng", esc(item.evidence)) : "",
-    parent ? metric("Việc cha", `<a href="javascript:void 0" ${jsCall("wfOpen", parent.id)}>${esc(parent.id)} • ${esc(parent.title)}</a>`) : "",
-    item.description ? `<p>${esc(item.description)}</p>` : "",
+      ? field("Người đề xuất", esc(who(item.createdBy))) + field("Người duyệt", esc(who(item.approver ?? "")))
+      : field(item.type === "payment" ? "Người lập" : "Người giao", esc(who(item.createdBy))),
+    item.type === "proposal" && isPendingProposal(item) ? "" : field(item.type === "payment" ? "Đang ở" : "Người thực hiện", esc(who(item.owner))),
+    item.type === "payment" || !unit ? "" : field("Đơn vị / tổ", esc(unit)),
+    field("Hạn", formatDate(item.due)),
+    item.type === "payment"
+      ? field("Số tiền", formatMoney(item.amount))
+      : field("Tiến độ", `<span class="vx-detail-progress"><i style="width:${progress}%"></i></span>${progress}%${childrenOf(item.id, all).length ? ' <span class="mini">(theo việc con)</span>' : ""}`),
+    item.complexity ? field("Độ phức tạp", esc(item.complexity)) : "",
+    field("Phối hợp", item.cc.map((r) => esc(who(r))).join("<br>") || "–", true),
+    item.description ? field(item.project && item.type !== "payment" ? "Kết quả / minh chứng yêu cầu" : "Mô tả", esc(item.description), true) : "",
+    item.evidence ? field("Minh chứng đã nộp", esc(item.evidence), true) : "",
+    parent ? field("Việc cha", `<a href="javascript:void 0" ${jsCall("wfOpen", parent.id)}>${esc(parent.id)} • ${esc(parent.title)}</a>`, true) : "",
   ].join("")
   const kidList = kids.length
-    ? `<h4 style="margin-top:12px">Việc con / hồ sơ liên quan</h4>${kids.map((k) => `<div class="alert"><span class="dot ${isClosed(k) ? "green" : "blue"}"></span><div><a href="javascript:void 0" ${jsCall("wfOpen", k.id)}><b>${esc(k.id)}</b> • ${esc(k.title)}</a><div class="mini">Giao cho <b>${esc(assignee(k.owner))}</b> • ${esc(k.status)}${k.type === "payment" ? "" : ` • ${rolledUpProgress(k, all)}%`}</div></div></div>`).join("")}`
+    ? `<h4 style="margin-top:16px">Việc con (${kids.length})</h4>${kids.map((k) => `<div class="alert"><span class="dot ${isClosed(k) ? "green" : "blue"}"></span><div><a href="javascript:void 0" ${jsCall("wfOpen", k.id)}><b>${esc(k.title)}</b></a><div class="mini">${esc(who(k.owner))} • ${esc(k.status)}${k.type === "payment" ? "" : ` • ${rolledUpProgress(k, all)}%`}</div></div></div>`).join("")}`
     : ""
   const notes = item.history.filter((h) => h.action === "comment")
-  const noteList = `<h4 style="margin-top:12px">Ghi chú (${notes.length})</h4>${notes.map((h) => `<div class="vx-note"><div class="vx-note-head"><b>${esc(h.byName || personOf(h.by) || roleTitle(h.by))}</b> <span class="mini">${esc(roleTitle(h.by))}${noteUnit(h) ? ` • ${esc(noteUnit(h))}` : ""} • ${formatTime(h.at)}</span></div><div>${esc(h.note ?? "")}</div></div>`).join("") || '<div class="mini">Chưa có ghi chú.</div>'}`
-  const history = `${item.type === "payment" ? "" : noteList}<h4 style="margin-top:12px">Lịch sử xử lý</h4><div class="timeline">${[...item.history].reverse().filter((h) => h.action !== "comment" || item.type === "payment").map((h) => `<div><b>${formatTime(h.at)} • ${esc(roleTitle(h.by))}</b><br>${esc(ACTION_LABELS[h.action as WorkAction] || (h.action === "create" ? "Khởi tạo" : h.action))}${h.note ? `: ${esc(h.note)}` : ""}</div>`).join("")}</div>`
+  const noteList = `<h4 style="margin-top:0">Ghi chú (${notes.length})</h4>${notes.map((h) => `<div class="vx-note"><div class="vx-note-head"><b>${esc(h.byName || personOf(h.by) || roleTitle(h.by))}</b> <span class="mini">${esc(roleTitle(h.by))}${noteUnit(h) ? ` • ${esc(noteUnit(h))}` : ""} • ${formatTime(h.at)}</span></div><div>${esc(h.note ?? "")}</div></div>`).join("") || '<div class="mini">Chưa có ghi chú.</div>'}`
+  const steps = [...item.history].reverse().filter((h) => h.action !== "comment" || item.type === "payment")
+    .map((h) => `<div><b>${formatTime(h.at)} • ${esc(h.byName || personOf(h.by) || roleTitle(h.by))}</b><br>${esc(ACTION_LABELS[h.action as WorkAction] || (h.action === "create" ? "Khởi tạo" : h.action))}${h.note ? `: ${esc(h.note)}` : ""}</div>`)
+  const older = steps.length > HISTORY_SHOWN
+    ? `<details class="vx-history-more"><summary>Xem tất cả (${steps.length})</summary><div class="timeline">${steps.slice(HISTORY_SHOWN).join("")}</div></details>`
+    : ""
+  // Work shows its notes only; a payment dossier keeps its processing trail.
+  const history = item.type === "payment" ? `<h4 style="margin-top:16px">Lịch sử xử lý</h4><div class="timeline">${steps.slice(0, HISTORY_SHOWN).join("")}</div>${older}` : noteList
   const form = actions.length
     ? `<div class="form-grid" style="margin-top:12px">${actions.includes("progress") ? `<div><label>Tiến độ (%)</label><input id="wf-progress" type="number" min="0" max="100" value="${Number(item.progress) || 0}"></div><div><label>Minh chứng</label><input id="wf-evidence" value="${esc(item.evidence || "")}"></div>` : ""}<div class="full"><label>Ghi chú / lý do</label><textarea id="wf-note" rows="2"></textarea></div></div><div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">${actions.map((a) => actionButton(item, a)).join("")}</div>`
     : '<div class="mini" style="margin-top:12px">Bạn chỉ có quyền xem việc này ở trạng thái hiện tại.</div>'
   const remove = canDeleteWork(item, role, all) ? `<button class="btn btn-danger" ${jsCall("wfDelete", item.id)}>Xoá việc</button>` : ""
   const blocked = blockedReason(item, role, all)
   const blockedNote = blocked ? `<div class="alert" style="margin-top:12px"><span class="dot yellow"></span><div>${esc(blocked)}</div></div>` : ""
-  return `<div class="grid twoeq"><div>${info}${kidList}${blockedNote}</div><div>${item.type === "payment" ? paymentStepper(item) : ""}${history}</div></div>${form}${remove ? `<div class="toolbar" style="margin-top:14px;justify-content:flex-end">${remove}</div>` : ""}`
+  return `<div class="vx-detail"><div class="vx-detail-main"><div class="vx-detail-grid">${info}</div>${kidList}${blockedNote}${form}${remove ? `<div class="toolbar" style="margin-top:14px">${remove}</div>` : ""}</div><div class="vx-detail-side">${item.type === "payment" ? paymentStepper(item) : ""}${history}</div></div>`
 }
 
 /** A returned proposal is corrected on its form page; the other actions run from the note box above. */
 function actionButton(item: WorkItem, a: WorkAction): string {
-  if (item.type === "proposal" && a === "resubmit") return `<button class="btn btn-primary" ${jsCall("go", `projects/de-xuat/${encodeURIComponent(item.id)}/sua`)}>Sửa và gửi lại</button>`
+  if (item.type === "proposal" && a === "resubmit") return `<button class="btn btn-light" ${jsCall("go", `projects/nhiem-vu/${encodeURIComponent(item.id)}/sua`)}>Sửa nhiệm vụ</button>`
+  if (item.type === "proposal" && a === "submit") return `<button class="btn btn-primary" ${jsCall("wfAct", item.id, a)}>Hoàn thành</button>`
   const handler = a === "delegate" ? jsCall("wfDelegate", item.id) : jsCall("wfAct", item.id, a)
   return `<button class="btn ${a === "return" || a === "reject" ? "btn-light" : "btn-primary"}" ${handler}>${ACTION_LABELS[a]}</button>`
 }
@@ -204,6 +218,35 @@ function ccBoxes(roles: string[]): string {
 }
 
 const priorityField = '<div><label>Mức ưu tiên</label><select id="wf-priority"><option>Cao</option><option>Trung bình</option><option>Thấp</option></select></div>'
+
+/** Breadcrumb levels: [label, path] for each level above, the last one (the page itself) without a path. */
+export function crumbsHtml(levels: [string, string?][]): string {
+  return `<nav class="vx-jira-crumbs">${levels.map(([label, path]) => path
+    ? `<a href="javascript:void 0" class="vx-crumb" ${jsCall("go", path)}>${esc(label)}</a>`
+    : `<span class="vx-crumb current">${esc(label)}</span>`).join('<span class="vx-crumb-sep">›</span>')}</nav>`
+}
+
+/** A select of several values: a dropdown with a checkbox per option; the closed box lists the ones picked. */
+export function multiSelectHtml(name: string, options: [string, string][], selected: string[], placeholder: string): string {
+  const picked = options.filter(([v]) => selected.includes(v)).map(([, l]) => l).join(", ")
+  return `<details class="vx-multiselect" data-placeholder="${esc(placeholder)}"><summary>${esc(picked || placeholder)}</summary><div class="vx-multiselect-list">${options.map(([v, l]) => `<label><input type="checkbox" name="${esc(name)}" value="${esc(v)}" data-label="${esc(l)}"${selected.includes(v) ? " checked" : ""} onchange="vxMultiPick(this)">${esc(l)}</label>`).join("")}</div></details>`
+}
+
+/** Shows the picked options in the closed box. */
+function vxMultiPick(input: HTMLInputElement) {
+  const box = input.closest("details")
+  const summary = box?.querySelector("summary")
+  if (!box || !summary) return
+  const picked = [...box.querySelectorAll<HTMLInputElement>("input:checked")].map((x) => x.dataset.label ?? x.value)
+  summary.textContent = picked.join(", ") || box.dataset.placeholder || ""
+}
+
+// A multi-select closes when clicking elsewhere, like a select.
+if (typeof document !== "undefined") {
+  document.addEventListener("click", (e) => {
+    document.querySelectorAll("details.vx-multiselect[open]").forEach((d) => { if (!d.contains(e.target as Node)) d.removeAttribute("open") })
+  })
+}
 
 function wfOpen(id: string) {
   const item = store.items().find((x) => x.id === id)
@@ -290,7 +333,7 @@ function applyProjectTarget(projectId: string, wbsId = "") {
 }
 
 const projectPath = (id: string) => `projects/${encodeURIComponent(id)}`
-const proposalPath = (id: string) => `projects/de-xuat/${encodeURIComponent(id)}`
+const proposalPath = (id: string) => `projects/nhiem-vu/${encodeURIComponent(id)}`
 const backLink = (path: string, label: string) => `<a class="vx-back" href="javascript:void 0" ${jsCall("go", path)}>← ${esc(label)}</a>`
 const pageHead = (back: string, title: string, sub = "") => `<div class="card vx-subpage-head">${back}<h3 style="margin:6px 0 2px">${esc(title)}</h3>${sub ? `<div class="mini">${sub}</div>` : ""}</div>`
 
@@ -306,29 +349,53 @@ export const canCreateTaskIn = (p: StoredProject) => canCreateTask(p, ctx.role()
  * Form page of a project task (Phòng Kỹ thuật): the owner is a role of a unit taking part; without a project, the
  * approved projects to create it in.
  */
+/** "Họ tên – Chức danh": tasks go straight to a person. */
+const personLabel = (r: string) => (personOf(r) ? `${personOf(r)} – ${roleTitle(r)}` : roleTitle(r))
+/** People of a unit taking part who may carry a task: staff first, the head last. */
+const unitPeople = (owners: string[], unit: string) =>
+  owners.filter((r) => roleUnitCode(r) === unit).sort((a, b) => Number(tierOf(a) === "head") - Number(tierOf(b) === "head"))
+/** The head of the person's unit, told of the task when it goes to someone else of the unit ("" otherwise). */
+const unitHeadFor = (owners: string[], person: string) =>
+  tierOf(person) === "head" ? "" : owners.find((r) => tierOf(r) === "head" && roleUnitCode(r) === roleUnitCode(person)) ?? ""
+const headNotice = (owners: string[], person: string) => {
+  const head = unitHeadFor(owners, person)
+  return head ? `${esc(roleTitle(head))}${personOf(head) ? ` <b>${esc(personOf(head))}</b>` : ""} sẽ nhận thông báo về việc này.` : ""
+}
+const personOptions = (people: string[], selected = "") => people.map((r) => `<option value="${r}"${r === selected ? " selected" : ""}>${esc(personLabel(r))}</option>`).join("")
+
 export function directiveFormHtml(presetProject = "", presetWbs = ""): string {
   const role = ctx.role()
   const project = presetProject ? projectsView().find((p) => p.id === presetProject) : undefined
+  // Page head: Dự án › <project> › Tạo việc, the title and a line under it.
+  const headOf = (sub: string) => `<div class="vx-jira-head">${crumbsHtml([["Dự án", "projects"], ...(project ? [[project.name, projectPath(project.id)] as [string, string]] : []), ["Tạo việc"]])}<div class="vx-jira-title"><div style="flex:1;min-width:0"><h2>Tạo việc</h2><div class="mini">${sub}</div></div></div></div>`
   if (!presetProject) {
     const ps = projectsView().filter((p) => canCreateTask(p, role))
     const rows = ps.map((p) => `<div class="alert vx-cap-pick" ${jsCall("go", `${projectPath(p.id)}/giao-viec`)}><span class="dot green"></span><div><b>${esc(p.id)} – ${esc(p.name)}</b><div class="mini">${esc(p.unit)}</div></div></div>`).join("")
-    return pageHead(backLink("projects", "Nhiệm vụ / Dự án"), "Tạo việc", "Chọn dự án (đã được phê duyệt) để tạo việc.") + `<div class="card">${rows || '<div class="mini">Bạn không có dự án nào để tạo việc.</div>'}</div>`
+    return headOf("Chọn dự án (đã được phê duyệt) để tạo việc.") + `<div class="card" style="margin-top:14px">${rows || '<div class="mini">Bạn không có dự án nào để tạo việc.</div>'}</div>`
   }
-  const back = project ? backLink(projectPath(project.id), `${project.id} – ${project.name}`) : backLink("projects", "Nhiệm vụ / Dự án")
-  if (!project) return pageHead(back, "Tạo việc") + `<div class="card mini">Không tìm thấy dự án ${esc(presetProject)}.</div>`
+  if (!project) return headOf(`Không tìm thấy dự án ${esc(presetProject)}.`)
   if (!canCreateTask(project, role)) {
     const why = approvalOf(project) === "Đã duyệt" ? "Chỉ Phòng Kỹ thuật tạo việc trong dự án." : "Dự án chưa được Liên đoàn trưởng phê duyệt."
-    return pageHead(back, "Tạo việc") + `<div class="card mini">${why}</div>`
+    return headOf(why)
   }
   const owners = taskOwners(project)
-  if (!owners.length) return pageHead(back, "Tạo việc") + '<div class="card mini">Dự án chưa có phòng thực hiện.</div>'
+  if (!owners.length) return headOf("Dự án chưa có phòng thực hiện.")
   const target = projectTarget(project, presetWbs)
-  const owner = ownerOfUnit(owners, target.unit) || owners[0]
-  const sub = target.sub ? vldcData.get("subUnits").find((s) => s.id === target.sub) : undefined
+  const units = projectUnits(project).filter((u) => unitPeople(owners, u).length)
+  const unit = units.includes(target.unit ?? "") ? (target.unit as string) : units[0]
+  const owner = unitPeople(owners, unit)[0]
   const done = projectPath(project.id)
-  return `${pageHead(back, "Tạo việc", "Việc giao cho một phòng tham gia dự án; Phòng Kỹ thuật duyệt kết quả. Các phòng tham gia xem và ghi chú.")}
-<div class="card"><div class="form-grid"><div class="full"><label>Nội dung công việc *</label><textarea id="wf-title" rows="2"></textarea></div><div><label>Dự án</label><input type="hidden" id="wf-project" value="${esc(project.id)}"><div class="vx-fixed-field"><b>${esc(project.id)}</b> – ${esc(project.name)}</div></div><div><label>Hạng mục dự án</label><select id="wf-wbs" onchange="wfWbsPicked()">${wbsOptionsHtml(project.id, presetWbs)}</select></div><div><label>Người chủ trì (phòng tham gia) *</label><select id="wf-owner" onchange="wfSubOptions(this.value)">${roleOptions(owners, owner)}</select><div class="mini" id="wf-owner-unit" style="margin-top:4px">${ownerUnitHint(owner)}</div></div><div><label>Tổ / phòng thực hiện</label><select id="wf-sub">${subOptionsHtml(owner, sub?.id)}</select></div><div><label>Hạn hoàn thành *</label><input id="wf-due" type="date" min="${today()}"${project.end ? ` max="${esc(project.end)}"` : ""}></div>${priorityField}<div class="full"><label>Kết quả / minh chứng yêu cầu</label><input id="wf-desc"></div><div class="full"><label>Phối hợp</label>${ccBoxes(owners.filter((r) => r !== role))}</div></div>
-<div class="toolbar" style="margin-top:12px"><button class="btn btn-primary" ${jsCall("wfSubmitDirective", done)}>Tạo việc</button><button class="btn btn-light" ${jsCall("go", done)}>Hủy</button></div></div>`
+  const section = (title: string, body: string) => `<div class="card vx-pj-section"><h4>${title}</h4><div class="form-grid">${body}</div></div>`
+  const head = headOf("Giao một việc của dự án cho đơn vị tham gia; Phòng Kỹ thuật duyệt kết quả, các đơn vị tham gia xem và ghi chú.")
+  const work = section("Thông tin công việc", `<div class="full"><label>Tên công việc *</label><input id="wf-title" placeholder="Ví dụ: Đo từ tuyến T1–T5 khu vực A"></div>
+<div class="full"><label>Kết quả / minh chứng yêu cầu</label><textarea id="wf-desc" rows="2" placeholder="Sản phẩm cần nộp khi hoàn thành"></textarea></div>
+<div><label>Độ phức tạp</label><select id="wf-complexity">${COMPLEXITIES.map((c) => `<option${c === "Trung bình" ? " selected" : ""}>${c}</option>`).join("")}</select></div>`)
+  const people = section("Người thực hiện", `<div><label>Đơn vị thực hiện *</label><select id="wf-unit" onchange="wfUnitPicked(this.value)">${units.map((u) => `<option value="${esc(u)}"${u === unit ? " selected" : ""}>${esc(unitName(u as UnitCode))}</option>`).join("")}</select></div>
+<div><label>Người thực hiện *</label><select id="wf-owner" onchange="wfPersonPicked(this.value)">${personOptions(unitPeople(owners, unit), owner)}</select><div class="mini" id="wf-head-note" style="margin-top:4px">${headNotice(owners, owner)}</div></div>
+<div class="full"><label>Phối hợp</label>${multiSelectHtml("wf-cc", owners.filter((r) => r !== role).map((r) => [r, personLabel(r)]), [], "Chọn người phối hợp")}</div>`)
+  const time = section("Thời hạn", `<div><label>Hạn hoàn thành *</label><input id="wf-due" type="date" min="${today()}"${project.end ? ` max="${esc(project.end)}"` : ""}>${project.end ? `<div class="mini" style="margin-top:4px">Không quá hạn dự án ${esc(formatDate(project.end))}</div>` : ""}</div>`)
+  return `${head}<input type="hidden" id="wf-project" value="${esc(project.id)}"><input type="hidden" id="wf-wbs" value="${esc(presetWbs)}">
+<div class="vx-pj-formpage">${work}${people}${time}<div class="vx-pj-actions"><button class="btn btn-primary" ${jsCall("wfSubmitDirective", done)}>Tạo việc</button><button class="btn btn-light" ${jsCall("go", done)}>Huỷ</button></div></div>`
 }
 
 function wfSubmitDirective(done: string) {
@@ -339,12 +406,14 @@ function wfSubmitDirective(done: string) {
       id: newId("CD"),
       title: inputValue("wf-title"),
       owner: inputValue("wf-owner"),
-      subUnit: inputValue("wf-sub") || undefined,
       project: project.id,
       wbsItem: inputValue("wf-wbs") || undefined,
-      cc: checkedValues("wf-cc"),
+      // The head of the person's unit follows the task (told of it and of its progress).
+      cc: [...new Set([...checkedValues("wf-cc"), unitHeadFor(taskOwners(project), inputValue("wf-owner"))].filter(Boolean))],
       due: inputValue("wf-due"),
-      priority: inputValue("wf-priority") as WorkItem["priority"],
+      // Project tasks are weighed by their độ phức tạp; the priority stays at its default.
+      priority: "Trung bình",
+      complexity: inputValue("wf-complexity") as Complexity,
       description: inputValue("wf-desc") || undefined,
     }, ctx.role(), { canCreate: canCreateTask(project, ctx.role()), owners: taskOwners(project), latest: project.end }, new Date().toISOString())
     await store.add(item)
@@ -355,8 +424,8 @@ function wfSubmitDirective(done: string) {
 function wfDelete(id: string) {
   const item = store.items().find((x) => x.id === id)
   if (!item || !confirm(`Xoá việc ${item.id} • ${item.title}?`)) return
-  const onPage = window.location.pathname.includes(`/viec/${encodeURIComponent(id)}`) || window.location.pathname.endsWith(`/de-xuat/${encodeURIComponent(id)}`)
-  const back = item.type === "proposal" ? "projects/de-xuat" : item.project ? projectPath(item.project) : ""
+  const onPage = window.location.pathname.includes(`/viec/${encodeURIComponent(id)}`) || window.location.pathname.endsWith(`/nhiem-vu/${encodeURIComponent(id)}`)
+  const back = item.type === "proposal" ? "projects/nhiem-vu" : item.project ? projectPath(item.project) : ""
   void run(() => store.remove(id, ctx.role()), undefined, onPage && back ? () => shell.go(back) : undefined)
 }
 
@@ -371,19 +440,19 @@ export const canPropose = () => showsProposals() && hasPerm(ctx.perms(), "vldc-d
 /** Form page of a new proposal, or of a returned one to correct and send again. */
 export function proposalFormHtml(id = ""): string {
   const role = ctx.role()
-  const back = backLink(id ? proposalPath(id) : "projects", id ? id : "Nhiệm vụ / Dự án")
+  const back = backLink(id ? proposalPath(id) : "projects/nhiem-vu", id ? id : "Nhiệm vụ")
   const item = id ? store.items().find((x) => x.id === id && x.type === "proposal") : undefined
   if (id && (!item || !allowedActions(item, role, ctx.perms(), store.items()).includes("resubmit"))) {
-    return pageHead(back, "Sửa đề xuất") + '<div class="card mini">Đề xuất này không ở trạng thái được sửa.</div>'
+    return pageHead(back, "Sửa nhiệm vụ") + '<div class="card mini">Nhiệm vụ này không ở trạng thái được sửa.</div>'
   }
   const approver = item?.approver ?? approverOf(role)
-  if (!item && !canPropose()) return pageHead(back, "Đề xuất nhiệm vụ") + '<div class="card mini">Bạn không có cấp trên để duyệt đề xuất.</div>'
+  if (!item && !canPropose()) return pageHead(back, "Tạo nhiệm vụ") + '<div class="card mini">Bạn không có cấp trên để duyệt đề xuất.</div>'
   const returned = item ? [...item.history].reverse().find((h) => h.action === "return") : undefined
   const priority = item?.priority ?? "Trung bình"
-  return `${pageHead(back, item ? `Sửa đề xuất ${item.id}` : "Đề xuất nhiệm vụ", `Người duyệt: <b>${esc(roleTitle(approver ?? ""))}</b>${personOf(approver ?? "") ? ` – ${esc(personOf(approver ?? ""))}` : ""} (cấp trên trực tiếp)`)}
+  return `${pageHead(back, item ? `Sửa nhiệm vụ ${item.id}` : "Tạo nhiệm vụ", `Người duyệt: <b>${esc(roleTitle(approver ?? ""))}</b>${personOf(approver ?? "") ? ` – ${esc(personOf(approver ?? ""))}` : ""} (cấp trên trực tiếp)`)}
 ${returned?.note ? `<div class="alert" style="margin-bottom:12px"><span class="dot yellow"></span><div><b>Lý do trả lại</b><div class="mini">${esc(returned.note)}</div></div></div>` : ""}
 <div class="card"><div class="form-grid"><div class="full"><label>Tên nhiệm vụ *</label><input id="wf-title" value="${esc(item?.title ?? "")}"></div><div class="full"><label>Nội dung, lý do, kết quả dự kiến</label><textarea id="wf-desc" rows="3">${esc(item?.description ?? "")}</textarea></div>${projectPicker(item?.project ?? "")}<div><label>Hạn hoàn thành *</label><input id="wf-due" type="date" min="${today()}" value="${esc(item?.due ?? "")}"></div><div><label>Mức ưu tiên</label><select id="wf-priority">${["Cao", "Trung bình", "Thấp"].map((p) => `<option${p === priority ? " selected" : ""}>${p}</option>`).join("")}</select></div>${item ? '<div class="full"><label>Giải trình khi gửi lại</label><textarea id="wf-note" rows="2"></textarea></div>' : `<div class="full"><label>Phối hợp</label>${ccBoxes(BUSINESS_ROLES.filter((r) => r !== role && r !== approver))}</div>`}</div>
-<div class="toolbar" style="margin-top:12px"><button class="btn btn-primary" ${jsCall("wfSubmitProposal", id)}>${item ? "Gửi lại" : "Gửi đề xuất"}</button><button class="btn btn-light" ${jsCall("go", id ? proposalPath(id) : "projects")}>Hủy</button></div></div>`
+<div class="toolbar" style="margin-top:12px"><button class="btn btn-primary" ${jsCall("wfSubmitProposal", id)}>${item ? "Gửi lại" : "Gửi xin duyệt"}</button><button class="btn btn-light" ${jsCall("go", id ? proposalPath(id) : "projects")}>Hủy</button></div></div>`
 }
 
 function wfSubmitProposal(id: string) {
@@ -441,10 +510,11 @@ function wfSubmitPayment() {
   })
 }
 
+/** Sample data back for the Firebase datasets; projects and work items live on the backend API and are left alone. */
 function wfResetDemo() {
-  if (!confirm("Xoá toàn bộ dữ liệu (luồng giao việc, dự án, tài chính, thiết bị, lịch...) và nạp lại dữ liệu mẫu?")) return
+  if (!confirm("Xoá dữ liệu (tài chính, thiết bị, lịch...) và nạp lại dữ liệu mẫu? Dự án và công việc không bị ảnh hưởng.")) return
   void run(async () => {
-    await Promise.all([store.reset(), vldcData.resetAll()])
+    await vldcData.resetAll()
   })
 }
 
@@ -518,7 +588,7 @@ function paymentsBlock(): string {
   const payments = all.filter((x) => x.type === "payment" && isVisible(x, role, all)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
   const canCreate = role === PAYMENT_STEPS[0].owner && hasPerm(ctx.perms(), "vldc-payments:create")
   const rows = payments.map((p) => `<tr><td><b>${esc(p.id)}</b></td><td>${esc(p.title)}</td><td>${formatMoney(p.amount)}</td><td>${esc(PAYMENT_STEPS[p.step ?? 0].label)}<div class="mini">${esc(roleTitle(p.owner))}</div></td><td>${statusBadge(p)}</td><td>${formatDate(p.due)}</td><td>${openButton(p, p.owner === role && !isClosed(p) ? "Xử lý" : "Xem")}</td></tr>`).join("")
-  return `${offlineBanner()}<div class="card" style="margin-bottom:14px"><div class="card-head"><div><h3>Hồ sơ thanh toán liên phòng</h3><div class="mini">${PAYMENT_STEPS.map((s) => esc(roleTitle(s.owner))).join(" → ")}</div></div>${canCreate ? '<button class="btn btn-primary" onclick="wfCreatePayment()">+ Lập đề nghị thanh toán</button>' : ""}</div>${rows ? `<table><tr><th>Mã</th><th>Nội dung</th><th>Số tiền</th><th>Bước hiện tại</th><th>Trạng thái</th><th>Hạn</th><th></th></tr>${rows}</table>` : '<div class="mini">Chưa có hồ sơ trong phạm vi của bạn.</div>'}</div>`
+  return `<div class="card" style="margin-bottom:14px"><div class="card-head"><div><h3>Hồ sơ thanh toán liên phòng</h3><div class="mini">${PAYMENT_STEPS.map((s) => esc(roleTitle(s.owner))).join(" → ")}</div></div>${canCreate ? '<button class="btn btn-primary" onclick="wfCreatePayment()">+ Lập đề nghị thanh toán</button>' : ""}</div>${rows ? `<table><tr><th>Mã</th><th>Nội dung</th><th>Số tiền</th><th>Bước hiện tại</th><th>Trạng thái</th><th>Hạn</th><th></th></tr>${rows}</table>` : '<div class="mini">Chưa có hồ sơ trong phạm vi của bạn.</div>'}</div>`
 }
 
 function leaderStats(): string {
@@ -586,7 +656,7 @@ export function installWorkflow(render: Record<string, () => void>, nextShell: S
   render.dashboard = function () {
     const el = content()
     if (managesAllUnits(ctx.role()) && el) {
-      el.innerHTML = leaderDashboardHtml(store.items(), { projects: projectsView(), disbursement: disbursementView(), spend: spendView(), org: leaderOrg(), risks: vldcData.get("risks"), cash: leaderCash() }, today(), offlineBanner())
+      el.innerHTML = leaderDashboardHtml(store.items(), { projects: projectsView(), disbursement: disbursementView(), spend: spendView(), org: leaderOrg(), risks: vldcData.get("risks"), cash: leaderCash() }, today())
       return
     }
     unitDashboard()
@@ -623,5 +693,21 @@ export function installWorkflow(render: Record<string, () => void>, nextShell: S
       if (hint) hint.innerHTML = ownerUnitHint(owner)
     },
     directiveDetail: wfOpen,
+    /** Tạo việc: picking the unit narrows the people to that unit. */
+    wfUnitPicked: (unit: string) => {
+      const project = projectsView().find((p) => p.id === inputValue("wf-project"))
+      if (!project) return
+      const people = unitPeople(taskOwners(project), unit)
+      const owner = document.getElementById("wf-owner")
+      if (owner) owner.innerHTML = personOptions(people, people[0])
+      const note = document.getElementById("wf-head-note")
+      if (note) note.innerHTML = people[0] ? headNotice(taskOwners(project), people[0]) : ""
+    },
+    wfPersonPicked: (person: string) => {
+      const project = projectsView().find((p) => p.id === inputValue("wf-project"))
+      const note = document.getElementById("wf-head-note")
+      if (project && note) note.innerHTML = headNotice(taskOwners(project), person)
+    },
+    vxMultiPick,
   })
 }

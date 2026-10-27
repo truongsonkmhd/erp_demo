@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { Bell, BellOff, CalendarClock, CheckCheck, DoorOpen, Loader2, Megaphone, Settings, Truck, Wallet, type LucideIcon } from "lucide-react"
+import { Bell, BellOff, CalendarClock, CheckCheck, ClipboardList, DoorOpen, Flag, FolderCheck, FolderX, ListChecks, Loader2, Megaphone, Settings, Truck, Wallet, type LucideIcon } from "lucide-react"
 import { changeFeed } from "@/features/vldc/data/registry"
 import {
   NOTIFICATION_QUEUE, fetchNotifications, fetchUnreadCount, markAllNotificationsRead, markNotificationRead,
@@ -9,7 +9,7 @@ import { openNotices } from "@/features/vldc/legacy/engine"
 import { vldcActions } from "@/features/vldc/store"
 
 /** Icon per notification type (the backend sends the lucide name); unknown types fall back to the bell. */
-const ICONS: Record<string, LucideIcon> = { CalendarClock, Wallet, Truck, DoorOpen, Megaphone }
+const ICONS: Record<string, LucideIcon> = { CalendarClock, Wallet, Truck, DoorOpen, Megaphone, FolderCheck, FolderX, ClipboardList, ListChecks, Flag }
 
 type Filter = "all" | "unread"
 

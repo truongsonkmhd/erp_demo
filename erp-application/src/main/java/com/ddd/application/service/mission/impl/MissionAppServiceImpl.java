@@ -141,6 +141,7 @@ public class MissionAppServiceImpl implements MissionAppService {
         log(saved, me, MissionAction.CREATE, null, MissionStatus.PENDING, null);
         changed(saved);
         notify(List.of(approver.getId()), "Nhiệm vụ " + saved.getCode() + " chờ duyệt", me.getFullName() + " lập nhiệm vụ \"" + saved.getTitle() + "\".", saved, me);
+        notify(followerIds(saved), "Bạn được thêm phối hợp nhiệm vụ " + saved.getCode(), saved.getTitle(), saved, me);
         return toDetail(saved, me);
     }
 
@@ -424,6 +425,6 @@ public class MissionAppServiceImpl implements MissionAppService {
     private void notify(Collection<Long> recipients, String title, String body, Mission m, User me) {
         List<Long> to = recipients.stream().filter(Objects::nonNull).filter(id -> !id.equals(me.getId())).distinct().toList();
         if (to.isEmpty()) return;
-        events.publishEvent(new WorkNotificationEvent(NOTIFY_TYPE, to, title, body, "/vldc/projects/nhiem-vu/" + m.getCode(), m.getCode()));
+        events.publishEvent(new WorkNotificationEvent(NOTIFY_TYPE, to, title, body, "projects/nhiem-vu/" + m.getCode(), m.getCode()));
     }
 }

@@ -46,6 +46,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -180,6 +181,11 @@ public class ProjectAppServiceImpl implements ProjectAppService {
         Project saved = projects.save(p);
         changed(saved);
         notify("PROJECT_APPROVAL", List.of(saved.getCreatedBy()), "Dự án " + saved.getCode() + " đã được phê duyệt", saved.getName(), saved);
+        // The heads of the taking-part units (Phòng Kỹ thuật included) now assign the work of their unit.
+        List<Long> heads = access.participatingUnits(saved).stream().map(roles::unitHeadOf).flatMap(Optional::stream).map(User::getId)
+                .filter(id -> !id.equals(me.getId()) && !id.equals(saved.getCreatedBy())).toList();
+        notify("PROJECT_APPROVAL", heads, "Dự án " + saved.getCode() + " đã được duyệt: giao việc cho đơn vị",
+                "Đơn vị của bạn tham gia dự án \"" + saved.getName() + "\". Hãy tạo việc và giao cho nhân viên.", saved);
         return toDetail(saved, me);
     }
 
@@ -447,6 +453,6 @@ public class ProjectAppServiceImpl implements ProjectAppService {
     private void notify(String type, List<Long> recipients, String title, String body, Project p) {
         List<Long> to = recipients.stream().filter(Objects::nonNull).distinct().toList();
         if (to.isEmpty()) return;
-        events.publishEvent(new WorkNotificationEvent(type, to, title, body, "/vldc/projects/" + p.getCode(), p.getCode()));
+        events.publishEvent(new WorkNotificationEvent(type, to, title, body, "projects/" + p.getCode(), p.getCode()));
     }
 }

@@ -462,6 +462,6 @@ public class ProjectTaskAppServiceImpl implements ProjectTaskAppService {
     private void notify(String type, Collection<Long> recipients, String title, String body, ProjectTask t, Project p, User me) {
         List<Long> to = recipients.stream().filter(Objects::nonNull).filter(id -> !id.equals(me.getId())).distinct().toList();
         if (to.isEmpty()) return;
-        events.publishEvent(new WorkNotificationEvent(type, to, title, body, "/vldc/projects/" + p.getCode() + "/viec/" + t.getCode(), t.getCode()));
+        events.publishEvent(new WorkNotificationEvent(type, to, title, body, "projects/" + p.getCode() + "/viec/" + t.getCode(), t.getCode()));
     }
 }

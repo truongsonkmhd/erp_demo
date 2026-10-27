@@ -31,7 +31,7 @@ import { DIRECTIVE_STATUS_FILTERS, TYPE_LABELS, directiveExportRows, filterDirec
 import { workflowStore as store } from "./repository"
 import { leaderDashboardHtml, type CashFigures, type OrgFigures } from "./leaderDashboard"
 import { staffView } from "../data/staffView"
-import { cashSummary, debtSummary } from "../data/ledgerCore"
+import { ledgerStore } from "../data/ledgerStore"
 import { performanceHtml, unitDetailHtml } from "./kpiViews"
 import { kpiUnits, rolesByUnit, unitKpis, unitOfRole } from "./kpi"
 import { vldcData } from "../data/registry"
@@ -122,7 +122,7 @@ const noteUnit = (h: { by: string; unit?: string }) => {
   return code ? unitName(code as UnitCode) : ""
 }
 
-export function detailHtml(item: WorkItem): string {
+export function detailHtml(item: WorkItem, withHeader = false): string {
   const all = store.items()
   const role = ctx.role()
   const actions = allowedActions(item, role, ctx.perms(), all)
@@ -130,8 +130,8 @@ export function detailHtml(item: WorkItem): string {
   const kids = all.filter((x) => x.parentId === item.id)
   const metric = (label: string, value: string) => `<div class="metric"><span>${label}</span><b>${value}</b></div>`
   const info = [
-    metric("Loại", TYPE_LABELS[item.type]),
-    metric("Trạng thái", statusBadge(item) + riskBadge(item, all)),
+    withHeader ? "" : metric("Loại", TYPE_LABELS[item.type]),
+    withHeader ? (riskBadge(item, all) ? metric("Cảnh báo", riskBadge(item, all)) : "") : metric("Trạng thái", statusBadge(item) + riskBadge(item, all)),
     item.type === "proposal"
       ? metric("Người đề xuất", esc(roleTitle(item.createdBy))) + metric("Người duyệt", esc(roleTitle(item.approver ?? "")))
       : metric("Người giao / lập", esc(roleTitle(item.createdBy))),
@@ -204,6 +204,35 @@ function ccBoxes(roles: string[]): string {
 }
 
 const priorityField = '<div><label>Mức ưu tiên</label><select id="wf-priority"><option>Cao</option><option>Trung bình</option><option>Thấp</option></select></div>'
+
+/** Breadcrumb levels: [label, path] for each level above, the last one (the page itself) without a path. */
+export function crumbsHtml(levels: [string, string?][]): string {
+  return `<nav class="vx-jira-crumbs">${levels.map(([label, path]) => path
+    ? `<a href="javascript:void 0" class="vx-crumb" ${jsCall("go", path)}>${esc(label)}</a>`
+    : `<span class="vx-crumb current">${esc(label)}</span>`).join('<span class="vx-crumb-sep">›</span>')}</nav>`
+}
+
+/** A select of several values: a dropdown with a checkbox per option; the closed box lists the ones picked. */
+export function multiSelectHtml(name: string, options: [string, string][], selected: string[], placeholder: string): string {
+  const picked = options.filter(([v]) => selected.includes(v)).map(([, l]) => l).join(", ")
+  return `<details class="vx-multiselect" data-placeholder="${esc(placeholder)}"><summary>${esc(picked || placeholder)}</summary><div class="vx-multiselect-list">${options.map(([v, l]) => `<label><input type="checkbox" name="${esc(name)}" value="${esc(v)}" data-label="${esc(l)}"${selected.includes(v) ? " checked" : ""} onchange="vxMultiPick(this)">${esc(l)}</label>`).join("")}</div></details>`
+}
+
+/** Shows the picked options in the closed box. */
+function vxMultiPick(input: HTMLInputElement) {
+  const box = input.closest("details")
+  const summary = box?.querySelector("summary")
+  if (!box || !summary) return
+  const picked = [...box.querySelectorAll<HTMLInputElement>("input:checked")].map((x) => x.dataset.label ?? x.value)
+  summary.textContent = picked.join(", ") || box.dataset.placeholder || ""
+}
+
+// A multi-select closes when clicking elsewhere, like a select.
+if (typeof document !== "undefined") {
+  document.addEventListener("click", (e) => {
+    document.querySelectorAll("details.vx-multiselect[open]").forEach((d) => { if (!d.contains(e.target as Node)) d.removeAttribute("open") })
+  })
+}
 
 function wfOpen(id: string) {
   const item = store.items().find((x) => x.id === id)
@@ -568,10 +597,10 @@ export function installWorkflow(render: Record<string, () => void>, nextShell: S
   // The leader gets a purpose-built dashboard instead of the stacked legacy demo blocks.
   const unitDashboard = render.dashboard
   function leaderCash(): CashFigures {
-    const debts = vldcData.get("debtRecords"), entries = vldcData.get("cashEntries")
-    const d = debtSummary(debts)
-    const c = cashSummary(debts, entries, today().slice(0, 7))
-    return { revenue: d.total + c.thuOther, contracts: d.count, thu: c.thu, thuOther: c.thuOther, thuMonth: c.thuMonth, chi: c.chi, chiMonth: c.chiMonth, remaining: d.remaining, doneOwing: d.doneOwing.length }
+    // Computed by the backend from contracts (running ones), their payments and thu khác / chi khác.
+    const s = ledgerStore.summary()
+    const contracts = ledgerStore.contracts().filter((c) => c.kind === "thu" && c.status !== "Dự thảo").length
+    return { revenue: s.revenue, contracts, thu: s.thu, thuOther: s.thuOther, thuMonth: s.thuMonth, chi: s.chi, chiMonth: s.chiMonth, remaining: s.receivable, doneOwing: s.doneOwing }
   }
 
   /** Same counts as the Phòng ban page: staff profiles, its unit cards and the active tổ/phòng. */
@@ -604,7 +633,7 @@ export function installWorkflow(render: Record<string, () => void>, nextShell: S
   }
   Object.assign(window, {
     wfOpen, wfAct, wfCreateDirective, wfSubmitDirective, wfDelegate, wfSubmitDelegate, wfSubmitProposal, wfDelete,
-    wfCreatePayment, wfSubmitPayment, wfResetDemo, wfNotice, wfUnitKpi,
+    wfCreatePayment, wfSubmitPayment, wfResetDemo, wfNotice, wfUnitKpi, vxMultiPick,
     createDirective: wfCreateDirective,
     wfCreateDirectiveFor: (subId: string) => wfCreateDirective(subId),
     wfCreateDirectiveForProject: (projectId: string) => wfCreateDirective("", projectId),

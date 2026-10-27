@@ -15,6 +15,7 @@ import { vldcData } from "./registry"
 import { searchAll, type SearchHit } from "./search"
 import { ALL_SEARCH_GROUPS, searchSources, type SearchData } from "./searchSources"
 import { DMS_FOLDERS } from "./seed/knowledge"
+import { ledgerStore } from "./ledgerStore"
 import type { AlertRule, DocTemplate, ReportDef } from "./types"
 import type { OutgoingDocument } from "../../../types/outgoingDocument"
 
@@ -42,7 +43,7 @@ const newId = (prefix: string) => `${prefix}-${Date.now().toString(36).toUpperCa
 function searchData(): SearchData {
   return {
     dmsFiles: D("dmsFiles"), incomingDocuments: D("incomingDocuments"), outgoingDocuments: D("outgoingDocuments"), staffSkills: D("staffSkills"),
-    equipment: D("equipment"), fixedAssets: D("fixedAssets"), projects: projectsView(), risks: D("risks"), contracts: D("contracts"),
+    equipment: D("equipment"), fixedAssets: D("fixedAssets"), projects: projectsView(), risks: D("risks"), contracts: ledgerStore.legacyContracts(),
     vouchers: D("vouchers"), advances: D("advances"), archiveRecords: D("archiveRecords"), geoDatasets: D("geoDatasets"),
   }
 }
@@ -153,7 +154,7 @@ function datahub() {
   const layers: [string, number, string][] = [
     ["Tài liệu DMS", D("dmsFiles").length, "dms"], ["Văn bản đến / đi", D("incomingDocuments").length + D("outgoingDocuments").length, "documents"],
     ["Hồ sơ lưu trữ", D("archiveRecords").length, "archive"], ["Dữ liệu địa vật lý", D("geoDatasets").length, "geodata"],
-    ["Dự án", projectsView().length, "projects"], ["Thiết bị", D("equipment").length, "equipment"], ["Hợp đồng", D("contracts").length, "contracts"],
+    ["Dự án", projectsView().length, "projects"], ["Thiết bị", D("equipment").length, "equipment"], ["Hợp đồng", ledgerStore.legacyContracts().length, "contracts"],
   ]
   const violations = rules.reduce((s, r) => s + r.violations, 0)
   return `${kpis(
@@ -176,7 +177,7 @@ function reportTable(def: ReportDef): string {
     case "projects": return table(["Dự án", "Đơn vị", "Kỹ thuật", "Chi phí", "Dự báo"], projectsView().map((p) => `<tr><td>${esc(p.id)}</td><td>${esc(p.unit)}</td><td>${p.technical}%</td><td>${p.costUsed}%</td><td>${p.delayDays ? `+${p.delayDays} ngày` : "Đúng hạn"}</td></tr>`))
     case "work_items": return table(["Mã", "Nội dung", "Chủ trì", "Hạn"], workflowStore.items().filter((x) => isWork(x) && x.status !== "Hoàn thành" && x.due < t).map((x) => `<tr><td>${esc(x.id)}</td><td>${esc(x.title)}</td><td>${esc(ROLE_TITLES[x.owner] || x.owner)}</td><td>${vnDate(x.due)}</td></tr>`), "Không có việc quá hạn.")
     case "finance_lines": return table(["Dự án", "Hạng mục", "Dự toán", "Đã chi"], D("financeLines").map((l) => `<tr><td>${esc(l.project)}</td><td>${esc(l.item)}</td><td>${tr(l.budget)}</td><td>${tr(l.paid)}</td></tr>`))
-    case "contracts": return table(["Hợp đồng", "Khách hàng", "Còn lại", "Tuổi nợ"], A.debtSummary(D("contracts"), "thu", t).debts.map((d) => `<tr><td>${esc(d.contract.id)}</td><td>${esc(d.contract.party)}</td><td>${tr(d.outstanding)}</td><td>${d.agingDays} ngày</td></tr>`))
+    case "contracts": return table(["Hợp đồng", "Khách hàng", "Còn lại", "Tuổi nợ"], A.debtSummary(ledgerStore.legacyContracts(), "thu", t).debts.map((d) => `<tr><td>${esc(d.contract.id)}</td><td>${esc(d.contract.party)}</td><td>${tr(d.outstanding)}</td><td>${d.agingDays} ngày</td></tr>`))
     case "advances": return table(["Mã", "Người", "Còn lại", "Hạn"], A.advanceSummary(D("advances"), t).open.map((a) => `<tr><td>${esc(a.id)}</td><td>${esc(a.person)}</td><td>${tr(A.advanceRemaining(a))}</td><td>${vnDate(a.due)}</td></tr>`))
     case "equipment": return table(["Thiết bị", "Đơn vị", "Kiểm định", "Utilization"], D("equipment").map((e) => `<tr><td>${esc(e.name)}</td><td>${esc(e.unit)}</td><td>${vnDate(e.inspectionDue)}</td><td>${e.utilization}%</td></tr>`))
     case "staff_skills": return table(["Nhân sự", "Đơn vị", "ĐVL", "GIS", "Dữ liệu", "QLDA"], D("staffSkills").map((s) => `<tr><td>${esc(s.name)}</td><td>${esc(s.unit)}</td><td>${s.geophysics}</td><td>${s.gis}</td><td>${s.data}</td><td>${s.pm}</td></tr>`))
@@ -244,7 +245,7 @@ let genTemplate = ""
 let genTarget = ""
 function targetsOf(tpl: DocTemplate): { id: string; label: string; row: Record<string, unknown> }[] {
   if (tpl.target === "project") return projectsView().map((p) => ({ id: p.id, label: `${p.id} – ${p.name}`, row: p }))
-  if (tpl.target === "contract") return D("contracts").map((c) => ({ id: c.id, label: `${c.id} – ${c.party}`, row: c }))
+  if (tpl.target === "contract") return ledgerStore.legacyContracts().map((c) => ({ id: c.id, label: `${c.id} – ${c.party}`, row: c }))
   return D("equipment").map((e) => ({ id: e.id, label: `${e.id} – ${e.name}`, row: { ...e, inspectionDue: vnDate(e.inspectionDue) } }))
 }
 

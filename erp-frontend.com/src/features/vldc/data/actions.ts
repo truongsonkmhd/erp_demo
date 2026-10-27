@@ -7,6 +7,7 @@ import { canCreateContract } from "./accountingMetrics"
 import { addDays, localToday, vnDate } from "./dates"
 import { ROLE_PROFILES } from "./org"
 import { vldcData } from "./registry"
+import { ledgerStore } from "./ledgerStore"
 import { fetchAnnouncementOptions, publishAnnouncement } from "./notificationsApi"
 import type { Scope } from "./types"
 
@@ -131,7 +132,7 @@ export function installActions(ctx: Ctx) {
       field("Loại", select("v-type", [["Ủy nhiệm chi", "Ủy nhiệm chi"], ["Phiếu chi", "Phiếu chi"], ["Phiếu thu", "Phiếu thu"], ["Chứng từ khác", "Chứng từ khác"]])) +
       field("Ngày", input("v-date", today(), "date")) + field("Đối tượng", input("v-party")) + field("Dự án", select("v-project", projectOptions())) +
       field("Số tiền (triệu đồng)", input("v-amount", "", "number")) + field("Nguồn kinh phí", select("v-fund", [["NSNN", "NSNN"], ["Dịch vụ", "Dịch vụ"]])) +
-      field("Hợp đồng liên quan", select("v-contract", [["", "Không"], ...D("contracts").map((c) => [c.id, `${c.id} – ${c.party}`] as [string, string])])) + field("Diễn giải", textarea("v-note"), true),
+      field("Hợp đồng liên quan", select("v-contract", [["", "Không"], ...ledgerStore.legacyContracts().map((c) => [c.id, `${c.id} – ${c.party}`] as [string, string])])) + field("Diễn giải", textarea("v-note"), true),
       "saveVoucher"))
   }
 
@@ -162,25 +163,6 @@ export function installActions(ctx: Ctx) {
       documentType: val("d-type") as never, urgency: val("d-urgency") as never, status: "Mới tiếp nhận", dueDate: val("d-due"), attachments: [],
       processHistory: [{ id: newId("log"), action: "Tiếp nhận văn bản", actor: who, role: roleName(me()), timestamp: at }], createdAt: nowIso(), updatedAt: nowIso(),
     })
-    close()
-  }
-
-  function contractForm() {
-    if (!canCreateContract(me())) return
-    open("Đề xuất hợp đồng", form(
-      field("Loại", select("k-kind", [["thu", "Khách hàng"], ["chi", "Nhà cung cấp"]])) + field("Đối tác", input("k-party")) +
-      field("Nội dung", input("k-name"), true) + field("Giá trị (triệu đồng)", input("k-value", "", "number")) + field("Dự án", select("k-project", projectOptions())) +
-      field("Hạn thanh toán đợt 1", input("k-due", addDays(today(), 30), "date")),
-      "saveContractForm", "Tạo dự thảo hợp đồng"))
-  }
-
-  function saveContractForm() {
-    if (!canCreateContract(me())) return
-    const party = val("k-party")
-    const name = val("k-name")
-    const value = num("k-value")
-    if (!required([party, "đối tác"], [name, "nội dung"], [value ? "x" : "", "giá trị"])) return
-    void vldcData.save("contracts", { id: newId("HĐ"), kind: val("k-kind") as "thu" | "chi", party, name, value, projectId: val("k-project"), stage: "Dự thảo", nextObligation: "Trình ký", risk: "Thấp", obligations: [], milestones: [{ name: "Đợt 1", value, invoiced: 0, paid: 0, due: val("k-due") || addDays(today(), 30) }] })
     close()
   }
 
@@ -325,7 +307,7 @@ export function installActions(ctx: Ctx) {
   Object.assign(window, {
     taskInboxDetail, completeInboxTask, returnInboxTask, handoffInboxTask, commentInboxTask,
     meetingDetail, addConclusion, publishConclusions, skillFind, runSkillFind,
-    financeForm, voucherModal, saveVoucher, documentForm, saveIncomingDoc, contractForm, saveContractForm,
+    financeForm, voucherModal, saveVoucher, documentForm, saveIncomingDoc,
     addEventModal, saveEvent, eventReminder, addPlanModal, savePlan, publishNoticeModal, saveNotice,
     createMeeting, saveMeeting, createRisk, saveRisk, goalForm, saveGoal,
     simulateImport, saveImport,

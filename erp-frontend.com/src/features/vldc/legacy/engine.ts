@@ -19,6 +19,7 @@ import { ROLE_PROFILES, canSeeProject, roleUnitCode, unitCodeOf } from "@/featur
 import { installDataPages } from "@/features/vldc/data/pages";
 import { baseDashboardHtml, hasUnitDashboard, installAccountingPages, unitDashboardHtml } from "@/features/vldc/data/accountingPages";
 import { aiSearchHtml, aiStatsHtml, installKnowledgePages } from "@/features/vldc/data/knowledgePages";
+import { installContractPage } from "@/features/vldc/data/contractPage";
 import { installActions } from "@/features/vldc/data/actions";
 import { installInboxPage } from "@/features/vldc/data/inboxPage";
 import { installPlansPage } from "@/features/vldc/data/plansPage";
@@ -391,6 +392,7 @@ installDataPages(render, { role: () => current });
 installAccountingPages(render, { role: () => current, openModal });
 installUncExport({ openModal, closeModal });
 installKnowledgePages(render, { role: () => current, openModal, closeModal });
+installContractPage(render, { role: () => current, openModal, closeModal });
 installActions({ role: () => current, openModal, closeModal });
 installInboxPage(render, { role: () => current });
 installPlansPage(render, { role: () => current, openModal, closeModal });

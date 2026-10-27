@@ -24,7 +24,7 @@ INSERT IGNORE INTO tbl_page (code, name, url) VALUES
   ('vldc-today', 'Hôm nay', '/vldc/today'),
   ('vldc-calendar', 'Lịch làm việc', '/vldc/calendar'),
   ('vldc-plans', 'Kế hoạch', '/vldc/plans'),
-  ('vldc-notifications', 'Trung tâm thông báo', '/vldc/notifications'),
+  ('vldc-notifications', 'Quản lý thông báo', '/vldc/notifications'),
   ('vldc-assistant', 'AI Knowledge Workspace', '/vldc/assistant'),
   ('vldc-command', 'Executive Command Center', '/vldc/command'),
   ('vldc-directives', 'Giao việc', '/vldc/directives'),
@@ -96,7 +96,7 @@ FROM (
   SELECT 'vldc-today' AS code, 'Hôm nay' AS title, 'Sun' AS icon, 105 AS sort_order UNION ALL
   SELECT 'vldc-calendar' AS code, 'Lịch làm việc' AS title, 'CalendarDays' AS icon, 106 AS sort_order UNION ALL
   SELECT 'vldc-plans' AS code, 'Kế hoạch' AS title, 'ListChecks' AS icon, 107 AS sort_order UNION ALL
-  SELECT 'vldc-notifications' AS code, 'Thông báo' AS title, 'Bell' AS icon, 108 AS sort_order UNION ALL
+  SELECT 'vldc-notifications' AS code, 'Quản lý thông báo' AS title, 'BellRing' AS icon, 108 AS sort_order UNION ALL
   SELECT 'vldc-assistant' AS code, 'Trợ lý AI' AS title, 'Sparkles' AS icon, 109 AS sort_order
 ) m
 JOIN tbl_menu g ON g.code = 'vldc-grp-workspace'

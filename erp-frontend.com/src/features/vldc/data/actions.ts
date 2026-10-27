@@ -7,6 +7,7 @@ import { canCreateContract } from "./accountingMetrics"
 import { addDays, localToday, vnDate } from "./dates"
 import { ROLE_PROFILES } from "./org"
 import { vldcData } from "./registry"
+import { fetchAnnouncementOptions, publishAnnouncement } from "./notificationsApi"
 import type { Scope } from "./types"
 
 /**
@@ -230,16 +231,46 @@ export function installActions(ctx: Ctx) {
     close()
   }
 
-  function publishNoticeModal() {
-    open("Phát hành thông báo", form(field("Tiêu đề", input("n-title"), true) + field("Nội dung", textarea("n-body"), true) + field("Mức ưu tiên", select("n-priority", [["Bình thường", "Bình thường"], ["Cao", "Cao"]])) + field("Liên kết", select("n-link", [["plans", "Kế hoạch"], ["action", "Công việc"], ["projects", "Dự án"], ["documents", "Văn bản"], ["calendar", "Sự kiện"]])) + scopeFields(), "saveNotice", "Phát hành"))
+  // Thông báo nội bộ go through the backend: it checks the permission and limits the audience to managed units,
+  // then delivers them like any other notification (bell, e-mail, live).
+  async function publishNoticeModal() {
+    let options
+    try {
+      options = await fetchAnnouncementOptions()
+    } catch {
+      alert("Không tải được phạm vi phát hành. Vui lòng thử lại.")
+      return
+    }
+    if (!options.canPublish) {
+      open("Phát hành thông báo", '<p>Bạn chưa có quyền phát hành thông báo. Chức năng dành cho lãnh đạo và trưởng phòng / đoàn, trong phạm vi đơn vị mình quản lý.</p>')
+      return
+    }
+    open("Phát hành thông báo", form(
+      field("Gửi tới", select("n-target", options.targets.map((t) => [t.value, t.label]))) +
+      field("Mở khi bấm vào", select("n-link", [["", "Không mở trang nào"], ["calendar", "Lịch làm việc"], ["plans", "Kế hoạch"], ["action", "Công việc"], ["directives", "Giao việc"], ["projects", "Dự án"], ["documents", "Văn bản"], ["news", "Bảng tin"]])) +
+      field("Tiêu đề", '<input id="n-title" type="text" maxlength="200">', true) +
+      field("Nội dung", '<textarea id="n-body" rows="4" maxlength="900"></textarea>', true) +
+      field("", '<label style="display:flex;gap:8px;align-items:center;font-weight:600"><input id="n-important" type="checkbox"> Đánh dấu quan trọng</label>', true),
+      "saveNotice", "Phát hành"))
   }
 
-  function saveNotice() {
+  async function saveNotice() {
     const title = val("n-title")
-    if (!required([title, "tiêu đề"], [val("n-body"), "nội dung"])) return
-    const s = scopeOf()
-    void vldcData.save("notices", { id: newId("NTF"), scope: s.scope, title, body: val("n-body"), time: `${vnDate(today()).slice(0, 5)} ${new Date().toTimeString().slice(0, 5)}`, priority: val("n-priority"), readBy: [me()], link: val("n-link"), ...(s.unit ? { unit: s.unit } : {}), ...(s.subUnit ? { subUnit: s.subUnit } : {}), ...(s.project !== "-" ? { project: s.project } : {}) })
-    close()
+    const body = val("n-body")
+    if (!required([title, "tiêu đề"], [body, "nội dung"])) return
+    const button = document.querySelector<HTMLButtonElement>('#modalBody button[onclick="saveNotice()"]')
+    if (button) button.disabled = true
+    try {
+      const sent = await publishAnnouncement({
+        title, body, link: val("n-link") || null, target: val("n-target"),
+        important: (document.getElementById("n-important") as HTMLInputElement | null)?.checked ?? false,
+      })
+      close()
+      alert(`Đã phát hành tới ${sent} người.`)
+    } catch (error) {
+      if (button) button.disabled = false
+      alert(`Không phát hành được: ${error instanceof Error ? error.message : "lỗi không xác định"}`)
+    }
   }
 
   // ----- Executive: meetings, risks, goals -----

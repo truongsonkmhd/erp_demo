@@ -17,6 +17,7 @@ public class AuditAppService {
     public static final String ROLE = "role";
     public static final String PERMISSION = "permission";
     public static final String DEPARTMENT = "department";
+    public static final String NOTIFICATION = "notification";
 
     private final AuditService auditService;
     private final CurrentActor currentActor;

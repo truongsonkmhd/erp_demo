@@ -26,9 +26,9 @@ import type { AuditEvent } from "./audit.ts"
 export const DATASETS = {
   inboxTasks: { collection: "inbox_tasks", seed: ex.inboxTasks, pages: ["action", "dashboard", "today"] },
   commonTasks: { collection: "common_tasks", seed: ex.commonTasks, pages: ["action"] },
-  calendarEvents: { collection: "calendar_events", seed: cal.calendarEvents, pages: ["today", "calendar", "dashboard"] },
+  calendarEvents: { collection: "calendar_events", api: true, seed: cal.calendarEvents, pages: ["today", "calendar", "dashboard"] },
   plans: { collection: "plans", seed: cal.plans, pages: ["today", "plans"] },
-  notices: { collection: "notices", seed: cal.notices, pages: ["notifications", "today", "dashboard"] },
+  notices: { collection: "notices", seed: cal.notices, pages: ["today", "dashboard"] },
   decisions: { collection: "decisions", seed: ex.decisions, pages: ["command"] },
   meetings: { collection: "meetings", seed: ex.meetings, pages: ["command", "meetings"] },
   strategicGoals: { collection: "strategic_goals", seed: ex.strategicGoals, pages: ["strategy", "command"] },

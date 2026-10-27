@@ -21,6 +21,8 @@ import org.springframework.stereotype.Component;
 @Component
 public class StompAuthInterceptor implements ChannelInterceptor {
     static final String TOPIC_PREFIX = "/topic/vldc/";
+    /** The caller's own notification queue; Spring maps it to that user's sessions only. */
+    static final String USER_NOTIFICATIONS = "/user" + NotificationBroadcaster.QUEUE;
 
     private final JwtService jwtService;
     private final UserDetailsService userDetailsService;
@@ -39,7 +41,9 @@ public class StompAuthInterceptor implements ChannelInterceptor {
             case SUBSCRIBE -> {
                 if (accessor.getUser() == null) throw new MessagingException("Unauthorized");
                 String destination = accessor.getDestination();
-                if (destination == null || !destination.startsWith(TOPIC_PREFIX)) throw new MessagingException("Forbidden destination");
+                boolean allowed = destination != null
+                        && (destination.startsWith(TOPIC_PREFIX) || USER_NOTIFICATIONS.equals(destination));
+                if (!allowed) throw new MessagingException("Forbidden destination");
             }
             case SEND -> throw new MessagingException("Sending is not allowed");
             default -> { }

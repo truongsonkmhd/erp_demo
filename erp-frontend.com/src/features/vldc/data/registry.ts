@@ -11,8 +11,8 @@ import { auditEvent, setAuditSink, type AuditEvent } from "./audit"
 
 type Collections = { [K in DatasetKey]: SyncedCollection<Row<K>> }
 
-/** One WebSocket for every API-backed collection; it opens when the first one subscribes. */
-const changeFeed = stompChangeFeed({
+/** One WebSocket for every API-backed collection (and the notification bell); it opens when the first one subscribes. */
+export const changeFeed = stompChangeFeed({
   url: () => socketUrl(API_BASE, window.location),
   token: getAccessToken,
   createClient: (config) => new Client(config),

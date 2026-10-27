@@ -1,6 +1,6 @@
-import { Bell, CalendarDays, ChevronRight, Inbox, Menu, Search, Sparkles, type LucideIcon } from "lucide-react"
+import { ChevronRight, Menu, Search } from "lucide-react"
 import { getPageMeta, getRoles, getShellBadges } from "@/features/vldc/legacy/engine"
-import { vldcActions } from "@/features/vldc/store"
+import { VldcNotificationBell } from "./VldcNotificationBell"
 
 type Props = {
   role: string
@@ -12,19 +12,12 @@ type Props = {
   onOpenPalette: () => void
 }
 
-type Shortcut = { page: string; label: string; icon: LucideIcon; badge?: { count: number; cls: string } }
-
 export function VldcTopbar({ role, roles, page, group, onRoleChange, onOpenMenu, onOpenPalette }: Props) {
   const allRoles = getRoles()
   const [title, sub] = getPageMeta(page) ?? ["", ""]
   // Recomputed on every render; the store bumps badgeSeq whenever the legacy data changes.
-  const badges = getShellBadges()
-  const shortcuts: Shortcut[] = [
-    { page: "assistant", label: "Trợ lý AI", icon: Sparkles },
-    { page: "notifications", label: "Thông báo", icon: Bell, badge: badges.notices },
-    { page: "calendar", label: "Lịch hôm nay", icon: CalendarDays, badge: badges.events },
-    { page: "action", label: "Việc của tôi", icon: Inbox, badge: badges.tasks },
-  ]
+  // Older in-browser business notices (workflow, Firestore); the bell itself counts the server notifications.
+  const legacyUnread = getShellBadges().notices.count
 
   return (
     <header className="vx-top">
@@ -53,19 +46,7 @@ export function VldcTopbar({ role, roles, page, group, onRoleChange, onOpenMenu,
       </button>
 
       <div className="vx-actions">
-        {shortcuts.map(({ page: target, label, icon: Icon, badge }) => (
-          <button
-            key={target}
-            type="button"
-            className={`vx-icon-btn vx-action${page === target ? " is-active" : ""}${target === "assistant" ? " is-ai" : ""}`}
-            onClick={() => vldcActions.show(target)}
-            title={badge ? `${label} (${badge.count})` : label}
-            aria-label={badge ? `${label}, ${badge.count} mục` : label}
-          >
-            <Icon size={19} />
-            {badge && badge.count > 0 && <span className={`vx-badge ${badge.cls === "b-danger" ? "is-danger" : ""}`}>{badge.count}</span>}
-          </button>
-        ))}
+        <VldcNotificationBell legacyUnread={legacyUnread} />
 
         {/* Only the roles the account holds (admin: all) — the backend still decides the menu. */}
         {roles.length > 1 && (

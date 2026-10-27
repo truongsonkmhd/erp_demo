@@ -7,8 +7,7 @@ import com.xxxx.ddd.application.model.command.CreateUserCommand;
 import com.xxxx.ddd.application.model.command.UpdateUserCommand;
 
 public interface UserAppService {
-    /** registrationStatus: null = every account, PENDING = self-registrations waiting for approval. */
-    UserPageDTO search(String keyword, String registrationStatus, int pageNo, int pageSize);
+    UserPageDTO search(String keyword, int pageNo, int pageSize);
 
     UserDTO getById(Long id);
 
@@ -21,8 +20,4 @@ public interface UserAppService {
     void changePassword(ChangePasswordCommand command);
 
     void resetPassword(Long id);
-
-    UserDTO approveRegistration(Long id, com.xxxx.ddd.application.model.command.ApproveRegistrationCommand command);
-
-    void rejectRegistration(Long id);
 }

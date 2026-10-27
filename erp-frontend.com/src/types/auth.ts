@@ -57,16 +57,8 @@ export interface EmployeeAccount {
   levelId: string
   baseSalary?: number
   active: boolean
-  /** Null for admin-created accounts; set for self-registered ones. */
-  registrationStatus?: RegistrationStatus | null
-  requestedOrgUnitId?: number | null
-  requestedOrgUnitName?: string | null
-  positionCode?: string | null
-  orgUnitId?: number | null
   createdAt: string
   updatedAt: string
 }
 
-export type RegistrationStatus = "PENDING" | "APPROVED" | "REJECTED"
-
-export type EmployeeAccountInput = Omit<EmployeeAccount, "id" | "createdAt" | "updatedAt" | "registrationStatus" | "requestedOrgUnitId" | "requestedOrgUnitName" | "positionCode" | "orgUnitId">
+export type EmployeeAccountInput = Omit<EmployeeAccount, "id" | "createdAt" | "updatedAt">

@@ -143,26 +143,3 @@ export function restoreSessionUser(): CurrentUser | null {
   if (!getAccessToken()) return null
   return getStoredUser()
 }
-
-export type RegistrationUnit = { id: number; code: string; name: string }
-
-export type RegisterInput = {
-  fullName: string
-  email: string
-  phone?: string
-  password: string
-  requestedOrgUnitId?: number
-}
-
-/** Self-registration: the account waits for an admin to grant roles and cannot sign in until approved. */
-export async function registerAccount(input: RegisterInput): Promise<void> {
-  await apiRequest("/api/authenticate/register", {
-    method: "POST",
-    auth: false,
-    body: { ...input, email: input.email.trim(), fullName: input.fullName.trim() },
-  })
-}
-
-export function getRegistrationUnits() {
-  return apiRequest<RegistrationUnit[]>("/api/authenticate/register/units", { auth: false })
-}

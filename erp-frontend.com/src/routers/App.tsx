@@ -117,7 +117,6 @@ const App = () => (
 
         <Route element={<PublicOnlyRoute />}>
           <Route path="/auth" element={<AuthScreen />} />
-          <Route path="/register" element={<AuthScreen mode="register" />} />
         </Route>
 
         <Route element={<ProtectedRoute />}>
@@ -287,7 +286,7 @@ const App = () => (
 
           {/* VLDC (chuyển từ vldc-erp-react): shell riêng, menu lấy từ /api/menus/me?module=vldc */}
           <Route path="/vldc" element={<Navigate to="/vldc/dashboard" replace />} />
-          <Route path="/vldc/:pageId" element={<VldcPage />} />
+          <Route path="/vldc/:pageId/*" element={<VldcPage />} />
         </Route>
 
         <Route path="*" element={<NotFound />} />

@@ -25,14 +25,18 @@ export type InboxRow = {
   mine: boolean
   /** Inline handler that opens the right detail modal. */
   open: string
+  /** Project (id) the row belongs to: it is listed inside that project. */
+  project?: string
+  /** A Nhiệm vụ: listed on its own, beside the projects. */
+  standalone?: boolean
 }
 
 export type InboxScope = "mine" | "all"
 export type UrgencyGroup = "overdue" | "today" | "week" | "later"
 export const GROUP_LABELS: Record<UrgencyGroup, string> = { overdue: "Quá hạn", today: "Hôm nay", week: "Trong 7 ngày", later: "Sau / chưa có hạn" }
 
-const WORK_TYPES: Record<WorkItem["type"], string> = { directive: "Chỉ đạo", task: "Việc được giao", payment: "Hồ sơ thanh toán" }
-const WORK_SOURCES: Record<WorkItem["type"], string> = { directive: "Giao việc", task: "Giao việc", payment: "Thanh toán liên phòng" }
+const WORK_TYPES: Record<WorkItem["type"], string> = { directive: "Chỉ đạo", task: "Việc được giao", payment: "Hồ sơ thanh toán", proposal: "Nhiệm vụ" }
+const WORK_SOURCES: Record<WorkItem["type"], string> = { directive: "Giao việc", task: "Giao việc", payment: "Thanh toán liên phòng", proposal: "Nhiệm vụ / Dự án" }
 /** Inbox task statuses that mean the role's step is finished. */
 const TASK_DONE = new Set(["Hoàn thành bước", "Đã bàn giao", "Hoàn thành", "Đã duyệt"])
 
@@ -55,6 +59,7 @@ export function inboxRows(work: WorkItem[], tasks: InboxTask[], role: string, sc
         id: x.id, kind: "work", type: WORK_TYPES[x.type], title: x.title, source: WORK_SOURCES[x.type], from: roleTitle(x.createdBy),
         owner: roleTitle(x.owner), status: x.status, priority: x.priority, due: x.due, slaText: sla.text, overdue: sla.overdue,
         mine: x.owner === role, open: "wfOpen",
+        ...(x.type === "proposal" ? { standalone: true } : x.project ? { project: x.project } : {}),
       }
     })
   const fromTasks = tasks
@@ -89,6 +94,31 @@ export function groupRows(rows: InboxRow[], today: string): Record<UrgencyGroup,
   const groups: Record<UrgencyGroup, InboxRow[]> = { overdue: [], today: [], week: [], later: [] }
   for (const r of rows) groups[urgencyOf(r, today)].push(r)
   return groups
+}
+
+/**
+ * The list as folders: each project holds its rows, a Nhiệm vụ stands beside the projects, and the rest (payments
+ * outside projects, department tasks, documents…) is gathered under "Việc khác" at the end. Entries keep the order of
+ * their first row, so sorting the rows first sorts the list.
+ */
+export type InboxEntry = { kind: "group"; key: string; rows: InboxRow[] } | { kind: "row"; row: InboxRow }
+export const OTHER_GROUP = "__other"
+
+export function inboxTree(rows: InboxRow[]): InboxEntry[] {
+  const entries: InboxEntry[] = []
+  const groups = new Map<string, InboxRow[]>()
+  const other: InboxRow[] = []
+  for (const r of rows) {
+    if (r.standalone) entries.push({ kind: "row", row: r })
+    else if (!r.project) other.push(r)
+    else if (groups.has(r.project)) groups.get(r.project)?.push(r)
+    else {
+      const list = [r]
+      groups.set(r.project, list)
+      entries.push({ kind: "group", key: r.project, rows: list })
+    }
+  }
+  return other.length ? [...entries, { kind: "group", key: OTHER_GROUP, rows: other }] : entries
 }
 
 export type InboxFilter = "mine" | "overdue" | "today" | "cc" | "all"

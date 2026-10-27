@@ -18,13 +18,16 @@ const changeFeed = stompChangeFeed({
   createClient: (config) => new Client(config),
 })
 
+/** A repo on the backend API /api/vldc/{collection}, sharing the one change feed. */
+export const apiRepoFor = <T extends { id: string }>(collection: string) => apiRepo<T>(collection, apiRequest, changeFeed)
+
 const collections = Object.fromEntries(
   (Object.keys(DATASETS) as DatasetKey[]).map((key) => {
-    const seed = () => (DATASETS[key].seed as (today: string) => { id: string }[])(localToday())
     const store = storageOf(key)
+    const seed = () => (store.blank ? [] : (DATASETS[key].seed as (today: string) => { id: string }[])(localToday()))
     // Every user save is audited, except the audit trail itself.
     const onSaved = key === "auditEvents" ? undefined : (rows: { id: string }[]) => rows.forEach((row) => auditEvent(store.firestore, row))
-    const primary = store.api ? apiRepo(DATASETS[key].collection, apiRequest, changeFeed) : firestoreRepo(store.firestore)
+    const primary = store.api ? apiRepoFor(DATASETS[key].collection) : firestoreRepo(store.firestore)
     return [key, createSyncedCollection(key, primary, localRepo(store.local), seed, { sharedSeed: store.shared, onSaved })]
   }),
 ) as unknown as Collections
@@ -35,8 +38,9 @@ let started: Promise<unknown> | undefined
 
 /** Synchronous, always-populated accessors for the legacy engine, plus lifecycle for the page host. */
 export const vldcData = {
+  /** Rows of a dataset; soft-deleted rows (deletedAt) are left out. */
   get<K extends DatasetKey>(key: K): Row<K>[] {
-    return collections[key].items() as Row<K>[]
+    return (collections[key].items() as Row<K>[]).filter((row) => !(row as { deletedAt?: string }).deletedAt)
   },
   save<K extends DatasetKey>(key: K, row: Row<K>): Promise<void> {
     return (collections[key] as SyncedCollection<Row<K>>).save(row)
@@ -52,7 +56,8 @@ export const vldcData = {
   offline(): boolean {
     return Object.values(collections).some((c) => c.mode() === "offline")
   },
+  /** Back to the sample data; datasets that start blank on the API are left alone. */
   resetAll(): Promise<unknown> {
-    return Promise.all(Object.values(collections).map((c) => c.reset()))
+    return Promise.all((Object.keys(collections) as DatasetKey[]).filter((key) => !storageOf(key).blank).map((key) => collections[key].reset()))
   },
 }

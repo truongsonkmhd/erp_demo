@@ -1,4 +1,4 @@
-import { isClosed, rolledUpProgress } from "./rules.ts"
+import { isClosed, isWork, rolledUpProgress } from "./rules.ts"
 import type { WorkItem } from "./types.ts"
 import { UNIT_DEFS, rolesOfUnit, unitName, type UnitCode } from "../data/org.ts"
 import { managedUnits, managesAllUnits } from "../data/access.ts"
@@ -90,7 +90,7 @@ export function visibleKpiUnits(role: string): Unit[] {
 /** KPI = completed ÷ all work the federation head gave the unit × 100 (approved = completed; sub-tasks are the unit's own split). */
 export function unitKpi(unit: Unit, all: WorkItem[], today: string): UnitKpi {
   const owns = unit.match ?? ((x: WorkItem) => unit.roles.includes(x.owner))
-  const items = all.filter((x) => x.type !== "payment" && owns(x)).sort((a, b) => a.due.localeCompare(b.due))
+  const items = all.filter((x) => isWork(x) && owns(x)).sort((a, b) => a.due.localeCompare(b.due))
   const flags = items.map((x) => itemFlags(x, today))
   const submitted = items.filter((x) => x.history.some((h) => h.action === "submit"))
   const started = items.filter((x) => x.status !== "Mới giao")

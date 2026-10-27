@@ -10,6 +10,9 @@ type MenuGroup<I extends MenuItem> = { items: I[] }
 /** Pages without their own menu entry, opened from a button of their parent page (which stays highlighted). */
 const MERGED_INTO: Record<string, string> = { units: "organization" }
 
+/** Retired pages and where their links and addresses lead now (Giao việc lives inside each project). */
+const REDIRECTS: Record<string, string> = { directives: "projects" }
+
 /** Pages removed for every account (menu, links and direct URLs). */
 const HIDDEN_FOR_ALL = ["crossflow", "handoff", "today", "plans", "finance"]
 
@@ -37,11 +40,14 @@ const PAGE_TABS: [string, string][][] = [
 const pageOf = (item: MenuItem) => item.url.split("/").filter(Boolean).pop() ?? item.code.replace(/^vldc-/, "")
 
 export function filterMenuGroups<I extends MenuItem, G extends MenuGroup<I>>(groups: G[], roles: string[]): G[] {
-  const hidden = new Set([...HIDDEN_FOR_ALL, ...Object.keys(MERGED_INTO), ...roles.flatMap((r) => HIDDEN_PAGES[r] ?? [])])
+  const hidden = new Set([...HIDDEN_FOR_ALL, ...Object.keys(MERGED_INTO), ...Object.keys(REDIRECTS), ...roles.flatMap((r) => HIDDEN_PAGES[r] ?? [])])
   return groups
     .map((g) => ({ ...g, items: g.items.filter((i) => !hidden.has(pageOf(i))) }))
     .filter((g) => g.items.length)
 }
+
+/** The page a retired page now leads to, or the page itself. */
+export const redirectOf = (page: string) => REDIRECTS[page] ?? page
 
 /** The menu entry a page belongs to (a merged page highlights its parent). */
 export const menuPageFor = (page: string) =>

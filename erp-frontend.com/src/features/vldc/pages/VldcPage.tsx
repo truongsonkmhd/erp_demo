@@ -1,10 +1,10 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
-import { blockedPages, menuPageFor, pruneBlockedLinks } from "@/features/vldc/data/menuPolicy"
+import { blockedPages, menuPageFor, pruneBlockedLinks, redirectOf } from "@/features/vldc/data/menuPolicy"
 import { useLocation, useNavigate, useParams } from "react-router-dom"
 import toast from "react-hot-toast"
 import { useAuth } from "@/services/auth/AuthContext"
 import { hasPage, renderPage, setCurrentRole } from "@/features/vldc/legacy/engine"
-import { setVldcNavigator, useVldcRole, useVldcShell, vldcActions } from "@/features/vldc/store"
+import { consumeKeepScroll, setVldcNavigator, useVldcRole, useVldcShell, vldcActions } from "@/features/vldc/store"
 import { useVldcMenus } from "@/features/vldc/useVldcMenus"
 import { workflowStore } from "@/features/vldc/workflow/repository"
 import { setWorkflowContext } from "@/features/vldc/workflow/views"
@@ -50,7 +50,7 @@ function initialsOf(name: string) {
  */
 export default function VldcPage() {
   const { pageId = "dashboard" } = useParams()
-  const { pathname } = useLocation()
+  const { pathname, search } = useLocation()
   const { user, signOut } = useAuth()
   const navigate = useNavigate()
   const { navSeq, modal } = useVldcShell()
@@ -59,7 +59,8 @@ export default function VldcPage() {
   const [collapsed, setCollapsed] = useState(readCollapsed)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
-  const known = hasPage(pageId)
+  const redirect = redirectOf(pageId)
+  const known = redirect === pageId && hasPage(pageId)
   const userName = user?.fullName || user?.email || ""
   // A merged page (Văn bản, Năng lực…) lights up its parent menu entry.
   const menuPath = pathname.startsWith("/vldc/") ? `/vldc/${menuPageFor(pageId)}` : pathname
@@ -126,11 +127,11 @@ export default function VldcPage() {
     }
   }, [modal])
 
-  // Modals and the mobile drawer belong to the page that opened them.
+  // Modals and the mobile drawer belong to the page (or sub page) that opened them.
   useEffect(() => {
     setMobileOpen(false)
     return vldcActions.closeModal
-  }, [pageId])
+  }, [pathname])
 
   useEffect(() => {
     try {
@@ -159,8 +160,9 @@ export default function VldcPage() {
   const blocked = useMemo(() => blockedPages(user?.roleCodes ?? []), [user])
   const shellRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    if (blocked.has(pageId)) navigate("/vldc/dashboard", { replace: true })
-  }, [pageId, blocked, navigate])
+    if (redirect !== pageId) navigate(`/vldc/${redirect}`, { replace: true })
+    else if (blocked.has(pageId)) navigate("/vldc/dashboard", { replace: true })
+  }, [pageId, redirect, blocked, navigate])
   useEffect(() => {
     const root = shellRef.current
     if (!root || !blocked.size) return
@@ -171,13 +173,19 @@ export default function VldcPage() {
     return () => observer.disconnect()
   }, [blocked])
 
+  const lastLocRef = useRef({ pathname, search })
   useLayoutEffect(() => {
     if (!known || blocked.has(pageId)) return
     setCurrentRole(role)
     renderPage(pageId)
-    if (keepScrollRef.current) keepScrollRef.current = false
-    else window.scrollTo({ top: 0 })
-  }, [pageId, role, navSeq, known, blocked])
+    // A re-render of the same page, or only the query changing (?selected opens an issue panel), keeps the scroll.
+    const onlyQuery = lastLocRef.current.pathname === pathname && lastLocRef.current.search !== search
+    lastLocRef.current = { pathname, search }
+    const keep = consumeKeepScroll() || keepScrollRef.current || onlyQuery
+    keepScrollRef.current = false
+    if (!keep) window.scrollTo({ top: 0 })
+    // A sub page (/vldc/projects/<id>…) is read from the address, so it re-renders when the address changes.
+  }, [pageId, pathname, search, role, navSeq, known, blocked])
 
   const handleLogout = async () => {
     try {

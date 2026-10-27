@@ -29,6 +29,10 @@ export const ACTION_LABELS: Record<string, string> = {
   delegate: "Giao việc con",
   advance: "Chuyển bước",
   resubmit: "Trình lại",
+  endorse: "Duyệt đề xuất",
+  reject: "Từ chối",
+  move: "Chuyển trạng thái",
+  delete: "Xoá",
 }
 
 /** Best human label of a record for the timeline. */

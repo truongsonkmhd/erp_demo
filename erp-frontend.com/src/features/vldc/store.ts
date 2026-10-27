@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react"
 import { flushSync } from "react-dom"
 import { connectShell, getRoles, hasPage } from "@/features/vldc/legacy/engine"
+import { redirectOf } from "@/features/vldc/data/menuPolicy"
 import type { CurrentUser } from "@/services/auth/AuthService"
 
 export const VLDC_ROOT = "/vldc"
@@ -18,6 +19,14 @@ export type VldcShellState = {
 
 let state: VldcShellState = { navSeq: 0, modal: null, badgeSeq: 0 }
 let navigate: (to: string) => void = () => {}
+/** Set by rerender(): the next render keeps the scroll position (the same page drawn again, not a navigation). */
+let keepScrollNext = false
+
+export function consumeKeepScroll(): boolean {
+  const keep = keepScrollNext
+  keepScrollNext = false
+  return keep
+}
 
 const listeners = new Set<() => void>()
 
@@ -38,9 +47,13 @@ export function setVldcNavigator(fn: (to: string) => void) {
 
 export const vldcActions = {
   show(page: string) {
-    if (!hasPage(page)) return
-    const to = `${VLDC_ROOT}/${page}`
-    if (window.location.pathname === to) setState({ navSeq: state.navSeq + 1 })
+    vldcActions.go(redirectOf(page))
+  },
+  /** Opens a page or one of its sub pages ("projects/VLDC-2027-001/giao-viec?wbs=W1"); the same address re-renders. */
+  go(path: string) {
+    if (!hasPage(path.split(/[/?]/)[0])) return
+    const to = `${VLDC_ROOT}/${path}`
+    if (window.location.pathname + window.location.search === to) setState({ navSeq: state.navSeq + 1 })
     else navigate(to)
   },
   openModal(title: string, html: string) {
@@ -57,6 +70,7 @@ export const vldcActions = {
   },
   /** Re-renders the current page in place (used when shared workflow data changes). */
   rerender() {
+    keepScrollNext = true
     setState({ navSeq: state.navSeq + 1 })
   },
 }

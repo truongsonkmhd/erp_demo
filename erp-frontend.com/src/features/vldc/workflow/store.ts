@@ -1,5 +1,5 @@
-import type { WorkItem } from "./types.ts"
-import { allowedActions, applyAction, blockedReason, type ActionInput, type WorkAction } from "./rules.ts"
+import type { WorkItem, WorkStatus } from "./types.ts"
+import { allowedActions, applyAction, blockedReason, deleteWork, moveWork, type ActionInput, type WorkAction } from "./rules.ts"
 import { createSyncedCollection, type Repo } from "../data/syncedCollection.ts"
 
 export type WorkItemRepo = Repo<WorkItem>
@@ -16,7 +16,10 @@ export function createWorkflowStore(
   const col = createSyncedCollection("Workflow", primary, fallback, seed, { saveTimeoutMs, seedUntilLoaded: false, onSaved })
   return {
     start: col.start,
-    items: col.items,
+    /** Live work; soft-deleted items are left out. */
+    items: () => col.items().filter((x) => !x.deletedAt),
+    /** Every item, deleted ones too (their history still notifies the people involved). */
+    allItems: col.items,
     mode: col.mode,
     onChange: col.onChange,
     async dispatch(id: string, action: WorkAction, input: ActionInput, role: string, perms: string[]): Promise<void> {
@@ -28,6 +31,19 @@ export function createWorkflowStore(
       }
       const result = applyAction(item, action, input, role, new Date().toISOString(), items)
       await col.saveMany(result.created ? [result.item, result.created] : [result.item])
+    },
+    /** Soft delete by the creator (see deleteWork). */
+    async remove(id: string, role: string): Promise<void> {
+      const items = col.items()
+      const item = items.find((x) => x.id === id && !x.deletedAt)
+      if (!item) throw new Error(`Không tìm thấy ${id}`)
+      await col.save(deleteWork(item, role, new Date().toISOString(), items))
+    },
+    /** Free move of a project task by Phòng Kỹ thuật (see moveWork). */
+    async moveTo(id: string, target: WorkStatus, role: string, manager: boolean): Promise<void> {
+      const item = col.items().find((x) => x.id === id && !x.deletedAt)
+      if (!item) throw new Error(`Không tìm thấy ${id}`)
+      await col.save(moveWork(item, target, role, new Date().toISOString(), { manager }))
     },
     add: col.save,
     reset: col.reset,

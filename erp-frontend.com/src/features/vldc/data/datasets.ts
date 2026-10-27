@@ -38,7 +38,8 @@ export const DATASETS = {
   orgStats: { collection: "org_stats", seed: org.orgStats, pages: ["organization", "capability", "hr"] },
   digitalAdoption: { collection: "digital_adoption", seed: org.digitalAdoption, pages: ["digital"] },
   equipment: { collection: "equipment", seed: eq.equipment, pages: ["equipment", "equipmentcatalog", "dashboard", "risks"] },
-  projects: { collection: "projects", seed: pr.projects, pages: ["projects", "finance", "dashboard"] },
+  // Off Firebase: the backend API holds the projects; the screen starts empty (the seed only serves tests).
+  projects: { collection: "projects", api: true, blank: true, seed: pr.projects, pages: ["projects", "finance", "dashboard"] },
   financeLines: { collection: "finance_lines", seed: pr.financeLines, pages: ["finance"] },
   disbursement: { collection: "disbursement", seed: pr.disbursement, pages: ["finance", "dashboard"] },
   staffSkills: { collection: "staff_skills", seed: hr.staffSkills, pages: ["hr"] },
@@ -73,11 +74,16 @@ export const DATASETS = {
   auditEvents: { collection: "audit_events", seed: (): AuditEvent[] => [], pages: ["audit"] },
 } as const
 
-/** Firestore collection and localStorage key of a dataset, and whether the backend API stores it. */
-export function storageOf(key: DatasetKey): { firestore: string; local: string; shared: boolean; api: boolean } {
-  const def: { collection: string; api?: boolean; shared?: { firestore: string; local: string } } = DATASETS[key]
+/**
+ * Firestore collection and localStorage key of a dataset, and whether the backend API stores it. blank: started empty
+ * on the API (no seed, never reset to one) with its own local copy, so nothing from the Firebase era shows up.
+ */
+export function storageOf(key: DatasetKey): { firestore: string; local: string; shared: boolean; api: boolean; blank: boolean } {
+  const def: { collection: string; api?: boolean; blank?: boolean; shared?: { firestore: string; local: string } } = DATASETS[key]
   const api = def.api === true
-  return def.shared ? { ...def.shared, shared: true, api } : { firestore: `vldc_${def.collection}`, local: `vldc_${def.collection}_v1`, shared: false, api }
+  const blank = def.blank === true
+  if (def.shared) return { ...def.shared, shared: true, api, blank }
+  return { firestore: `vldc_${def.collection}`, local: blank ? `vldc_${def.collection}_api_v1` : `vldc_${def.collection}_v1`, shared: false, api, blank }
 }
 
 export type DatasetKey = keyof typeof DATASETS

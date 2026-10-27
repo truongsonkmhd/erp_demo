@@ -1,5 +1,6 @@
 package com.xxxx.ddd.controller.exception;
 
+import com.xxxx.ddd.application.exception.ConflictException;
 import com.xxxx.ddd.application.exception.NotFoundException;
 import com.xxxx.ddd.controller.model.enums.ResultUtil;
 import com.xxxx.ddd.controller.model.vo.ResultMessage;
@@ -63,6 +64,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ResultMessage<Object>> unreadable(HttpMessageNotReadableException e) {
         return error(HttpStatus.BAD_REQUEST, "Invalid request body");
+    }
+
+    /** Wrong status for the action or a duplicate code: the message says why. */
+    @ExceptionHandler(ConflictException.class)
+    public ResponseEntity<ResultMessage<Object>> conflict(ConflictException e) {
+        return error(HttpStatus.CONFLICT, e.getMessage());
     }
 
     @ExceptionHandler(NotFoundException.class)

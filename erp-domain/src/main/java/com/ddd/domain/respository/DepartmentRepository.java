@@ -7,6 +7,7 @@ import java.util.Optional;
 public interface DepartmentRepository {
     List<Department> findAll();
     Optional<Department> findById(Long id);
+    Optional<Department> findByCode(String code);
     boolean existsByCode(String code);
     boolean existsByCodeAndIdNot(String code, Long id);
     long countRoles(Long id);

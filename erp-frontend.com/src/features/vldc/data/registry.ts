@@ -56,8 +56,8 @@ export const vldcData = {
   offline(): boolean {
     return Object.values(collections).some((c) => c.mode() === "offline")
   },
-  /** Back to the sample data; datasets that start blank on the API are left alone. */
+  /** Back to the sample data; datasets that start blank on the API or that the backend owns are left alone. */
   resetAll(): Promise<unknown> {
-    return Promise.all((Object.keys(collections) as DatasetKey[]).filter((key) => !storageOf(key).blank).map((key) => collections[key].reset()))
+    return Promise.all((Object.keys(collections) as DatasetKey[]).filter((key) => !storageOf(key).blank && !storageOf(key).owned).map((key) => collections[key].reset()))
   },
 }

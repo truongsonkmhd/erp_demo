@@ -3,17 +3,17 @@ import { disbursementView, projectsView } from "./projectView"
 import { staffView } from "./staffView"
 import { subUnitsOf } from "./subUnitCore"
 import { overallKpi, unitKpis } from "../workflow/kpi"
-import { isClosed } from "../workflow/rules"
+import { hasPerm, isClosed } from "../workflow/rules"
 import { workflowStore } from "../workflow/repository"
 import { localToday, vnDate } from "./dates"
 import * as M from "./metrics"
 import { vldcData } from "./registry"
-import { managesAllUnits, rolePosition } from "./access"
+import { managedUnits, managesAllUnits, rolePosition } from "./access"
 import type { Project, Risk } from "./types"
 
 /** Engine pages rebuilt on Firestore data: every tile is computed from the records shown below it. */
 
-type Ctx = { role(): string }
+type Ctx = { role(): string; perms?(): string[] }
 const D = vldcData.get
 const content = () => document.getElementById("content")
 const today = () => localToday()
@@ -108,14 +108,17 @@ function command() {
 <div class="grid twoeq" style="margin-top:14px"><div class="card"><h3>Top rủi ro cần theo dõi</h3>${top.map((r) => `<div class="alert"><span class="dot ${M.riskLevel(r) === "Cao" ? "red" : "yellow"}"></span><div><b>${esc(r.title)}</b><div class="mini">${esc(r.id)} • Owner: ${esc(r.owner)} • ${esc(r.mitigation)}</div></div></div>`).join("")}<button class="btn btn-light" onclick="show('risks')">Risk Register</button></div><div class="card"><h3>Lịch quyết định / cuộc họp</h3>${meetingsAll.slice(0, 2).map((m) => `<div class="meeting-card"><div class="meeting-date"><b>${m.date.slice(0, 2)}</b><span>Th${m.date.slice(3, 5)}</span></div><div><h4>${esc(m.title)}</h4><p>${esc(m.time)} • ${esc(m.scope)}</p></div><button class="btn btn-light" ${jsCall("meetingDetail", m.id)}>Mở</button></div>`).join("")}</div></div>`
 }
 
-function organization() {
+function organization(ctx: Ctx) {
   const units = D("orgUnits")
+  const perms = ctx.perms?.() ?? []
+  // Sửa đơn vị: the whole Liên đoàn with vldc-organization:create, own units with :update (orgEdit in subUnitPage).
+  const canOrg = (unit: string) => hasPerm(perms, "vldc-organization:create") || (hasPerm(perms, "vldc-organization:update") && managedUnits(ctx.role()).has(unit))
   // Head counts and tổ come from the staff profiles and the tổ list, not from the published figures.
   const people = staffView()
   const subs = D("subUnits")
   const support = units.filter((u) => u.type === "Bộ máy giúp việc")
   const direct = units.filter((u) => u.type === "Đơn vị trực thuộc")
-  return `<div class="card"><div class="card-head"><div><h3>Cơ cấu tổ chức & chức năng</h3><div class="mini">${support.length} phòng chức năng • ${direct.length} đơn vị trực thuộc • ${people.length} nhân sự • ${subs.filter((x) => x.active).length} tổ/phòng</div></div><div class="toolbar"><span class="official-badge">DỮ LIỆU CÔNG KHAI</span><button class="btn btn-primary" onclick="show('units')">Xem đơn vị</button></div></div><div class="org-grid">${units.map((u) => `<div class="org-card"><span class="org-chip">${esc(u.type)}</span><h4>${esc(u.name)}</h4><div class="org-meta"><span><b>Lãnh đạo:</b> ${esc(u.leader)}</span>${u.deputy ? `<span><b>Phó:</b> ${esc(u.deputy)}</span>` : ""}<span><b>Nhân sự:</b> ${people.filter((p) => p.unit === u.id).length} người</span></div><p>${esc(u.mission)}</p>${(() => { const mine = subUnitsOf(u.id, subs); return mine.length ? `<div class="mini" style="margin-bottom:8px"><b>Tổ/phòng:</b> ${mine.map((x) => esc(x.name)).join(" • ")}</div>` : "" })()}</div>`).join("")}</div></div>`
+  return `<div class="card"><div class="card-head"><div><h3>Cơ cấu tổ chức & chức năng</h3><div class="mini">${support.length} phòng chức năng • ${direct.length} đơn vị trực thuộc • ${people.length} nhân sự • ${subs.filter((x) => x.active).length} tổ/phòng</div></div><div class="toolbar"><span class="official-badge">DỮ LIỆU CÔNG KHAI</span><button class="btn btn-primary" onclick="show('units')">Xem đơn vị</button></div></div><div class="org-grid">${units.map((u) => `<div class="org-card"><span class="org-chip">${esc(u.type)}</span>${canOrg(u.id) ? `<button class="btn btn-light vx-org-edit" ${jsCall("orgEdit", u.id)}>Sửa</button>` : ""}<h4>${esc(u.name)}</h4><div class="org-meta"><span><b>Lãnh đạo:</b> ${esc(u.leader || "Chưa chỉ định")}</span>${u.deputy ? `<span><b>Phó:</b> ${esc(u.deputy)}</span>` : ""}<span><b>Nhân sự:</b> ${people.filter((p) => p.unit === u.id).length} người</span></div><p>${esc(u.mission)}</p>${(() => { const mine = subUnitsOf(u.id, subs); return mine.length ? `<div class="mini" style="margin-bottom:8px"><b>Tổ/phòng:</b> ${mine.map((x) => esc(x.name)).join(" • ")}</div>` : "" })()}</div>`).join("")}</div></div>`
 }
 
 function equipmentCatalog() {

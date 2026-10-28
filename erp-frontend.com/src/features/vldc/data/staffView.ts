@@ -6,5 +6,8 @@ import type { StaffProfile } from "./types"
 
 let seed: StaffProfile[] | undefined
 
-/** Stored staff profiles, with the seeded tổ filled in for profiles saved before tổ existed. */
-export const staffView = (): StaffProfile[] => withSeedSubUnits(vldcData.get("staffProfiles"), (seed ??= staffProfiles(localToday())))
+/** Every stored profile, people who left included (the Nhân sự list can show them). */
+export const allStaffView = (): StaffProfile[] => withSeedSubUnits(vldcData.get("staffProfiles"), (seed ??= staffProfiles(localToday())))
+
+/** The people working now: what counts, KPIs, pickers and the capability figures use. */
+export const staffView = (): StaffProfile[] => allStaffView().filter((p) => p.status !== "NGHI_VIEC")

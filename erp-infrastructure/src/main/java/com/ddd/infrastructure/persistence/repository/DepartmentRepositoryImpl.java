@@ -24,6 +24,7 @@ public class DepartmentRepositoryImpl implements DepartmentRepository {
 
     public List<Department> findAll() { return mapper.findAll(); }
     public Optional<Department> findById(Long id) { return mapper.findById(id); }
+    public Optional<Department> findByCode(String code) { return mapper.findByCode(code); }
     public boolean existsByCode(String code) { return mapper.existsByCode(code); }
     public boolean existsByCodeAndIdNot(String code, Long id) { return mapper.existsByCodeAndIdNot(code, id); }
     public long countRoles(Long id) { return roles.countByDepartmentId(id); }

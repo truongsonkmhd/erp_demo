@@ -5,11 +5,13 @@ import type { Education, StaffProfile } from "./types.ts"
 export const EDUCATION_LEVELS: Education[] = ["Tiến sĩ", "Thạc sĩ", "Kỹ sư/Cử nhân", "KTV/Công nhân"]
 export type ExpBand = "under5" | "from5to15" | "over15"
 export type AgeBand = "under30" | "30to45" | "over45"
+/** status "" = people working now, "left" = who left, "all" = everyone. */
 export type StaffFilter = {
   query: string; unit: string; subUnit: string; education: string; age: "" | AgeBand; exp: "" | ExpBand; cert: "" | "expiring"; onField: "" | "yes" | "no"
+  status: "" | "left" | "all"
 }
 export type StaffSort = "name" | "age" | "education" | "experience" | "unit"
-export const EMPTY_STAFF_FILTER: StaffFilter = { query: "", unit: "", subUnit: "", education: "", age: "", exp: "", cert: "", onField: "" }
+export const EMPTY_STAFF_FILTER: StaffFilter = { query: "", unit: "", subUnit: "", education: "", age: "", exp: "", cert: "", onField: "", status: "" }
 /** A certificate counts as "expiring" within this many days. */
 export const CERT_WARN_DAYS = 60
 
@@ -17,7 +19,9 @@ export const ageOf = (p: StaffProfile, today: string) => Number(today.slice(0, 4
 export const expBand = (years: number): ExpBand => (years < 5 ? "under5" : years <= 15 ? "from5to15" : "over15")
 export const ageBand = (age: number): AgeBand => (age < 30 ? "under30" : age <= 45 ? "30to45" : "over45")
 
+/** A certificate without an expiry date never runs out. */
 export function certState(expiry: string, today: string): "expired" | "expiring" | "valid" {
+  if (!expiry) return "valid"
   if (expiry < today) return "expired"
   return expiry <= addDays(today, CERT_WARN_DAYS) ? "expiring" : "valid"
 }
@@ -44,7 +48,8 @@ export function filterStaff(staff: StaffProfile[], f: StaffFilter, today: string
     && (!f.age || ageBand(ageOf(p, today)) === f.age)
     && (!f.exp || expBand(p.experience) === f.exp)
     && (!f.cert || p.certs.some((c) => certState(c.expiry, today) !== "valid"))
-    && (!f.onField || p.onField === (f.onField === "yes")))
+    && (!f.onField || p.onField === (f.onField === "yes"))
+    && (f.status === "all" || (f.status === "left") === (p.status === "NGHI_VIEC")))
 }
 
 const givenName = (name: string) => name.trim().split(/\s+/).pop() ?? ""

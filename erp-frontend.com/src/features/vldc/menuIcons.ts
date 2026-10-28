@@ -30,6 +30,7 @@ import {
   Forward,
   Gauge,
   History,
+  KeyRound,
   Inbox,
   Landmark,
   LayoutDashboard,
@@ -60,7 +61,7 @@ const icons: Record<string, LucideIcon> = {
   Archive, ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Award, BarChart3, Bell, BellRing, BookOpen, BookText,
   BriefcaseBusiness, Building2, Calculator, CalendarDays, CheckCheck, Cpu, CreditCard, Database, DatabaseZap,
   FileBarChart, FilePlus2, FileSignature, FileText, Flag, FlaskConical, FolderKanban, FolderOpen, Forward, Gauge,
-  History, Inbox, Landmark, LayoutDashboard, ListChecks, Lock, MapPinned, Network, Newspaper, Package, Radar, Receipt, Send,
+  History, Inbox, KeyRound, Landmark, LayoutDashboard, ListChecks, Lock, MapPinned, Network, Newspaper, Package, Radar, Receipt, Send,
   ShieldAlert, Sparkles, Sun, Target, Upload, UserRound, Users, Wallet, Workflow, Wrench,
 }
 

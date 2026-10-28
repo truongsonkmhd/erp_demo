@@ -21,7 +21,8 @@ import type { AuditEvent } from "./audit.ts"
  * Every Firestore-backed business dataset: collection vldc_<collection>, its seed, and the engine
  * pages that show it (re-rendered in place when the data changes). A "shared" dataset reuses a collection
  * that other screens also own (Firestore name + localStorage key given explicitly; seeding only tops up).
- * An "api" dataset is stored by the Spring backend (/api/vldc/<collection>, MySQL) instead of Firestore.
+ * An "api" dataset is stored by the Spring backend (/api/vldc/<collection>, MySQL) instead of Firestore; an "owned" one
+ * is kept in its own tables there (nhân sự, tổ/phòng, đơn vị, skill matrix): seeded by migration, never reset from here.
  */
 export const DATASETS = {
   inboxTasks: { collection: "inbox_tasks", seed: ex.inboxTasks, pages: ["action", "dashboard", "today"] },
@@ -34,7 +35,7 @@ export const DATASETS = {
   strategicGoals: { collection: "strategic_goals", seed: ex.strategicGoals, pages: ["strategy", "command"] },
   initiatives: { collection: "initiatives", seed: ex.initiatives, pages: ["strategy"] },
   risks: { collection: "risks", seed: ex.risks, pages: ["risks", "command", "dashboard", "projects"] },
-  orgUnits: { collection: "org_units", seed: org.orgUnits, pages: ["organization", "capability", "units"] },
+  orgUnits: { collection: "org_units", api: true, owned: true, seed: org.orgUnits, pages: ["organization", "capability", "units", "hr"] },
   orgStats: { collection: "org_stats", seed: org.orgStats, pages: ["organization", "capability", "hr"] },
   digitalAdoption: { collection: "digital_adoption", seed: org.digitalAdoption, pages: ["digital"] },
   equipment: { collection: "equipment", seed: eq.equipment, pages: ["equipment", "equipmentcatalog", "dashboard", "risks"] },
@@ -42,7 +43,7 @@ export const DATASETS = {
   projects: { collection: "projects", api: true, blank: true, seed: pr.projects, pages: ["projects", "finance", "dashboard"] },
   financeLines: { collection: "finance_lines", seed: pr.financeLines, pages: ["finance"] },
   disbursement: { collection: "disbursement", seed: pr.disbursement, pages: ["finance", "dashboard"] },
-  staffSkills: { collection: "staff_skills", seed: hr.staffSkills, pages: ["hr"] },
+  staffSkills: { collection: "staff_skills", api: true, owned: true, seed: hr.staffSkills, pages: ["hr", "capability"] },
   contracts: { collection: "contracts", seed: ct.contracts, pages: ["contracts", "receivables", "payables", "accounting", "acctreports"] },
   vouchers: { collection: "vouchers", seed: acc.vouchers, pages: ["vouchers", "ledgers", "reconcile", "accounting", "cashbank"] },
   advances: { collection: "advances", seed: acc.advances, pages: ["advances", "accounting", "acctreports"] },
@@ -64,10 +65,10 @@ export const DATASETS = {
   alertRules: { collection: "alert_rules", seed: gv.alertRules, pages: ["alerts", "dashboard"] },
   reportCatalog: { collection: "report_catalog", seed: gv.reportCatalog, pages: ["reports"] },
   docTemplates: { collection: "doc_templates", seed: gv.docTemplates, pages: ["generator"] },
-  subUnits: { collection: "sub_units", seed: su.subUnits, pages: ["units", "organization", "hr", "performance", "dashboard", "news"] },
+  subUnits: { collection: "sub_units", api: true, owned: true, seed: su.subUnits, pages: ["units", "organization", "hr", "performance", "dashboard", "news"] },
   scienceTopics: { collection: "science_topics", seed: sc.scienceTopics, pages: ["research", "action"] },
   docAssignments: { collection: "doc_assignments", seed: da.docAssignments, pages: ["documents", "action", "dashboard"] },
-  staffProfiles: { collection: "staff_profiles", seed: st.staffProfiles, pages: ["capability", "hr"] },
+  staffProfiles: { collection: "staff_profiles", api: true, owned: true, seed: st.staffProfiles, pages: ["capability", "hr", "organization", "units", "accounts"] },
   news: { collection: "news", api: true, seed: nw.news, pages: ["news", "dashboard"] },
   debtRecords: { collection: "debt_records", seed: lg.debtRecords, pages: ["debts", "cashin", "cashout", "dashboard"] },
   cashEntries: { collection: "cash_entries", seed: lg.cashEntries, pages: ["cashin", "cashout", "debts", "dashboard", "finance", "acctreports"] },
@@ -78,12 +79,14 @@ export const DATASETS = {
  * Firestore collection and localStorage key of a dataset, and whether the backend API stores it. blank: started empty
  * on the API (no seed, never reset to one) with its own local copy, so nothing from the Firebase era shows up.
  */
-export function storageOf(key: DatasetKey): { firestore: string; local: string; shared: boolean; api: boolean; blank: boolean } {
-  const def: { collection: string; api?: boolean; blank?: boolean; shared?: { firestore: string; local: string } } = DATASETS[key]
+export function storageOf(key: DatasetKey): { firestore: string; local: string; shared: boolean; api: boolean; blank: boolean; owned: boolean } {
+  const def: { collection: string; api?: boolean; blank?: boolean; owned?: boolean; shared?: { firestore: string; local: string } } = DATASETS[key]
   const api = def.api === true
   const blank = def.blank === true
-  if (def.shared) return { ...def.shared, shared: true, api, blank }
-  return { firestore: `vldc_${def.collection}`, local: blank ? `vldc_${def.collection}_api_v1` : `vldc_${def.collection}_v1`, shared: false, api, blank }
+  const owned = def.owned === true
+  if (def.shared) return { ...def.shared, shared: true, api, blank, owned }
+  const local = blank ? `vldc_${def.collection}_api_v1` : owned ? `vldc_${def.collection}_db_v1` : `vldc_${def.collection}_v1`
+  return { firestore: `vldc_${def.collection}`, local, shared: false, api, blank, owned }
 }
 
 export type DatasetKey = keyof typeof DATASETS

@@ -775,6 +775,17 @@
 .vldc-scope .vx-skill { display: inline-flex; gap: 3px; }
 .vldc-scope .vx-skill i { width: 8px; height: 8px; border-radius: 50%; background: #dfe7ef; }
 .vldc-scope .vx-skill i.on { background: var(--primary); }
+.vldc-scope .vx-staff-left td { color: var(--muted, #6b7a8c); }
+.vldc-scope .vx-cert-row { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 6px; margin-bottom: 6px; }
+.vldc-scope .vx-acc-roles { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 4px 12px; }
+.vldc-scope .vx-acc-roles label { display: flex; align-items: center; gap: 6px; font-weight: 400; }
+.vldc-scope .vx-acc-actions { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+.vldc-scope .vx-acc-actions .btn { padding: 4px 8px; font-size: 12px; }
+.vldc-scope .org-card { position: relative; }
+.vldc-scope .vx-org-edit { position: absolute; top: 10px; right: 10px; padding: 3px 10px; font-size: 12px; }
+@media (max-width: 640px) {
+  .vldc-scope .vx-cert-row { grid-template-columns: 1fr 1fr; }
+}
 .vldc-scope .vx-hr-unit { padding: 8px 6px; border-bottom: 1px solid var(--line); }
 .vldc-scope .vx-hr-unit-head { display: flex; justify-content: space-between; margin-bottom: 5px; }
 .vldc-scope .vx-hr-bar { height: 8px; border-radius: 99px; background: #e9eef3; overflow: hidden; }

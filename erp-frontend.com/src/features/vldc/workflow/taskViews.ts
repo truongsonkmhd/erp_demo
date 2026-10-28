@@ -1,6 +1,7 @@
 import Sortable from "sortablejs"
 import { escapeHtml as esc, formatDate, formatTime, jsCall } from "./html"
 import { crumbsHtml, multiSelectHtml } from "./views"
+import { confirmDialog, notify, reasonDialog } from "./dialogs"
 import { avatarHtml, dueHtml, lozengeHtml, personName, projectBase, projectHeaderHtml } from "./workViews"
 import { entryStateHtml, me, runAction, workCache } from "../data/workStore"
 import {
@@ -150,15 +151,25 @@ function act(code: string, action: string, note: string) {
 
 function taskAct(code: string, action: string) {
   const note = inputValue("wf-note")
-  if ((action === "RETURN" || action === "COMMENT") && !note) return alert(action === "RETURN" ? "Vui lòng nhập lý do trả lại" : "Vui lòng nhập nội dung ghi chú")
-  void runAction(() => act(code, action, note), () => shell.rerender())
+  if ((action === "RETURN" || action === "COMMENT") && !note) return notify.error(action === "RETURN" ? "Vui lòng nhập lý do trả lại" : "Vui lòng nhập nội dung ghi chú")
+  void runAction(() => act(code, action, note), () => {
+    notify.success(DONE[action] ?? "Đã lưu")
+    shell.rerender()
+  })
 }
 
-function taskDelete(code: string) {
-  if (!confirm(`Xoá việc ${code}?`)) return
+const DONE: Record<string, string> = {
+  ACCEPT: "Đã nhận việc", PROGRESS: "Đã cập nhật tiến độ", SUBMIT: "Đã nộp nghiệm thu", APPROVE: "Đã nghiệm thu", RETURN: "Đã trả lại việc", COMMENT: "Đã thêm ghi chú", MOVE: "Đã chuyển trạng thái",
+}
+
+async function taskDelete(code: string) {
+  if (!(await confirmDialog({ title: "Xoá việc", message: `Xoá việc ${code}? Người thực hiện và người phối hợp sẽ được báo.`, confirmLabel: "Xoá việc", danger: true }))) return
   // From the panel or the task page, back to the project.
   const project = current?.project.code ?? decodeURIComponent(window.location.pathname.split("/").filter(Boolean)[2] ?? "")
-  void runAction(() => tasksApi.remove(code), () => shell.go(projectBase(project)))
+  void runAction(() => tasksApi.remove(code), () => {
+    notify.success(`Đã xoá việc ${code}`)
+    shell.go(projectBase(project))
+  })
 }
 
 // ---------- Drag and drop
@@ -188,24 +199,21 @@ async function dropOn(code: string, from: TaskStatus, to: TaskStatus) {
   try {
     detail = await tasksApi.detail(code)
   } catch (e) {
-    return alert((e as Error).message)
+    return notify.error((e as Error).message)
   }
   const allowed = detail.allowedActions
   const action = allowed.includes(wanted) ? wanted : allowed.includes("MOVE") ? "MOVE" : null
-  if (!action) return alert("Bạn không chuyển được việc này sang cột đó: chỉ người thực hiện nhận / nộp việc, người giao nghiệm thu, trả lại hoặc kéo tự do.")
-  if (action === "RETURN") return askReturn(code)
-  void runAction(() => (action === "MOVE" ? tasksApi.move(code, to) : act(code, action, "")), () => shell.rerender())
-}
-
-function askReturn(code: string) {
-  shell.openModal(`Trả lại • ${code}`, `<label>Lý do *</label><textarea id="vx-move-note" rows="3"></textarea><div class="toolbar" style="margin-top:10px"><button class="btn btn-primary" ${jsCall("taskConfirmReturn", code)}>Trả lại</button><button class="btn btn-light" onclick="closeModal()">Hủy</button></div>`)
-}
-
-function taskConfirmReturn(code: string) {
-  const note = ((document.getElementById("vx-move-note") as HTMLTextAreaElement | null)?.value ?? "").trim()
-  if (!note) return alert("Vui lòng nhập lý do trả lại")
-  void runAction(() => tasksApi.returnTask(code, note), () => {
-    shell.closeModal()
+  if (!action) return notify.error("Bạn không chuyển được việc này sang cột đó: người thực hiện nhận và nộp việc; người giao nghiệm thu, trả lại hoặc kéo tự do.")
+  if (action === "RETURN") {
+    const note = await reasonDialog({ title: `Trả lại việc ${code}`, hint: "Người thực hiện sẽ thấy lý do và làm tiếp.", confirmLabel: "Trả lại" })
+    if (note === null) return
+    return void runAction(() => tasksApi.returnTask(code, note), () => {
+      notify.success(DONE.RETURN)
+      shell.rerender()
+    })
+  }
+  void runAction(() => (action === "MOVE" ? tasksApi.move(code, to) : act(code, action, "")), () => {
+    notify.success(DONE[action] ?? "Đã lưu")
     shell.rerender()
   })
 }
@@ -248,14 +256,17 @@ export function taskFormHtml(p: ProjectDetail | undefined, code: string, loading
 
 function taskCreate(projectCode: string) {
   const owner = Number(inputValue("wf-owner"))
-  if (!owner) return alert("Vui lòng chọn người thực hiện")
+  if (!owner) return notify.error("Vui lòng chọn người thực hiện")
   const due = inputValue("wf-due")
-  if (!due) return alert("Vui lòng chọn hạn hoàn thành")
+  if (!due) return notify.error("Vui lòng chọn hạn hoàn thành")
   void runAction(() => tasksApi.create({
     code: inputValue("wf-code"), projectCode, title: inputValue("wf-title"), resultRequirement: inputValue("wf-desc"),
     complexity: inputValue("wf-complexity") as Complexity, assigneeUserId: owner, dueDate: due,
     followerUserIds: [...document.querySelectorAll<HTMLInputElement>('input[name="wf-cc"]:checked')].map((x) => Number(x.value)),
-  }), () => shell.go(projectBase(projectCode)))
+  }), (t) => {
+    notify.success(`Đã giao việc ${t.code} cho ${t.assignee?.fullName ?? "người thực hiện"}`)
+    shell.go(projectBase(projectCode))
+  })
 }
 
 // ---------- Handlers
@@ -269,7 +280,7 @@ function redrawBody() {
 export function installTaskViews(next: Shell) {
   shell = next
   Object.assign(window, {
-    taskAct, taskDelete, taskCreate, taskConfirmReturn,
+    taskAct, taskDelete, taskCreate,
     taskSelect: (code: string) => current && shell.go(`${projectBase(current.project.code)}/${current.tab}?selected=${encodeURIComponent(code)}`),
     /** Only the cards / rows re-render while typing, so the search box keeps focus. */
     taskSearch: (q: string) => {

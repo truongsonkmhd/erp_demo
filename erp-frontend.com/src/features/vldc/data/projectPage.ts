@@ -1,5 +1,6 @@
 import { escapeHtml as esc, formatDate, formatMoney, jsCall, pagerHtml } from "../workflow/html"
 import { crumbsHtml, multiSelectHtml } from "../workflow/views"
+import { confirmDialog, notify, reasonDialog } from "../workflow/dialogs"
 import { installTaskViews, mountTaskBoard, taskFormHtml, taskPageHtml, taskSpaceHtml } from "../workflow/taskViews"
 import { PROJECT_STATE, flowBarHtml, lozengeHtml, personName, projectBase, projectHeaderHtml } from "../workflow/workViews"
 import { installMissionViews, isMissionListKey, missionFormHtml, missionPageHtml, missionSpaceHtml, mountMissionBoard, redrawMissionBody } from "../workflow/missionViews"
@@ -193,38 +194,55 @@ export function installProjectPage(render: Record<string, () => void>, ctx: Ctx)
       coDepartmentIds: [...document.querySelectorAll<HTMLInputElement>('input[name="pj-co"]:checked')].map((x) => Number(x.value)),
       estimatedBudget: Number(value("pj-budget")), startDate: value("pj-start"), endDate: value("pj-end"),
     }
-    if (!body.leadDepartmentId) return alert("Vui lòng chọn đơn vị chủ trì")
-    void runAction(() => (code ? projectsApi.update(code, body) : projectsApi.create(body)), (saved) => ctx.go(projectBase(saved.code)))
+    if (!body.leadDepartmentId) return notify.error("Vui lòng chọn đơn vị chủ trì")
+    if (!(body.estimatedBudget > 0)) return notify.error("Ngân sách dự kiến phải lớn hơn 0")
+    void runAction(() => (code ? projectsApi.update(code, body) : projectsApi.create(body)), (saved) => {
+      notify.success(code ? "Đã lưu dự án" : `Đã lập dự án ${saved.code} và gửi Liên đoàn trưởng phê duyệt`)
+      ctx.go(projectBase(saved.code))
+    })
   }
 
   // ---------- Phê duyệt, xoá dự án
 
-  function projectDecide(code: string, decision: string) {
-    if (decision === "approve") return void runAction(() => projectsApi.approve(code), rerender)
-    const note = prompt("Lý do không phê duyệt") ?? ""
-    if (!note.trim()) return
-    void runAction(() => projectsApi.reject(code, note.trim()), rerender)
+  /** A done action: its toast, then the page again. */
+  const done = (message: string) => () => {
+    notify.success(message)
+    rerender()
+  }
+
+  async function projectDecide(code: string, decision: string) {
+    if (decision === "approve") {
+      if (!(await confirmDialog({ title: "Phê duyệt dự án", message: `Phê duyệt dự án ${code}? Trưởng các đơn vị tham gia sẽ được báo để giao việc.`, confirmLabel: "Phê duyệt" }))) return
+      return void runAction(() => projectsApi.approve(code), done("Đã phê duyệt dự án"))
+    }
+    const note = await reasonDialog({ title: `Không phê duyệt dự án ${code}`, hint: "Phòng Kỹ thuật sẽ thấy lý do để sửa và trình lại.", confirmLabel: "Không phê duyệt", danger: true })
+    if (note === null) return
+    void runAction(() => projectsApi.reject(code, note), done("Đã trả dự án về Phòng Kỹ thuật"))
   }
 
   /** Phòng Kỹ thuật asks to delete the project (once it has no task); the federation head confirms. */
-  function projectRequestDelete(code: string) {
-    const reason = prompt(`Lý do đề nghị xoá dự án ${code}`) ?? ""
-    if (!reason.trim()) return
-    void runAction(() => projectsApi.requestDelete(code, reason.trim()), rerender)
+  async function projectRequestDelete(code: string) {
+    const reason = await reasonDialog({ title: `Đề nghị xoá dự án ${code}`, hint: "Liên đoàn trưởng sẽ xác nhận. Dự án chỉ xoá được khi không còn việc nào.", confirmLabel: "Gửi đề nghị", danger: true })
+    if (reason === null) return
+    void runAction(() => projectsApi.requestDelete(code, reason), done("Đã gửi đề nghị xoá dự án"))
   }
 
-  function projectCancelDelete(code: string) {
-    void runAction(() => projectsApi.cancelDelete(code), rerender)
+  async function projectCancelDelete(code: string) {
+    if (!(await confirmDialog({ title: "Huỷ đề nghị xoá", message: `Huỷ đề nghị xoá dự án ${code}?`, confirmLabel: "Huỷ đề nghị" }))) return
+    void runAction(() => projectsApi.cancelDelete(code), done("Đã huỷ đề nghị xoá"))
   }
 
-  function projectConfirmDelete(code: string, answer: string) {
+  async function projectConfirmDelete(code: string, answer: string) {
     if (answer === "yes") {
-      if (!confirm(`Xoá dự án ${code}?`)) return
-      return void runAction(() => projectsApi.approveDelete(code), () => ctx.go("projects"))
+      if (!(await confirmDialog({ title: "Xác nhận xoá dự án", message: `Xoá dự án ${code}? Dự án sẽ không còn hiện ở danh sách.`, confirmLabel: "Xoá dự án", danger: true }))) return
+      return void runAction(() => projectsApi.approveDelete(code), () => {
+        notify.success(`Đã xoá dự án ${code}`)
+        ctx.go("projects")
+      })
     }
-    const note = prompt("Lý do không xoá") ?? ""
-    if (!note.trim()) return
-    void runAction(() => projectsApi.rejectDelete(code, note.trim()), rerender)
+    const note = await reasonDialog({ title: `Không xoá dự án ${code}`, hint: "Người đề nghị sẽ thấy lý do.", confirmLabel: "Giữ dự án" })
+    if (note === null) return
+    void runAction(() => projectsApi.rejectDelete(code, note), done("Đã giữ lại dự án"))
   }
 
   Object.assign(window, {

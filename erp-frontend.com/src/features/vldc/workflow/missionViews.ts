@@ -1,6 +1,7 @@
 import Sortable from "sortablejs"
 import { escapeHtml as esc, formatTime, jsCall, pagerHtml } from "./html"
 import { crumbsHtml, multiSelectHtml } from "./views"
+import { confirmDialog, notify, reasonDialog } from "./dialogs"
 import { avatarHtml, dueHtml, flowBarHtml, lozengeHtml, personName, projectBase } from "./workViews"
 import { commentsHtml, progressField } from "./taskViews"
 import { MISSION_COLUMNS, MISSION_STATE, missionDropAction, unitAndTeams } from "./missionCore"
@@ -146,13 +147,23 @@ function act(code: string, action: string, note: string) {
 
 function missionAct(code: string, action: string) {
   const note = inputValue("wf-note")
-  if ((action === "REJECT" || action === "COMMENT") && !note) return alert(action === "REJECT" ? "Vui lòng nhập lý do từ chối" : "Vui lòng nhập nội dung ghi chú")
-  void runAction(() => act(code, action, note), () => shell.rerender())
+  if ((action === "REJECT" || action === "COMMENT") && !note) return notify.error(action === "REJECT" ? "Vui lòng nhập lý do từ chối" : "Vui lòng nhập nội dung ghi chú")
+  void runAction(() => act(code, action, note), () => {
+    notify.success(DONE[action] ?? "Đã lưu")
+    shell.rerender()
+  })
 }
 
-function missionDelete(code: string) {
-  if (!confirm(`Xoá nhiệm vụ ${code}?`)) return
-  void runAction(() => missionsApi.remove(code), () => shell.go(MISSION_BASE))
+const DONE: Record<string, string> = {
+  APPROVE: "Đã duyệt nhiệm vụ", REJECT: "Đã từ chối nhiệm vụ", PROGRESS: "Đã cập nhật tiến độ", COMPLETE: "Đã báo hoàn thành nhiệm vụ", COMMENT: "Đã thêm ghi chú",
+}
+
+async function missionDelete(code: string) {
+  if (!(await confirmDialog({ title: "Xoá nhiệm vụ", message: `Xoá nhiệm vụ ${code}? Người duyệt sẽ được báo.`, confirmLabel: "Xoá nhiệm vụ", danger: true }))) return
+  void runAction(() => missionsApi.remove(code), () => {
+    notify.success(`Đã xoá nhiệm vụ ${code}`)
+    shell.go(MISSION_BASE)
+  })
 }
 
 // ---------- Board drag and drop
@@ -175,27 +186,26 @@ export function mountMissionBoard() {
 
 async function dropOn(code: string, from: MissionStatus, to: MissionStatus) {
   const wanted = missionDropAction(from, to)
-  if (!wanted) return alert("Nhiệm vụ chỉ kéo được: Chờ duyệt → Đang thực hiện (duyệt) hoặc Từ chối, Đang thực hiện → Hoàn thành.")
+  if (!wanted) return notify.error("Nhiệm vụ chỉ kéo được: Chờ duyệt → Đang thực hiện (duyệt) hoặc Từ chối, Đang thực hiện → Hoàn thành.")
   let detail: MissionDetail
   try {
     detail = await missionsApi.detail(code)
   } catch (e) {
-    return alert((e as Error).message)
+    return notify.error((e as Error).message)
   }
   if (!detail.allowedActions.includes(wanted)) {
-    return alert(wanted === "COMPLETE" ? "Chỉ người lập báo hoàn thành nhiệm vụ." : "Chỉ người duyệt (cấp trên trực tiếp) duyệt hoặc từ chối nhiệm vụ.")
+    return notify.error(wanted === "COMPLETE" ? "Chỉ người lập báo hoàn thành nhiệm vụ." : "Chỉ người duyệt (cấp trên trực tiếp) duyệt hoặc từ chối nhiệm vụ.")
   }
   if (wanted === "REJECT") {
-    return shell.openModal(`Từ chối • ${code}`, `<label>Lý do *</label><textarea id="vx-move-note" rows="3"></textarea><div class="toolbar" style="margin-top:10px"><button class="btn btn-primary" ${jsCall("missionConfirmReject", code)}>Từ chối</button><button class="btn btn-light" onclick="closeModal()">Hủy</button></div>`)
+    const note = await reasonDialog({ title: `Từ chối nhiệm vụ ${code}`, hint: "Người lập sẽ thấy lý do.", confirmLabel: "Từ chối", danger: true })
+    if (note === null) return
+    return void runAction(() => missionsApi.reject(code, note), () => {
+      notify.success(DONE.REJECT)
+      shell.rerender()
+    })
   }
-  void runAction(() => act(code, wanted, ""), () => shell.rerender())
-}
-
-function missionConfirmReject(code: string) {
-  const note = ((document.getElementById("vx-move-note") as HTMLTextAreaElement | null)?.value ?? "").trim()
-  if (!note) return alert("Vui lòng nhập lý do từ chối")
-  void runAction(() => missionsApi.reject(code, note), () => {
-    shell.closeModal()
+  void runAction(() => act(code, wanted, ""), () => {
+    notify.success(DONE[wanted] ?? "Đã lưu")
     shell.rerender()
   })
 }
@@ -249,8 +259,11 @@ function missionSave(code: string) {
     projectCode: inputValue("mv-project") || null, dueDate: inputValue("mv-due"), content: inputValue("mv-content"),
     equipmentIds: checked("mv-eq"), followerUserIds: checked("mv-cc"),
   }
-  if (!body.dueDate) return alert("Vui lòng chọn hạn hoàn thành")
-  void runAction(() => (code ? missionsApi.update(code, body) : missionsApi.create(body)), (saved) => shell.go(missionPath(saved.code)))
+  if (!body.dueDate) return notify.error("Vui lòng chọn hạn hoàn thành")
+  void runAction(() => (code ? missionsApi.update(code, body) : missionsApi.create(body)), (saved) => {
+    notify.success(code ? "Đã lưu nhiệm vụ" : `Đã gửi nhiệm vụ ${saved.code} cho ${saved.approver?.fullName ?? "cấp trên"} duyệt`)
+    shell.go(missionPath(saved.code))
+  })
 }
 
 // ---------- Handlers
@@ -270,7 +283,7 @@ export const redrawMissionBody = redrawBody
 export function installMissionViews(next: Shell) {
   shell = next
   Object.assign(window, {
-    missionAct, missionDelete, missionSave, missionConfirmReject,
+    missionAct, missionDelete, missionSave,
     missionSelect: (code: string) => shell.go(`${MISSION_BASE}/${currentTab}?selected=${encodeURIComponent(code)}`),
     missionSearch: (q: string) => {
       view.query = q

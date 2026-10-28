@@ -135,8 +135,11 @@ public class ProjectTaskAppServiceImpl implements ProjectTaskAppService {
         String code = WorkCodes.requireNew(c.getCode(), "việc", tasks::existsByCode);
         String title = required(c.getTitle(), "Vui lòng nhập tên công việc");
         User assignee = activeUser(c.getAssigneeUserId(), "Không tìm thấy người thực hiện");
-        if (assignee.getOrgUnit() == null || !myUnit.equals(assignee.getOrgUnit().getId()) || !authorization.canManage(me, assignee)) {
-            throw new IllegalArgumentException("Chỉ giao việc cho nhân viên trong đơn vị của bạn");
+        if (assignee.getOrgUnit() == null || !myUnit.equals(assignee.getOrgUnit().getId())) {
+            throw new IllegalArgumentException(assignee.getFullName() + " không thuộc đơn vị của bạn. Chỉ giao việc cho nhân viên trong đơn vị của bạn.");
+        }
+        if (!authorization.canManage(me, assignee)) {
+            throw new IllegalArgumentException("Không giao việc được cho " + assignee.getFullName() + ": người này cùng cấp hoặc cấp cao hơn bạn. Chỉ giao việc cho nhân viên cấp dưới trong đơn vị.");
         }
         LocalDate due = requireDue(c.getDueDate(), p.getEndDate());
 

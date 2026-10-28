@@ -382,7 +382,7 @@ export function getShellBadges() {
 
 // Functions referenced from inline on* attributes inside the HTML templates.
 Object.assign(window, {
- render, show, openModal, closeModal, tab, aiFill, aiRun, toggleAiSource, openTaskSource, eventDetail, openNotice, openNoticeCenter, setNoticeView, markAllNotices, setCalendarScope, openUnit, setCalendarWeek, toggleCalendarSync
+ render, show, go, openModal, closeModal, tab, aiFill, aiRun, toggleAiSource, openTaskSource, eventDetail, openNotice, openNoticeCenter, setNoticeView, markAllNotices, setCalendarScope, openUnit, setCalendarWeek, toggleCalendarSync
 });
 
 // Shared cross-account workflow (directives, delegated tasks, payment dossiers) backed by Firestore.

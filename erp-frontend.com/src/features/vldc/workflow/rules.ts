@@ -351,30 +351,6 @@ export function createProposal(
   }, now, [approver])
 }
 
-/**
- * A task of an approved project, created by Phòng Kỹ thuật for a role of a unit taking part (its owner carries it out,
- * the creator accepts the result). The caller says whether the role may create tasks there and who may own them.
- */
-export function createProjectTask(
-  input: { id: string; title: string; owner: string; project: string; wbsItem?: string; subUnit?: string; cc: string[]; due: string; priority: WorkItem["priority"]; complexity?: WorkItem["complexity"]; description?: string },
-  role: string,
-  access: { canCreate: boolean; owners: string[]; latest?: string },
-  now: string,
-): WorkItem {
-  if (!access.canCreate) throw new Error("Chỉ Phòng Kỹ thuật tạo việc, trong dự án đã được phê duyệt")
-  if (!input.owner) throw new Error("Vui lòng chọn người chủ trì")
-  if (!access.owners.includes(input.owner)) throw new Error("Người chủ trì phải thuộc phòng tham gia dự án")
-  const title = requireText(input.title, "Vui lòng nhập nội dung công việc")
-  const due = requireDue(input.due, "Vui lòng chọn hạn hoàn thành", now, access.latest)
-  const cc = input.cc.filter((r) => r !== input.owner && r !== role)
-  return newWorkItem({
-    id: input.id, type: "directive", title, description: input.description, createdBy: role, owner: input.owner, project: input.project,
-    ...(input.wbsItem ? { wbsItem: input.wbsItem } : {}), ...(input.subUnit ? { subUnit: input.subUnit } : {}),
-    ...(input.complexity ? { complexity: input.complexity } : {}),
-    cc, status: "Mới giao", priority: input.priority, due,
-  }, now, [input.owner, ...cc])
-}
-
 /** Only the creator deletes a task (never a payment dossier), and not while it still has sub-tasks. */
 export function canDeleteWork(item: WorkItem, role: string, all: WorkItem[]): boolean {
   return item.type !== "payment" && item.createdBy === role && !item.deletedAt && !all.some((x) => x.parentId === item.id && !x.deletedAt)

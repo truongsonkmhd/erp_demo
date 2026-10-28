@@ -1,122 +1,97 @@
-import { escapeHtml as esc, formatBillion, jsCall } from "../workflow/html"
-import { ROLE_TITLES } from "../workflow/rules"
-import { crumbsHtml, directiveFormHtml, multiSelectHtml, proposalFormHtml } from "../workflow/views"
-import { flowBarHtml, installBoard, issuePageHtml, mountBoard, projectHeaderHtml, projectSpaceHtml, proposalSpaceHtml } from "../workflow/boardViews"
-import { tierOf } from "./access"
-import { workflowStore } from "../workflow/repository"
-import { localToday, vnDate } from "./dates"
-import * as M from "./metrics"
-import { ROLE_PROFILES, UNIT_DEFS, type UnitCode, unitCodeOf, unitName } from "./org"
-import {
-  CR_KINDS, PROJECT_APPROVER, PROJECT_LOZENGE, PROJECT_STATUSES, addChangeRequest, approvalOf, canCreateProject, canRequestDelete, cancelDeleteRequest, canSeeProject, canUpdateProject,
-  decideChangeRequest, decideDelete, decideProject, deleteBlocker, requestDelete, isProjectApprover, projectProblems, projectStateOf, submitProject,
-  type ProjectState, toggleMilestone, updateWbs, wbsRemovalProblems,
-} from "./projectCore"
-import { projectWork, projectsView } from "./projectView"
-import { vldcData } from "./registry"
-import { resolveUnitChoice, unitChoiceGroups } from "./subUnitCore"
-import type { ChangeRequestKind, Project, ProjectStatus, StoredProject } from "./types"
+import { escapeHtml as esc, formatDate, formatMoney, jsCall, pagerHtml } from "../workflow/html"
+import { crumbsHtml, multiSelectHtml } from "../workflow/views"
+import { confirmDialog, notify, reasonDialog } from "../workflow/dialogs"
+import { installTaskViews, mountTaskBoard, taskFormHtml, taskPageHtml, taskSpaceHtml } from "../workflow/taskViews"
+import { PROJECT_STATE, flowBarHtml, lozengeHtml, personName, projectBase, projectHeaderHtml } from "../workflow/workViews"
+import { installMissionViews, isMissionListKey, missionFormHtml, missionPageHtml, missionSpaceHtml, mountMissionBoard, redrawMissionBody } from "../workflow/missionViews"
+import { entryStateHtml, me, onWorkUpdate, runAction, workCache } from "./workStore"
+import { WORK_TOPICS, orgApi, projectsApi, type OrgUnit, type ProjectDetail, type ProjectStatus, type SaveProject } from "./workApi"
 
 /**
- * Nhiệm vụ / Dự án in the style of Jira: a directory of projects (figures computed from WBS, finance lines, payments and
- * dates), each with Board / Danh sách (workflow/boardViews.ts) and Tổng quan (here), and the Nhiệm vụ flow beside them.
+ * Nhiệm vụ / Dự án in the style of Jira, on the project API: the directory of projects, each with Board / Danh sách
+ * (workflow/boardViews.ts) and Tổng quan (here), its form page and the decisions on it; the Nhiệm vụ flow beside them.
+ * The server checks every rule and says what the viewer may do (permissions); this page shows it and calls the actions.
  */
 
 type Ctx = { role(): string; openModal(title: string, html: string): void; closeModal(): void; go(path: string): void }
 
 const content = () => document.getElementById("content")
-const value = (id: string, root: ParentNode = document) => ((root.querySelector(`#${id}`) as HTMLInputElement | null)?.value ?? "").trim()
-const roleTitle = (r?: string) => (r ? ROLE_TITLES[r] || r : "–")
-const personOf = (r: string) => ROLE_PROFILES[r]?.name || roleTitle(r)
-const subName = (id?: string) => (id ? vldcData.get("subUnits").find((s) => s.id === id)?.name ?? "" : "")
-const bar = (pct: number, color = "var(--primary)") => `<div class="vx-plan-bar"><i style="width:${Math.min(100, Math.max(0, pct))}%;background:${color}"></i></div>`
-const notice = (ownerRole: string, title: string, body: string, by: string) => {
-  const now = new Date()
-  void vldcData.save("notices", {
-    id: `NTF-${now.getTime().toString(36).toUpperCase()}-${ownerRole}`, scope: "personal", ownerRole, title, body,
-    time: `${vnDate(localToday()).slice(0, 5)} ${now.toTimeString().slice(0, 5)}`, priority: "Trung bình", readBy: [by], link: "projects",
-  })
-}
+const value = (id: string) => ((document.getElementById(id) as HTMLInputElement | null)?.value ?? "").trim()
+/** Projects are created and edited by Phòng Kỹ thuật (the server checks it again). */
+const isTechnical = () => me().orgUnitCode === "KT"
+
+const STATUS_FILTERS: [ProjectStatus | "", string][] = [["", "Tất cả"], ...(Object.entries(PROJECT_STATE) as [ProjectStatus, [string, string]][]).map(([k, [l]]) => [k, l] as [ProjectStatus, string])]
+const APPROVAL_BADGE = { PENDING: ' <span class="badge b-warn">Chờ duyệt</span>', REJECTED: ' <span class="badge b-danger">Không duyệt</span>', APPROVED: "" }
 
 export function installProjectPage(render: Record<string, () => void>, ctx: Ctx) {
-  const stored = (id: string) => vldcData.get("projects").find((p) => p.id === id)
-  const computed = (id: string) => projectsView().find((p) => p.id === id)
+  const list = { status: "" as ProjectStatus | "", query: "", pageNo: 1 }
+  let searchTimer: ReturnType<typeof setTimeout> | undefined
 
-  const projectPath = (id: string) => `projects/${encodeURIComponent(id)}`
-
-  /** Projects the role sees: all for Phòng Kỹ thuật and the approver; approved ones its unit takes part in for the others. */
-  const myProjects = () => projectsView().filter((p) => canSeeProject(p, ctx.role()))
-  const approvalBadge = (p: StoredProject) =>
-    approvalOf(p) === "Chờ duyệt" ? ' <span class="badge b-warn">Chờ duyệt</span>' : approvalOf(p) === "Từ chối" ? ' <span class="badge b-danger">Không duyệt</span>' : ""
-
-  /** Status filter of the Dự án flow: all (the default) or one state. */
-  type ProjectFilter = ProjectState | "all"
-  const PROJECT_FILTERS: [ProjectFilter, string][] = [["all", "Tất cả"], ...PROJECT_STATUSES.map((s) => [s, s] as [ProjectFilter, string])]
-  let projectFilter: ProjectFilter = "all"
-  let projectQuery = ""
-  const projectMatches = (p: Project, f: ProjectFilter) => f === "all" || projectStateOf(p) === f
-  const projectSearchText = (p: Project) => `${p.id} ${p.name} ${p.unit} ${subName(p.subUnit)} ${roleTitle(p.leadRole)}`.toLowerCase()
+  const listKey = () => `projects:list:${list.status}:${list.query.trim()}:${list.pageNo}`
+  const listEntry = () => workCache.get(listKey(), () => projectsApi.list({ status: list.status, keyword: list.query.trim(), pageNo: list.pageNo }), [WORK_TOPICS.projects])
+  const detailEntry = (code: string) => workCache.get(`projects:detail:${code}`, () => projectsApi.detail(code), [WORK_TOPICS.projects, WORK_TOPICS.tasks])
+  const orgEntry = () => workCache.get("org", () => orgApi.directory())
 
   /**
-   * The project rows for the filter and search (re-rendered alone while typing, so the search box keeps focus): code, name,
-   * lead unit, state, technical progress (none before approval) and deadline with any forecast delay. Cost, milestones and
-   * change requests are on the project's own page.
+   * The project rows (re-rendered alone while typing, so the search box keeps focus): code, name, lead unit, state,
+   * progress (none before approval) and deadline with any forecast delay.
    */
   function projectTableHtml(): string {
-    const all = myProjects()
-    const q = projectQuery.trim().toLowerCase()
-    const ps = all.filter((p) => projectMatches(p, projectFilter) && (!q || projectSearchText(p).includes(q)))
-    const rows = ps.map((p) => {
-      const state = projectStateOf(p)
-      const progress = state === "Khởi tạo" ? "—" : `${p.technical}%`
-      const late = p.delayDays > 0 ? `<span class="vx-pj-late">${p.end ? " · trễ" : "Trễ"} ${p.delayDays} ngày</span>` : ""
-      return `<tr class="vx-staff-row" ${jsCall("go", projectPath(p.id))}><td class="mini">${esc(p.id)}</td><td><b>${esc(p.name)}</b></td>
-<td>${esc(p.unit)}${subName(p.subUnit) ? `<div class="mini">${esc(subName(p.subUnit))}</div>` : ""}</td>
-<td><span class="vx-jira-lozenge l-${PROJECT_LOZENGE[state]}">${esc(state)}</span>${approvalBadge(p)}</td>
-<td>${progress}</td><td>${p.end ? esc(vnDate(p.end)) : late ? "" : "—"}${late}</td></tr>`
+    const entry = listEntry()
+    if (!entry.data) return entryStateHtml(entry)
+    const page = entry.data
+    const rows = page.items.map((p) => {
+      const progress = p.approvalStatus === "APPROVED" ? `${p.progress}%` : "—"
+      const late = p.delayDays > 0 ? `<span class="vx-pj-late"> · trễ ${p.delayDays} ngày</span>` : ""
+      return `<tr class="vx-staff-row" ${jsCall("go", projectBase(p.code))}><td class="mini">${esc(p.code)}</td><td><b>${esc(p.name)}</b></td>
+<td>${esc(p.leadDepartment?.name ?? "–")}</td><td>${lozengeHtml(PROJECT_STATE[p.status])}${APPROVAL_BADGE[p.approvalStatus]}</td>
+<td>${progress}</td><td>${formatDate(p.endDate)}${late}</td></tr>`
     }).join("")
-    const empty = rows ? "" : `<tr><td colspan="6" class="mini">${all.length ? "Không có dự án nào khớp." : "Chưa có dự án."}</td></tr>`
-    return `<table><tr><th>Mã</th><th>Tên dự án</th><th>Đơn vị chủ trì</th><th>Trạng thái</th><th>Tiến độ</th><th>Hạn</th></tr>${rows}${empty}</table>`
+    const filtering = !!(list.status || list.query.trim())
+    const empty = rows ? "" : `<tr><td colspan="6" class="mini">${filtering ? "Không có dự án nào khớp." : "Chưa có dự án."}</td></tr>`
+    return `<table><tr><th>Mã</th><th>Tên dự án</th><th>Đơn vị chủ trì</th><th>Trạng thái</th><th>Tiến độ</th><th>Hạn</th></tr>${rows}${empty}</table>${pagerHtml(page, "projectPageNo")}`
   }
 
-  /** Luồng Dự án: the flow bar; search and status; a one-line summary; the projects. */
+  /** Luồng Dự án: the flow bar; search and status; the projects, ten a page. */
   function pageHtml(): string {
-    const role = ctx.role()
-    const all = myProjects()
-    const staff = tierOf(role) === "staff"
-    const m = M.projectMetrics(all, vldcData.get("risks"))
-    const summary = staff ? "" : `<div class="mini vx-flow-summary">${m.count} dự án • ${m.late} dự báo trễ • ${m.milestones} mốc trong 30 ngày • ${m.openRisks} rủi ro đang mở (${m.highRisks} mức cao) • ${m.changeRequestsPending} đề xuất thay đổi chờ duyệt</div>`
-    const status = `<select class="vx-filter-select" onchange="projectFilterSet(this.value)">${PROJECT_FILTERS.map(([k, l]) => `<option value="${esc(k)}"${k === projectFilter ? " selected" : ""}>${l}</option>`).join("")}</select>`
-    const create = canCreateProject(role) ? `<button class="btn btn-primary" ${jsCall("projectForm", "")}>+ Dự án</button>` : ""
-    return `${flowBarHtml("du-an", create)}<div class="vx-jira-toolbar"><input class="vx-jira-search" placeholder="Tìm dự án…" value="${esc(projectQuery)}" oninput="projectSearch(this.value)">${status}</div>${summary}<div class="card"><div class="vx-staff-table" id="vx-pj-table">${projectTableHtml()}</div></div>`
+    const status = `<select class="vx-filter-select" onchange="projectFilterSet(this.value)">${STATUS_FILTERS.map(([k, l]) => `<option value="${k}"${k === list.status ? " selected" : ""}>${l}</option>`).join("")}</select>`
+    const create = isTechnical() ? `<button class="btn btn-primary" ${jsCall("projectForm", "")}>+ Dự án</button>` : ""
+    return `${flowBarHtml("du-an", create)}<div class="vx-jira-toolbar"><input class="vx-jira-search" placeholder="Tìm dự án…" value="${esc(list.query)}" oninput="projectSearch(this.value)">${status}</div><div class="card"><div class="vx-staff-table" id="vx-pj-table">${projectTableHtml()}</div></div>`
   }
+
+  type Route = { first: string; second: string; third: string }
+  const route = (): Route => {
+    const [first = "", second = "", third = ""] = window.location.pathname.split("/").filter(Boolean).slice(2).map(decodeURIComponent)
+    return { first, second, third }
+  }
+  const isListRoute = (r = route()) => !r.first
+  const isFormRoute = (r = route()) => r.first === "moi" || r.second === "sua" || r.second === "giao-viec" || (r.first === "nhiem-vu" && (r.second === "moi" || r.third === "sua"))
 
   /**
-   * Nhiệm vụ / Dự án and its sub pages, read from the address: /projects (directory), /projects/<id>[/board|/danh-sach|
-   * /tong-quan|/sua|/giao-viec?wbs=|/viec/<item>], /projects/moi (lập dự án), /projects/giao-viec (pick a project); luồng Nhiệm vụ: /projects/nhiem-vu[/board|/danh-sach|/moi|<item>|<item>/sua];
+   * Nhiệm vụ / Dự án and its sub pages, read from the address: /projects (directory), /projects/<code>[/board|/danh-sach|
+   * /tong-quan|/sua|/giao-viec|/viec/<item>], /projects/moi; luồng Nhiệm vụ: /projects/nhiem-vu[/board|/danh-sach|/moi|<item>|<item>/sua];
    * ?selected=<item> opens the issue panel on a board or list.
    */
   function pageFor(): string {
-    const [first = "", second = "", third = ""] = window.location.pathname.split("/").filter(Boolean).slice(2).map(decodeURIComponent)
-    const query = new URLSearchParams(window.location.search)
+    const { first, second, third } = route()
     if (!first) return pageHtml()
     if (first === "nhiem-vu") {
-      // The list is the default view of the Nhiệm vụ flow (decisions on each row); the board is the other one.
-      if (!second || second === "board" || second === "danh-sach") return proposalSpaceHtml(second === "board" ? "board" : "danh-sach")
-      if (second === "moi") return proposalFormHtml()
-      return third === "sua" ? proposalFormHtml(second) : issuePageHtml(second)
+      if (!second || second === "board" || second === "danh-sach") return missionSpaceHtml(second === "board" ? "board" : "danh-sach")
+      if (second === "moi") return missionFormHtml()
+      return third === "sua" ? missionFormHtml(second) : missionPageHtml(second)
     }
-    if (first === "giao-viec") return directiveFormHtml()
     if (first === "moi") return projectFormHtml("")
     if (second === "sua") return projectFormHtml(first)
-    // Work is opened by whoever may see it, also staff that do not follow the whole project.
-    if (second === "viec") return issuePageHtml(third)
-    if (second === "giao-viec") return directiveFormHtml(first, query.get("wbs") ?? "")
-    const p = myProjects().find((x) => x.id === first)
-    if (!p) return `<div class="vx-jira-head">${crumbsHtml([["Dự án", "projects"], [first]])}<div class="mini" style="margin-top:8px">Không tìm thấy dự án ${esc(first)}.</div></div>`
+    if (second === "viec") return taskPageHtml(first, third)
+    const entry = detailEntry(first)
+    if (second === "giao-viec") return taskFormHtml(entry.data, first, entryStateHtml(entry))
+    if (!entry.data) {
+      const head = `<div class="vx-jira-head">${crumbsHtml([["Dự án", "projects"], [first]])}</div>`
+      return entry.error ? `${head}<div class="mini" style="margin-top:8px">Không tìm thấy dự án ${esc(first)}.</div>` : head + entryStateHtml(entry)
+    }
     const tab = second || "board"
-    if (tab === "board" || tab === "danh-sach") return projectSpaceHtml(p, tab)
-    return projectHeaderHtml(p, "tong-quan") + projectOverviewHtml(p)
+    if (tab === "board" || tab === "danh-sach") return taskSpaceHtml(entry.data, tab)
+    return projectHeaderHtml(entry.data, "tong-quan") + projectOverviewHtml(entry.data)
   }
 
   function rerender() {
@@ -124,271 +99,175 @@ export function installProjectPage(render: Record<string, () => void>, ctx: Ctx)
     if (!el) return
     el.innerHTML = pageFor()
     // A board (if this page has one) gets its drag and drop.
-    mountBoard()
+    if (route().first === "nhiem-vu") mountMissionBoard()
+    else mountTaskBoard()
   }
   render.projects = rerender
-  installBoard({ go: ctx.go, openModal: ctx.openModal, closeModal: ctx.closeModal })
+  installMissionViews({ go: ctx.go, openModal: ctx.openModal, closeModal: ctx.closeModal, rerender })
+  installTaskViews({ go: ctx.go, openModal: ctx.openModal, closeModal: ctx.closeModal, rerender })
 
-  function projectOpen(id: string) {
-    ctx.go(projectPath(id))
-  }
+  /** New data: the list only redraws its table (the search box keeps focus); a form is never redrawn under the user. */
+  onWorkUpdate((key) => {
+    if (!window.location.pathname.includes("/projects")) return
+    const r = route()
+    if (isListRoute(r)) {
+      if (!key.startsWith("projects:list")) return
+      const el = document.getElementById("vx-pj-table")
+      if (el) el.innerHTML = projectTableHtml()
+      return
+    }
+    if (isFormRoute(r) && document.getElementById("pj-form-ready")) return
+    // The Nhiệm vụ list / board redraw only their body (the search box keeps focus).
+    if (r.first === "nhiem-vu" && (!r.second || r.second === "board" || r.second === "danh-sach") && isMissionListKey(key) && !new URLSearchParams(window.location.search).get("selected")) return redrawMissionBody()
+    rerender()
+  })
 
-  /** Tổng quan tab: who and when (with editing and the delete request), three figures and the update log. */
-  function projectOverviewHtml(p: Project): string {
-    const role = ctx.role()
-    const files = vldcData.get("dmsFiles").filter((f) => f.projectId === p.id)
-    const canEdit = canCreateProject(role)
+  /** Tổng quan tab: who and when (with editing and the delete request) and three figures. */
+  function projectOverviewHtml(p: ProjectDetail): string {
+    const can = p.permissions
     const actions = [
-      canEdit ? `<button class="btn btn-light" ${jsCall("projectForm", p.id)}>Sửa dự án</button>` : "",
-      canRequestDelete(p, role) ? `<button class="btn btn-danger" ${jsCall("projectRequestDelete", p.id)}>Đề nghị xoá dự án</button>` : "",
+      can.canEdit ? `<button class="btn btn-light" ${jsCall("projectForm", p.code)}>Sửa dự án</button>` : "",
+      can.canRequestDelete ? `<button class="btn btn-danger" ${jsCall("projectRequestDelete", p.code)}>Đề nghị xoá dự án</button>` : "",
     ].join("")
-    const co = (p.coUnits ?? []).filter((u) => u !== unitCodeOf(p.unit)).map((u) => unitName(u as UnitCode))
+    const co = p.coDepartments.filter((d) => d.id !== p.leadDepartment?.id).map((d) => d.name)
     const info: [string, string][] = [
-      ["Thời gian", p.start && p.end ? `${vnDate(p.start)} – ${vnDate(p.end)}` : p.end ? `đến ${vnDate(p.end)}` : "–"],
-      ["Đơn vị chủ trì", `${p.unit}${subName(p.subUnit) ? ` – ${subName(p.subUnit)}` : ""}`],
+      ["Thời gian", `${formatDate(p.startDate)} – ${formatDate(p.endDate)}`],
+      ["Đơn vị chủ trì", p.leadDepartment?.name ?? "–"],
       ["Đơn vị phối hợp", co.join(", ") || "–"],
-      ["Chủ nhiệm", p.leadRole ? roleTitle(p.leadRole) : "–"],
+      ["Ngân sách dự kiến", formatMoney(p.estimatedBudget)],
+      ["Người lập", personName(p.createdBy)],
+      ["Phê duyệt", p.approvedAt ? formatDate(p.approvedAt) : p.approvalStatus === "PENDING" ? "Chờ duyệt" : "–"],
     ]
-    const docs = files.length ? `<a href="javascript:void 0" class="mini" ${jsCall("projectFiles", p.id)}>${files.length} tài liệu DMS</a>` : ""
     const late = p.delayDays ? `<small style="color:var(--danger)">trễ ${p.delayDays} ngày</small>` : "<small>đúng hạn</small>"
     return `<div class="card"><div class="card-head"><h4 style="margin:0">Thông tin chung</h4>${actions ? `<div class="toolbar">${actions}</div>` : ""}</div>
-<div class="vx-pj-info">${info.map(([k, v]) => `<div><span>${k}</span><b>${esc(v)}</b></div>`).join("")}</div>${p.description ? `<div class="vx-pj-desc"><span>Mục tiêu và phạm vi</span><div>${esc(p.description)}</div></div>` : ""}${docs}
-${p.start ? "" : '<div class="mini" style="margin-top:6px">Dự án nhập trước khi có lập kế hoạch: bấm "Sửa dự án" để nhập ngày và hạng mục.</div>'}</div>
-<div class="vx-pj-tiles three" style="margin-top:14px"><div><span>Tiến độ</span><b>${p.technical}%</b></div><div><span>Chi phí</span><b>${p.costUsed}%</b><small>${formatBillion(p.spent)} / ${formatBillion(p.budget)}</small></div><div><span>Hạn</span><b>${p.end ? esc(vnDate(p.end)) : "–"}</b>${late}</div></div>
-${(p.log ?? []).length ? `<div class="card" style="margin-top:14px"><h4>Nhật ký cập nhật</h4><div class="timeline">${[...(p.log ?? [])].reverse().slice(0, 5).map((l) => `<div><b>${esc(vnDate(l.at.slice(0, 10)))} • ${esc(l.byName)}</b><br>${esc(l.note)}${l.changes.length ? `<div class="mini">${l.changes.map((c) => `${esc(c.name)}: ${c.from}% → ${c.to}%`).join(" • ")}</div>` : ""}</div>`).join("")}</div></div>` : ""}`
+<div class="vx-pj-info">${info.map(([k, v]) => `<div><span>${k}</span><b>${esc(v)}</b></div>`).join("")}</div>${p.description ? `<div class="vx-pj-desc"><span>Mục tiêu và phạm vi</span><div>${esc(p.description)}</div></div>` : ""}</div>
+<div class="vx-pj-tiles three" style="margin-top:14px"><div><span>Tiến độ</span><b>${p.approvalStatus === "APPROVED" ? `${p.progress}%` : "—"}</b><small>theo độ phức tạp của việc đã xong</small></div><div><span>Việc đang mở</span><b>${p.openTaskCount}</b><small>${p.overdueTaskCount ? `<span style="color:var(--danger)">${p.overdueTaskCount} quá hạn</span>` : "không có việc quá hạn"}</small></div><div><span>Hạn</span><b>${formatDate(p.endDate)}</b>${late}</div></div>`
   }
 
-  function projectFiles(id: string) {
-    const files = vldcData.get("dmsFiles").filter((f) => f.projectId === id)
-    ctx.openModal(`Tài liệu DMS • ${id}`, files.map((f) => `<div class="metric vx-cap-pick" ${jsCall("openDmsFile", f.id)}><span>${esc(f.name)}<br><small>${esc(f.folder)} • v${f.version}</small></span><b>${esc(f.status)}</b></div>`).join("") || '<div class="mini">Không có tài liệu.</div>')
+  // ---------- Lập / sửa dự án
+
+  /** Units a project can be given to (the federation board itself aside), in directory order. */
+  const projectUnits = (units: OrgUnit[]) => units.filter((u) => u.code !== "BLD")
+
+  /** Lập / sửa dự án opens as a page: /projects/moi or /projects/<code>/sua. */
+  function projectForm(code: string) {
+    ctx.go(code ? `${projectBase(code)}/sua` : "projects/moi")
   }
 
-  // ---------- Tạo / sửa dự án
-  /** Đơn vị phối hợp: a dropdown of the units with a checkbox each. */
-  const coSelectHtml = (codes: string[]) => multiSelectHtml("pj-co", UNIT_DEFS.filter((u) => u.code !== "BLD").map((u) => [u.code, u.name]), codes, "Chọn đơn vị phối hợp")
-
-  /** Lập / sửa dự án opens as a page: /projects/moi or /projects/<id>/sua. */
-  function projectForm(id: string) {
-    ctx.go(id ? `${projectPath(id)}/sua` : "projects/moi")
-  }
-
-  /**
-   * The project form: general (code, name, goal and scope), units and lead, time and expected budget (with the state once
-   * approved). Its tasks are created on the board once the federation head approves it.
-   */
-  function projectFormHtml(id: string): string {
-    const role = ctx.role()
-    const p = id ? stored(id) : undefined
-    const crumbs = p ? crumbsHtml([["Dự án", "projects"], [p.name, projectPath(p.id)], ["Sửa dự án"]]) : crumbsHtml([["Dự án", "projects"], ["Lập dự án mới"]])
+  /** The project form: general (code, name, goal and scope), units, time and expected budget. */
+  function projectFormHtml(code: string): string {
+    const crumbs = code ? crumbsHtml([["Dự án", "projects"], [code, projectBase(code)], ["Sửa dự án"]]) : crumbsHtml([["Dự án", "projects"], ["Lập dự án mới"]])
     const head = (title: string, sub: string) => `<div class="vx-jira-head">${crumbs}<div class="vx-jira-title"><div style="flex:1;min-width:0"><h2>${esc(title)}</h2><div class="mini">${sub}</div></div></div></div>`
-    if (!canCreateProject(role)) return head("Lập dự án", "Chỉ Phòng Kỹ thuật lập và sửa dự án.")
-    if (id && !p) return head("Sửa dự án", `Không tìm thấy dự án ${esc(id)}.`)
-    const year = localToday().slice(0, 4)
-    const nextId = `VLDC-${year}-${String(vldcData.get("projects").filter((x) => x.id.startsWith(`VLDC-${year}-`)).length + 101).slice(-3)}`
-    const unitValue = p?.subUnit || unitCodeOf(p?.unit) || ""
-    const roles = Object.keys(ROLE_TITLES).filter((r) => r !== "admin")
-    const approved = !!p && approvalOf(p) === "Đã duyệt"
-    const state = approved
-      ? `<div><label>Trạng thái</label><select id="pj-status">${PROJECT_STATUSES.filter((s) => s !== "Khởi tạo").map((s) => `<option${s === projectStateOf(p) ? " selected" : ""}>${s}</option>`).join("")}</select></div>`
-      : ""
+    if (!code && !isTechnical()) return head("Lập dự án", "Chỉ Phòng Kỹ thuật lập và sửa dự án.")
+    const org = orgEntry()
+    const detail = code ? detailEntry(code) : undefined
+    if (!org.data) return head(code ? "Sửa dự án" : "Lập dự án mới", "") + entryStateHtml(org)
+    if (detail && !detail.data) return head("Sửa dự án", "") + entryStateHtml(detail)
+    const p = detail?.data
+    if (p && !p.permissions.canEdit) return head("Sửa dự án", "Bạn không sửa được dự án này.")
+    const units = projectUnits(org.data.units)
+    const lead = p?.leadDepartment?.id
+    const co = (p?.coDepartments ?? []).map((d) => String(d.id))
     const section = (title: string, hint: string, body: string) => `<div class="card vx-pj-section"><h4>${title}</h4>${hint ? `<div class="mini" style="margin:-4px 0 10px">${hint}</div>` : ""}${body}</div>`
     const general = section("Thông tin chung", "", `<div class="form-grid">
-<div><label>Mã dự án *</label><input id="pj-id" value="${esc(p?.id ?? nextId)}"${p ? " disabled" : ""}></div>
+<div><label>Mã dự án *</label><input id="pj-id" maxlength="30" value="${esc(p?.code ?? "")}"${p ? " disabled" : ' placeholder="VD: VLDC-2026-001"'}></div>
 <div class="full"><label>Tên dự án *</label><input id="pj-name" value="${esc(p?.name ?? "")}"></div>
 <div class="full"><label>Mục tiêu và phạm vi</label><textarea id="pj-desc" rows="3" placeholder="Mục tiêu, khu vực, khối lượng chính, sản phẩm giao nộp">${esc(p?.description ?? "")}</textarea></div></div>`)
-    const units = section("Đơn vị thực hiện", "Sau khi Liên đoàn trưởng phê duyệt, đơn vị chủ trì và các đơn vị phối hợp thấy dự án, nhận việc và ghi chú vào việc.", `<div class="form-grid">
-<div><label>Đơn vị chủ trì (tổ) *</label><select id="pj-unit">${unitChoiceGroups(vldcData.get("subUnits")).map((g) => `<optgroup label="${esc(g.name)}">${g.options.map((o) => `<option value="${esc(o.value)}"${o.value === unitValue ? " selected" : ""}>${esc(o.label)}</option>`).join("")}</optgroup>`).join("")}</select></div>
-<div><label>Chủ nhiệm dự án</label><select id="pj-lead">${roles.map((r) => `<option value="${r}"${r === (p?.leadRole ?? "chunhiem") ? " selected" : ""}>${esc(roleTitle(r))} – ${esc(personOf(r))}</option>`).join("")}</select></div>
-<div class="full"><label>Đơn vị phối hợp</label>${coSelectHtml(p?.coUnits ?? [])}</div></div>`)
+    const unitsBox = section("Đơn vị thực hiện", "Phòng Kỹ thuật luôn tham gia. Sau khi Liên đoàn trưởng phê duyệt, trưởng các đơn vị tham gia tạo việc và giao cho nhân viên đơn vị mình.", `<div class="form-grid">
+<div><label>Đơn vị chủ trì *</label><select id="pj-unit"><option value="">– Chọn đơn vị –</option>${units.map((u) => `<option value="${u.id}"${u.id === lead ? " selected" : ""}>${esc(u.name)}</option>`).join("")}</select></div>
+<div class="full"><label>Đơn vị phối hợp</label>${multiSelectHtml("pj-co", units.filter((u) => u.code !== "KT").map((u) => [String(u.id), u.name]), co, "Chọn đơn vị phối hợp")}</div></div>`)
     const time = section("Thời gian và kinh phí", "", `<div class="form-grid">
-<div><label>Bắt đầu *</label><input id="pj-start" type="date" value="${esc(p?.start ?? localToday())}"></div>
-<div><label>Kết thúc *</label><input id="pj-end" type="date" value="${esc(p?.end ?? "")}"></div>
-<div><label>Ngân sách dự kiến (tỷ đồng) *</label><input id="pj-budget" type="number" min="0" step="0.1" value="${p?.budget ?? ""}"></div>${state}</div>`)
-    const submit = !p ? "Lập dự án và trình duyệt" : p.approval === "Từ chối" ? "Lưu và trình lại" : "Lưu thay đổi"
-    const sub = p ? `${esc(p.id)} · ${esc(approved ? projectStateOf(p) : "Khởi tạo – chờ Liên đoàn trưởng phê duyệt")}` : "Dự án mới ở trạng thái Khởi tạo và được gửi Liên đoàn trưởng phê duyệt; sau khi được duyệt, Phòng Kỹ thuật tạo việc trên Board."
-    return `${head(p ? "Sửa dự án" : "Lập dự án mới", sub)}<div class="vx-pj-formpage">${general}${units}${time}
-<div class="vx-pj-actions"><button class="btn btn-primary" ${jsCall("projectSave", p?.id ?? "")}>${submit}</button><button class="btn btn-light" ${jsCall("go", p ? projectPath(p.id) : "projects")}>Huỷ</button></div></div>`
+<div><label>Bắt đầu *</label><input id="pj-start" type="date" value="${esc(p?.startDate ?? new Date().toLocaleDateString("sv-SE"))}"></div>
+<div><label>Kết thúc *</label><input id="pj-end" type="date" value="${esc(p?.endDate ?? "")}"></div>
+<div><label>Ngân sách dự kiến (đồng) *</label><input id="pj-budget" type="number" min="0" step="1000000" value="${p?.estimatedBudget ?? ""}"></div></div>`)
+    const submit = !p ? "Lập dự án và trình duyệt" : p.approvalStatus === "REJECTED" ? "Lưu và trình lại" : "Lưu thay đổi"
+    const sub = p
+      ? `${esc(p.code)} · ${p.approvalStatus === "APPROVED" ? esc(PROJECT_STATE[p.status][0]) : "Chờ Liên đoàn trưởng phê duyệt"}`
+      : "Dự án mới được gửi Liên đoàn trưởng phê duyệt; sau khi được duyệt, trưởng các đơn vị tham gia tạo việc trên Board."
+    return `${head(p ? "Sửa dự án" : "Lập dự án mới", sub)}<div class="vx-pj-formpage" id="pj-form-ready">${general}${unitsBox}${time}
+<div class="vx-pj-actions"><button class="btn btn-primary" ${jsCall("projectSave", p?.code ?? "")}>${submit}</button><button class="btn btn-light" ${jsCall("go", p ? projectBase(p.code) : "projects")}>Huỷ</button></div></div>`
   }
 
-  function projectSave(id: string) {
-    const role = ctx.role()
-    if (!canCreateProject(role)) return
-    const prev = id ? stored(id) : undefined
-    const unit = resolveUnitChoice(value("pj-unit"), vldcData.get("subUnits"))
-    const next: StoredProject = {
-      ...(prev ?? { crs: [], log: [] }),
-      id: prev?.id ?? value("pj-id"), name: value("pj-name"), unit: unit?.unitName ?? "", subUnit: unit?.subUnit ?? "",
-      leadRole: value("pj-lead"), budget: Number(value("pj-budget")), start: value("pj-start"), end: value("pj-end"), description: value("pj-desc"),
-      // Only an approved project's state is picked here; before that it stays Khởi tạo.
-      status: prev && approvalOf(prev) === "Đã duyệt" ? (value("pj-status") as ProjectStatus) : "Khởi tạo", wbs: prev?.wbs ?? [], milestones: prev?.milestones ?? [],
-      coUnits: [...document.querySelectorAll<HTMLInputElement>('input[name="pj-co"]:checked')].map((x) => x.value).filter((u) => u !== unitCodeOf(unit?.unitName)),
+  function projectSave(code: string) {
+    const body: SaveProject = {
+      code: code || value("pj-id"), name: value("pj-name"), description: value("pj-desc"), leadDepartmentId: Number(value("pj-unit")),
+      coDepartmentIds: [...document.querySelectorAll<HTMLInputElement>('input[name="pj-co"]:checked')].map((x) => Number(x.value)),
+      estimatedBudget: Number(value("pj-budget")), startDate: value("pj-start"), endDate: value("pj-end"),
     }
-    if (!unit) return alert("Vui lòng chọn phòng thực hiện chính")
-    const problems = [...projectProblems(next, vldcData.get("projects"), !prev), ...(prev ? wbsRemovalProblems(prev, next, projectWork()) : [])]
-    if (problems.length) return alert(problems.join("\n"))
-    const saved = submitProject(prev, next, role)
-    void vldcData.save("projects", saved)
-    if (approvalOf(saved) === "Chờ duyệt" && (!prev || approvalOf(prev) !== "Chờ duyệt")) {
-      notice(PROJECT_APPROVER, `Dự án ${saved.id} chờ phê duyệt`, `${roleTitle(role)} trình dự án "${saved.name}".`, role)
-    }
-    if (!prev || prev.leadRole !== saved.leadRole) notice(saved.leadRole as string, `Dự án ${saved.id}`, `Bạn là chủ nhiệm dự án "${saved.name}".`, role)
-    ctx.go(projectPath(saved.id))
+    if (!body.leadDepartmentId) return notify.error("Vui lòng chọn đơn vị chủ trì")
+    if (!(body.estimatedBudget > 0)) return notify.error("Ngân sách dự kiến phải lớn hơn 0")
+    void runAction(() => (code ? projectsApi.update(code, body) : projectsApi.create(body)), (saved) => {
+      notify.success(code ? "Đã lưu dự án" : `Đã lập dự án ${saved.code} và gửi Liên đoàn trưởng phê duyệt`)
+      ctx.go(projectBase(saved.code))
+    })
   }
 
   // ---------- Phê duyệt, xoá dự án
-  function projectDecide(id: string, decision: "Đã duyệt" | "Từ chối") {
-    const p = stored(id)
-    const role = ctx.role()
-    if (!p || !isProjectApprover(role)) return
-    const note = decision === "Từ chối" ? prompt("Lý do không phê duyệt") ?? "" : ""
-    if (decision === "Từ chối" && !note.trim()) return
-    try {
-      void vldcData.save("projects", decideProject(p, decision, note, new Date().toISOString()))
-      if (p.createdBy) notice(p.createdBy, `Dự án ${p.id}: ${decision === "Đã duyệt" ? "đã được phê duyệt" : "không được phê duyệt"}`, `${p.name}${note ? ` – ${note}` : ""}`, role)
-      rerender()
-    } catch (e) {
-      alert((e as Error).message)
+
+  /** A done action: its toast, then the page again. */
+  const done = (message: string) => () => {
+    notify.success(message)
+    rerender()
+  }
+
+  async function projectDecide(code: string, decision: string) {
+    if (decision === "approve") {
+      if (!(await confirmDialog({ title: "Phê duyệt dự án", message: `Phê duyệt dự án ${code}? Trưởng các đơn vị tham gia sẽ được báo để giao việc.`, confirmLabel: "Phê duyệt" }))) return
+      return void runAction(() => projectsApi.approve(code), done("Đã phê duyệt dự án"))
     }
+    const note = await reasonDialog({ title: `Không phê duyệt dự án ${code}`, hint: "Phòng Kỹ thuật sẽ thấy lý do để sửa và trình lại.", confirmLabel: "Không phê duyệt", danger: true })
+    if (note === null) return
+    void runAction(() => projectsApi.reject(code, note), done("Đã trả dự án về Phòng Kỹ thuật"))
   }
 
-  /** Tasks still in the project (payment dossiers aside): each is deleted by its own creator before the project can go. */
-  const liveWork = (id: string) => workflowStore.items().filter((x) => x.project === id && x.type !== "payment").length
+  /** Phòng Kỹ thuật asks to delete the project (once it has no task); the federation head confirms. */
+  async function projectRequestDelete(code: string) {
+    const reason = await reasonDialog({ title: `Đề nghị xoá dự án ${code}`, hint: "Liên đoàn trưởng sẽ xác nhận. Dự án chỉ xoá được khi không còn việc nào.", confirmLabel: "Gửi đề nghị", danger: true })
+    if (reason === null) return
+    void runAction(() => projectsApi.requestDelete(code, reason), done("Đã gửi đề nghị xoá dự án"))
+  }
 
-  /** The creator asks to delete the project; the federation head confirms (projectConfirmDelete). */
-  function projectRequestDelete(id: string) {
-    const p = stored(id)
-    const role = ctx.role()
-    if (!p || !canRequestDelete(p, role)) return
-    const blocker = deleteBlocker(liveWork(id))
-    if (blocker) return alert(blocker)
-    const reason = prompt(`Lý do đề nghị xoá dự án ${p.id}`) ?? ""
-    if (!reason.trim()) return
-    try {
-      void vldcData.save("projects", requestDelete(p, role, reason, new Date().toISOString(), liveWork(id)))
-      notice(PROJECT_APPROVER, `Đề nghị xoá dự án ${p.id}`, `${roleTitle(role)} đề nghị xoá "${p.name}": ${reason.trim()}`, role)
-      rerender()
-    } catch (e) {
-      alert((e as Error).message)
+  async function projectCancelDelete(code: string) {
+    if (!(await confirmDialog({ title: "Huỷ đề nghị xoá", message: `Huỷ đề nghị xoá dự án ${code}?`, confirmLabel: "Huỷ đề nghị" }))) return
+    void runAction(() => projectsApi.cancelDelete(code), done("Đã huỷ đề nghị xoá"))
+  }
+
+  async function projectConfirmDelete(code: string, answer: string) {
+    if (answer === "yes") {
+      if (!(await confirmDialog({ title: "Xác nhận xoá dự án", message: `Xoá dự án ${code}? Dự án sẽ không còn hiện ở danh sách.`, confirmLabel: "Xoá dự án", danger: true }))) return
+      return void runAction(() => projectsApi.approveDelete(code), () => {
+        notify.success(`Đã xoá dự án ${code}`)
+        ctx.go("projects")
+      })
     }
-  }
-
-  function projectCancelDelete(id: string) {
-    const p = stored(id)
-    if (!p) return
-    try {
-      void vldcData.save("projects", cancelDeleteRequest(p, ctx.role()))
-      rerender()
-    } catch (e) {
-      alert((e as Error).message)
-    }
-  }
-
-  /** The federation head confirms the deletion (only of a project with no task left) or keeps the project, with a reason. */
-  function projectConfirmDelete(id: string, answer: string) {
-    const p = stored(id)
-    const role = ctx.role()
-    if (!p?.deleteRequest || !isProjectApprover(role)) return
-    const confirmed = answer === "yes"
-    if (confirmed && deleteBlocker(liveWork(id))) return alert(deleteBlocker(liveWork(id)))
-    if (confirmed && !confirm(`Xoá dự án ${p.id} • ${p.name}?`)) return
-    const note = confirmed ? "" : prompt("Lý do không xoá") ?? ""
-    if (!confirmed && !note.trim()) return
-    try {
-      void vldcData.save("projects", decideDelete(p, confirmed, note, role, new Date().toISOString(), liveWork(id)))
-      notice(p.deleteRequest.by, `Dự án ${p.id}: ${confirmed ? "đã xoá" : "không xoá"}`, confirmed ? `Liên đoàn trưởng đã xác nhận xoá "${p.name}".` : `Liên đoàn trưởng giữ lại "${p.name}": ${note.trim()}`, role)
-      if (confirmed) ctx.go("projects")
-      else rerender()
-    } catch (e) {
-      alert((e as Error).message)
-    }
-  }
-
-  // ---------- Tiến độ, mốc, yêu cầu thay đổi
-  function projectProgressForm(id: string) {
-    const p = computed(id)
-    if (!p || !canUpdateProject(p, ctx.role())) return
-    ctx.openModal(`Cập nhật tiến độ • ${p.id}`, `<div class="vx-staff-table"><table id="pj-prog"><tr><th>Hạng mục</th><th>Trọng số</th><th>Tiến độ %</th></tr>${p.wbs.map((w, i) => `<tr><td>${esc(w.name)}</td><td>${w.weight ?? "–"}%</td><td>${w.linkedWork ? `<b>${w.progress}%</b><div class="mini">Tự tính từ ${w.linkedWork} việc giao</div>` : `<input class="pj-p" data-key="${esc(w.id ?? String(i))}" type="number" min="0" max="100" value="${w.progress}">`}</td></tr>`).join("")}</table></div>
-<div class="form-grid" style="margin-top:10px"><div class="full"><label>Công việc đã làm *</label><textarea id="pj-note" rows="2"></textarea></div></div>
-<button class="btn btn-primary" style="margin-top:10px" ${jsCall("projectProgressSave", p.id)}>Lưu tiến độ</button>`)
-  }
-
-  function projectProgressSave(id: string) {
-    const p = stored(id)
-    const role = ctx.role()
-    if (!p || !canUpdateProject(p, role)) return
-    const progress = Object.fromEntries([...document.querySelectorAll<HTMLInputElement>("#pj-prog .pj-p")].map((el) => [el.dataset.key as string, Number(el.value)]))
-    try {
-      void vldcData.save("projects", updateWbs(p, progress, role, personOf(role), value("pj-note"), new Date().toISOString()))
-      ctx.closeModal()
-      rerender()
-    } catch (e) {
-      alert((e as Error).message)
-    }
-  }
-
-  function projectMilestone(id: string, milestoneId: string) {
-    const p = stored(id)
-    if (!p || !canUpdateProject(p, ctx.role())) return
-    void vldcData.save("projects", toggleMilestone(p, milestoneId, new Date().toISOString()))
-    projectOpen(id)
-  }
-
-  function projectCrForm(id: string) {
-    const p = stored(id)
-    if (!p || !canUpdateProject(p, ctx.role())) return
-    ctx.openModal(`Đề xuất thay đổi • ${p.id}`, `<div class="form-grid"><div><label>Loại thay đổi</label><select id="pj-cr-kind" onchange="document.getElementById('pj-cr-end-box').style.display=this.value==='Thời gian'?'':'none';document.getElementById('pj-cr-budget-box').style.display=this.value==='Ngân sách'?'':'none'">${CR_KINDS.map((k) => `<option>${k}</option>`).join("")}</select></div>
-<div id="pj-cr-end-box" style="display:none"><label>Ngày kết thúc mới</label><input id="pj-cr-end" type="date" value="${esc(p.end ?? "")}"></div>
-<div id="pj-cr-budget-box" style="display:none"><label>Ngân sách mới (tỷ)</label><input id="pj-cr-budget" type="number" step="0.1" value="${p.budget}"></div>
-<div class="full"><label>Nội dung, lý do *</label><textarea id="pj-cr-content" rows="3"></textarea></div></div>
-<button class="btn btn-primary" style="margin-top:10px" ${jsCall("projectCrSave", p.id)}>Trình Liên đoàn trưởng</button>`)
-  }
-
-  function projectCrSave(id: string) {
-    const p = stored(id)
-    const role = ctx.role()
-    if (!p || !canUpdateProject(p, role)) return
-    try {
-      const kind = value("pj-cr-kind") as ChangeRequestKind
-      const next = addChangeRequest(p, { kind, content: value("pj-cr-content"), newEnd: value("pj-cr-end"), newBudget: Number(value("pj-cr-budget")) }, role, new Date().toISOString())
-      void vldcData.save("projects", next)
-      notice(PROJECT_APPROVER, `Yêu cầu thay đổi dự án ${p.id}`, `${roleTitle(role)} đề xuất thay đổi ${kind.toLowerCase()} cho "${p.name}".`, role)
-      ctx.closeModal()
-      rerender()
-    } catch (e) {
-      alert((e as Error).message)
-    }
-  }
-
-  function projectCrDecide(id: string, crId: string, decision: "Đã duyệt" | "Từ chối") {
-    const p = stored(id)
-    const role = ctx.role()
-    if (!p || !isProjectApprover(role)) return
-    const note = decision === "Từ chối" ? prompt("Lý do từ chối") ?? "" : ""
-    try {
-      void vldcData.save("projects", decideChangeRequest(p, crId, decision, note, new Date().toISOString()))
-      const cr = (p.crs ?? []).find((c) => c.id === crId)
-      if (cr) notice(cr.by, `Yêu cầu thay đổi ${p.id}: ${decision}`, `${cr.kind}: ${cr.content}${note ? ` – ${note}` : ""}`, role)
-      projectOpen(id)
-      rerender()
-    } catch (e) {
-      alert((e as Error).message)
-    }
+    const note = await reasonDialog({ title: `Không xoá dự án ${code}`, hint: "Người đề nghị sẽ thấy lý do.", confirmLabel: "Giữ dự án" })
+    if (note === null) return
+    void runAction(() => projectsApi.rejectDelete(code, note), done("Đã giữ lại dự án"))
   }
 
   Object.assign(window, {
-    projectOpen, projectFiles, projectForm, projectSave, projectProgressForm, projectProgressSave, projectMilestone, projectCrForm,
-    projectFilterSet: (f: ProjectFilter) => {
-      projectFilter = f
+    projectForm, projectSave, projectDecide, projectRequestDelete, projectCancelDelete, projectConfirmDelete,
+    projectOpen: (code: string) => ctx.go(projectBase(code)),
+    projectFilterSet: (status: ProjectStatus | "") => {
+      list.status = status
+      list.pageNo = 1
       rerender()
     },
     projectSearch: (q: string) => {
-      projectQuery = q
+      list.query = q
+      list.pageNo = 1
+      clearTimeout(searchTimer)
+      searchTimer = setTimeout(() => {
+        const el = document.getElementById("vx-pj-table")
+        if (el) el.innerHTML = projectTableHtml()
+      }, 250)
+    },
+    projectPageNo: (n: string) => {
+      list.pageNo = Number(n) || 1
       const el = document.getElementById("vx-pj-table")
       if (el) el.innerHTML = projectTableHtml()
     },
-    projectCrSave, projectCrDecide, projectDecide, projectRequestDelete, projectCancelDelete, projectConfirmDelete,
     // Older pages open projects through projectDetail.
-    projectDetail: projectOpen,
+    projectDetail: (code: string) => ctx.go(projectBase(code)),
   })
 }
-

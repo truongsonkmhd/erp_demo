@@ -49,3 +49,11 @@ export function statusBadge(item: WorkItem): string {
         : "b-info"
   return `<span class="badge ${cls}">${escapeHtml(s)}</span>`
 }
+
+/** "Trang x / y" with previous / next buttons calling fn(pageNo); nothing when everything fits on one page. */
+export function pagerHtml(page: { pageNo: number; totalPages: number; totalElements: number }, fn: string): string {
+  if (page.totalPages <= 1) return ""
+  const btn = (label: string, to: number, disabled: boolean) =>
+    `<button class="btn btn-light" ${disabled ? "disabled" : jsCall(fn, String(to))}>${label}</button>`
+  return `<div class="vx-pager"><span class="mini">${page.totalElements} mục • Trang ${page.pageNo} / ${page.totalPages}</span>${btn("‹ Trước", page.pageNo - 1, page.pageNo <= 1)}${btn("Sau ›", page.pageNo + 1, page.pageNo >= page.totalPages)}</div>`
+}

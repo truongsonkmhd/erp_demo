@@ -1,6 +1,5 @@
 import { escapeHtml as esc, formatDate, jsCall } from "./html"
 import { crumbsHtml } from "./views"
-import { initials } from "./boardCore"
 import type { PersonRef, ProjectDetail, ProjectStatus } from "../data/workApi"
 
 /**
@@ -18,6 +17,10 @@ export const projectBase = (code: string) => `projects/${encodeURIComponent(code
 
 /** "Nguyễn Văn A" (or "–"). */
 export const personName = (p: PersonRef | null | undefined) => (p ? p.fullName : "–")
+
+/** "Lê Hoàng Nam" → "HN": the last two words' initials. */
+export const initials = (name: string) =>
+  name.split(/\s+/).filter(Boolean).slice(-2).map((p) => p[0]).join("").toUpperCase() || "?"
 
 const AVATAR_COLORS = 6
 export function avatarHtml(p: PersonRef | null | undefined): string {

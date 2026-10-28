@@ -64,3 +64,14 @@ export function projectHeaderHtml(p: ProjectDetail, tab: string): string {
 <div class="vx-jira-title"><div style="flex:1;min-width:0"><h2>${esc(p.name)} ${lozengeHtml(PROJECT_STATE[p.status])}</h2><div class="mini">${esc(sub)}</div></div>${create}</div>
 ${bannerHtml(p)}<nav class="vx-jira-tabs">${tabs}</nav></div>`
 }
+
+/**
+ * Bar heading the Nhiệm vụ / Dự án menu: a switch between its two flows, Dự án (Phòng Kỹ thuật makes projects, the
+ * federation head approves them, unit heads hand the work down) and Nhiệm vụ (a subordinate asks its direct superior),
+ * then the flow's actions.
+ */
+export function flowBarHtml(active: "du-an" | "nhiem-vu", actions = ""): string {
+  const seg = (key: string, path: string, label: string, hint: string) =>
+    `<button class="${key === active ? "active" : ""}" title="${esc(hint)}" ${jsCall("go", path)}>${label}</button>`
+  return `<div class="vx-flow-bar"><div class="vx-flow-seg">${seg("du-an", "projects", "Dự án", "Phòng Kỹ thuật lập dự án, Liên đoàn trưởng duyệt, trưởng đơn vị giao việc")}${seg("nhiem-vu", "projects/nhiem-vu", "Nhiệm vụ", "Cấp dưới lập nhiệm vụ, cấp trên trực tiếp duyệt")}</div><span style="flex:1"></span>${actions}</div>`
+}

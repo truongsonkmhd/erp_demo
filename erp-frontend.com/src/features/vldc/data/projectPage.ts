@@ -1,8 +1,8 @@
 import { escapeHtml as esc, formatDate, formatMoney, jsCall, pagerHtml } from "../workflow/html"
-import { crumbsHtml, directiveFormHtml, multiSelectHtml, proposalFormHtml } from "../workflow/views"
-import { flowBarHtml, installBoard, issuePageHtml, mountBoard, proposalSpaceHtml } from "../workflow/boardViews"
+import { crumbsHtml, multiSelectHtml } from "../workflow/views"
 import { installTaskViews, mountTaskBoard, taskFormHtml, taskPageHtml, taskSpaceHtml } from "../workflow/taskViews"
-import { PROJECT_STATE, lozengeHtml, personName, projectBase, projectHeaderHtml } from "../workflow/workViews"
+import { PROJECT_STATE, flowBarHtml, lozengeHtml, personName, projectBase, projectHeaderHtml } from "../workflow/workViews"
+import { installMissionViews, isMissionListKey, missionFormHtml, missionPageHtml, missionSpaceHtml, mountMissionBoard, redrawMissionBody } from "../workflow/missionViews"
 import { entryStateHtml, me, onWorkUpdate, runAction, workCache } from "./workStore"
 import { WORK_TOPICS, orgApi, projectsApi, type OrgUnit, type ProjectDetail, type ProjectStatus, type SaveProject } from "./workApi"
 
@@ -75,11 +75,10 @@ export function installProjectPage(render: Record<string, () => void>, ctx: Ctx)
     const { first, second, third } = route()
     if (!first) return pageHtml()
     if (first === "nhiem-vu") {
-      if (!second || second === "board" || second === "danh-sach") return proposalSpaceHtml(second === "board" ? "board" : "danh-sach")
-      if (second === "moi") return proposalFormHtml()
-      return third === "sua" ? proposalFormHtml(second) : issuePageHtml(second)
+      if (!second || second === "board" || second === "danh-sach") return missionSpaceHtml(second === "board" ? "board" : "danh-sach")
+      if (second === "moi") return missionFormHtml()
+      return third === "sua" ? missionFormHtml(second) : missionPageHtml(second)
     }
-    if (first === "giao-viec") return directiveFormHtml()
     if (first === "moi") return projectFormHtml("")
     if (second === "sua") return projectFormHtml(first)
     if (second === "viec") return taskPageHtml(first, third)
@@ -99,11 +98,11 @@ export function installProjectPage(render: Record<string, () => void>, ctx: Ctx)
     if (!el) return
     el.innerHTML = pageFor()
     // A board (if this page has one) gets its drag and drop.
-    if (route().first === "nhiem-vu") mountBoard()
+    if (route().first === "nhiem-vu") mountMissionBoard()
     else mountTaskBoard()
   }
   render.projects = rerender
-  installBoard({ go: ctx.go, openModal: ctx.openModal, closeModal: ctx.closeModal })
+  installMissionViews({ go: ctx.go, openModal: ctx.openModal, closeModal: ctx.closeModal, rerender })
   installTaskViews({ go: ctx.go, openModal: ctx.openModal, closeModal: ctx.closeModal, rerender })
 
   /** New data: the list only redraws its table (the search box keeps focus); a form is never redrawn under the user. */
@@ -117,6 +116,8 @@ export function installProjectPage(render: Record<string, () => void>, ctx: Ctx)
       return
     }
     if (isFormRoute(r) && document.getElementById("pj-form-ready")) return
+    // The Nhiệm vụ list / board redraw only their body (the search box keeps focus).
+    if (r.first === "nhiem-vu" && (!r.second || r.second === "board" || r.second === "danh-sach") && isMissionListKey(key) && !new URLSearchParams(window.location.search).get("selected")) return redrawMissionBody()
     rerender()
   })
 

@@ -4,16 +4,21 @@ import { isClosed } from "../workflow/rules"
 import { workflowStore } from "../workflow/repository"
 import { localToday, vnDate } from "./dates"
 import { UNIT_DEFS, unitName, type UnitCode } from "./org"
-import { managesAllUnits } from "./access"
+import { managedUnits } from "./access"
+import { hasPerm } from "../workflow/rules"
+import { errorText, saveOrgUnit, saveStaff, saveSubUnit } from "./hrApi"
 import { kpis } from "./pages"
 import { vldcData } from "./registry"
 import { staffView } from "./staffView"
-import { SUB_UNIT_KINDS, dissolveBlockers, dissolveSubUnit, orgTree, saveSubUnitCheck, subUnitsOf, withHead } from "./subUnitCore"
+import { SUB_UNIT_KINDS, dissolveBlockers, dissolveSubUnit, orgTree, saveSubUnitCheck, subUnitsOf } from "./subUnitCore"
 import type { SubUnit, SubUnitKind } from "./types"
 
-/** Không gian đơn vị: Liên đoàn → đơn vị → tổ/phòng, with KPIs per tổ; the federation head restructures it. */
+/**
+ * Không gian đơn vị: Liên đoàn → đơn vị → tổ/phòng, with KPIs per tổ. vldc-organization:create restructures every
+ * unit, vldc-organization:update alone the units the role manages; the backend re-checks both (hrApi).
+ */
 
-type Ctx = { role(): string; openModal(title: string, html: string): void; closeModal(): void }
+type Ctx = { role(): string; perms(): string[]; openModal(title: string, html: string): void; closeModal(): void }
 
 const state = { collapsed: new Set<string>() }
 const content = () => document.getElementById("content")
@@ -27,7 +32,18 @@ export function installSubUnitPage(render: Record<string, () => void>, ctx: Ctx)
   const subs = () => vldcData.get("subUnits")
   const staff = () => staffView()
   const find = (id: string) => subs().find((s) => s.id === id)
-  const manager = () => managesAllUnits(ctx.role())
+  /** May restructure this unit (add/edit/dissolve its tổ, edit the unit itself). */
+  const canOrg = (unit: string) => hasPerm(ctx.perms(), "vldc-organization:create")
+    || (hasPerm(ctx.perms(), "vldc-organization:update") && managedUnits(ctx.role()).has(unit))
+  const manager = () => UNIT_DEFS.some((u) => canOrg(u.code))
+  async function run(task: () => Promise<unknown>, done?: () => void) {
+    try {
+      await task()
+      done?.()
+    } catch (e) {
+      alert(errorText(e))
+    }
+  }
   const personName = (id?: string) => (id ? staff().find((p) => p.id === id)?.name : undefined)
 
   function pageHtml(): string {
@@ -56,7 +72,7 @@ export function installSubUnitPage(render: Record<string, () => void>, ctx: Ctx)
       }).join("")
       return `<div class="card vx-org-unit"><div class="vx-org-unit-head"><button class="vx-plan-toggle" ${jsCall("subToggle", u.unit)}>${open ? "▾" : "▸"}</button>
 <div><h3 style="margin:0">${esc(unitLabel(u.unit))}</h3><div class="mini">${u.staff} người • ${u.children.length} tổ/phòng${u.unassigned && u.unit !== "BLD" ? ` • ${u.unassigned} chưa xếp tổ` : ""}${k ? ` • ${k.open} việc mở` : ""}</div></div>
-<div class="toolbar">${k ? `KPI ${scoreBadge(k)}` : ""}${manager() && u.unit !== "BLD" ? `<button class="btn btn-light" ${jsCall("subForm", u.unit, "")}>+ Thêm tổ/phòng</button>` : ""}</div></div>
+<div class="toolbar">${k ? `KPI ${scoreBadge(k)}` : ""}${canOrg(u.unit) && u.unit !== "BLD" ? `<button class="btn btn-light" ${jsCall("subForm", u.unit, "")}>+ Thêm tổ/phòng</button>` : ""}${canOrg(u.unit) ? `<button class="btn btn-light" ${jsCall("orgEdit", u.unit)}>Sửa đơn vị</button>` : ""}</div></div>
 ${open ? rows || '<div class="mini" style="padding:8px 0">Chưa chia tổ/phòng.</div>' : ""}</div>`
     }).join("")
     // Không gian đơn vị has no menu entry of its own: it opens from Phòng ban and leads back there.
@@ -79,7 +95,7 @@ ${open ? rows || '<div class="mini" style="padding:8px 0">Chưa chia tổ/phòng
     const metric = (l: string, v: string) => `<div class="metric"><span>${l}</span><b>${v}</b></div>`
     const crit = (l: string, v: number | null) => metric(l, v == null ? "–" : `${v}%`)
     const open = k.items.filter((x) => !isClosed(x))
-    const actions = manager() && s.active
+    const actions = canOrg(s.unit) && s.active
       ? `<div class="toolbar" style="margin-top:12px"><button class="btn btn-light" ${jsCall("subForm", s.unit, s.id)}>Sửa</button><button class="btn btn-light" ${jsCall("subDissolve", s.id)}>Giải thể</button></div>`
       : ""
     ctx.openModal(`${s.kind} • ${s.name}`, `<div class="mini">${esc(unitLabel(s.unit))}${s.active ? "" : " • đã giải thể"}</div><p>${esc(s.duty)}</p>
@@ -90,7 +106,7 @@ ${open ? rows || '<div class="mini" style="padding:8px 0">Chưa chia tổ/phòng
   }
 
   function subForm(unit: string, id: string) {
-    if (!manager()) return
+    if (!canOrg(unit)) return
     const s = id ? find(id) : undefined
     const members = staff().filter((p) => (s ? p.subUnit === s.id : p.unit === unit))
     ctx.openModal(s ? `Sửa ${s.kind.toLowerCase()} • ${s.name}` : `Thêm tổ/phòng • ${unitLabel(unit)}`, `<div class="form-grid">
@@ -103,7 +119,7 @@ ${s ? "" : '<div class="mini" style="margin-top:6px">Tổ trưởng chọn trong
   }
 
   function subSave(unit: string, id: string) {
-    if (!manager()) return
+    if (!canOrg(unit)) return
     const prev = id ? find(id) : undefined
     const headId = value("su-head") || undefined
     const next: SubUnit = {
@@ -112,28 +128,59 @@ ${s ? "" : '<div class="mini" style="margin-top:6px">Tổ trưởng chọn trong
     }
     const problem = saveSubUnitCheck(next, subs())
     if (problem) return alert(problem)
-    // One person heads one tổ: the tổ they headed before loses its head.
-    for (const changed of withHead(next, subs())) void vldcData.save("subUnits", changed)
-    // A head picked for a new tổ moves into it.
+    // A head picked from outside the tổ moves into it first; the backend clears the tổ they headed before.
     const head = headId ? staff().find((p) => p.id === headId) : undefined
-    if (head && head.subUnit !== next.id) void vldcData.save("staffProfiles", { ...head, unit: next.unit, subUnit: next.id })
-    ctx.closeModal()
-    rerender()
+    void run(async () => {
+      if (!prev) await saveSubUnit({ ...next, headId: undefined })
+      if (head && head.subUnit !== next.id) await saveStaff({ ...head, unit: next.unit, subUnit: next.id, transferNote: `Làm tổ trưởng ${next.name}` })
+      await saveSubUnit(next)
+    }, () => {
+      ctx.closeModal()
+      rerender()
+    })
   }
 
   function subDissolve(id: string) {
     const s = find(id)
-    if (!s || !manager()) return
+    if (!s || !canOrg(s.unit)) return
     const blockers = dissolveBlockers(s, staff(), workflowStore.items(), vldcData.get("projects"))
     if (blockers.length) return alert(`Chưa thể giải thể ${s.name}: ${blockers.join(", ")}. Hãy điều chuyển nhân sự, hoàn thành/chuyển việc và giao hạng mục dự án cho tổ khác trước.`)
     if (!confirm(`Giải thể ${s.name}? Lịch sử công việc của tổ vẫn được giữ.`)) return
-    void vldcData.save("subUnits", dissolveSubUnit(s, new Date().toISOString()))
-    ctx.closeModal()
-    rerender()
+    void run(() => saveSubUnit(dissolveSubUnit(s, new Date().toISOString())), () => {
+      ctx.closeModal()
+      rerender()
+    })
+  }
+
+  /** Sửa đơn vị (Phòng ban): tên, nhóm, chức năng nhiệm vụ, trưởng/phó chọn trong nhân sự của đơn vị. */
+  function orgEdit(code: string) {
+    const u = vldcData.get("orgUnits").find((x) => x.id === code)
+    if (!u || !canOrg(code)) return
+    const people = staff().filter((p) => p.unit === code)
+    const pick = (id: string, selected?: string) => `<select id="${id}"><option value="">– Chưa chỉ định –</option>${people.map((p) => `<option value="${esc(p.id)}"${p.id === selected ? " selected" : ""}>${esc(p.name)} – ${esc(p.title)}</option>`).join("")}</select>`
+    const types = ["Điều hành", "Bộ máy giúp việc", "Đơn vị trực thuộc"]
+    ctx.openModal(`Sửa đơn vị • ${u.name}`, `<div class="form-grid">
+<div class="full"><label>Tên đơn vị *</label><input id="ou-name" value="${esc(u.name)}"></div>
+<div><label>Nhóm</label><select id="ou-type">${types.map((t) => `<option${t === u.type ? " selected" : ""}>${t}</option>`).join("")}</select></div>
+<div><label>Trưởng đơn vị</label>${pick("ou-head", u.headId)}</div>
+<div><label>Phó đơn vị</label>${pick("ou-deputy", u.deputyId)}</div>
+<div class="full"><label>Chức năng, nhiệm vụ</label><textarea id="ou-mission" rows="4">${esc(u.mission)}</textarea></div></div>
+<button class="btn btn-primary" style="margin-top:10px" ${jsCall("orgSave", code)}>Lưu</button>`)
+  }
+
+  function orgSave(code: string) {
+    const u = vldcData.get("orgUnits").find((x) => x.id === code)
+    if (!u) return
+    if (!value("ou-name")) return alert("Vui lòng nhập tên đơn vị")
+    const headId = value("ou-head") || undefined
+    const deputyId = value("ou-deputy") || undefined
+    if (headId && headId === deputyId) return alert("Trưởng và phó đơn vị phải là hai người khác nhau")
+    // The org_units change re-renders Phòng ban / Không gian đơn vị (datasets.ts pages).
+    void run(() => saveOrgUnit({ ...u, name: value("ou-name"), type: value("ou-type"), mission: value("ou-mission"), headId, deputyId }), () => ctx.closeModal())
   }
 
   Object.assign(window, {
-    subOpen, subForm, subSave, subDissolve,
+    subOpen, subForm, subSave, subDissolve, orgEdit, orgSave,
     subToggle: (unit: string) => {
       if (state.collapsed.has(unit)) state.collapsed.delete(unit)
       else state.collapsed.add(unit)

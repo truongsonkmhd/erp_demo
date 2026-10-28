@@ -21,6 +21,7 @@ import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 /** Safety net for controllers without their own try/catch: ResultMessage body with the matching HTTP status. */
 @Slf4j
@@ -30,6 +31,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ResultMessage<Object>> badRequest(IllegalArgumentException e) {
         return error(HttpStatus.BAD_REQUEST, e.getMessage());
+    }
+
+    /** spring.servlet.multipart limits, hit before the controller runs. */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ResultMessage<Object>> tooLarge(MaxUploadSizeExceededException e) {
+        return error(HttpStatus.PAYLOAD_TOO_LARGE, "File quá dung lượng cho phép (tối đa 20 MB mỗi file)");
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

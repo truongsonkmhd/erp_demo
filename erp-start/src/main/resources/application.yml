@@ -59,6 +59,11 @@ spring:
       mail.smtp.connectiontimeout: 10000
       mail.smtp.timeout: 15000
       mail.smtp.writetimeout: 15000
+  # Đính kèm VLDC: 20 MB per file, a topic holds at most 10 files.
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 210MB
 
 notification:
   zone: ${NOTIFICATION_ZONE:Asia/Ho_Chi_Minh}
@@ -68,6 +73,12 @@ notification:
   calendar:
     enabled: ${NOTIFICATION_CALENDAR_ENABLED:true}
     poll-ms: ${NOTIFICATION_CALENDAR_POLL_MS:60000}
+
+# Uploaded VLDC files live on the backend's disk, outside any web root, and are only served through
+# /api/vldc/files after a sign-in and scope check. The database keeps their URLs only.
+vldc:
+  files:
+    root: ${VLDC_FILES_ROOT:./data/uploads}
 
 management:
   health:

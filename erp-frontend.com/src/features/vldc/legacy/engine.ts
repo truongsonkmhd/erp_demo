@@ -19,12 +19,15 @@ import { ROLE_PROFILES, canSeeProject, roleUnitCode, unitCodeOf } from "@/featur
 import { installDataPages } from "@/features/vldc/data/pages";
 import { baseDashboardHtml, hasUnitDashboard, installAccountingPages, unitDashboardHtml } from "@/features/vldc/data/accountingPages";
 import { aiSearchHtml, aiStatsHtml, installKnowledgePages } from "@/features/vldc/data/knowledgePages";
+import { installDmsPage } from "@/features/vldc/data/dmsPage";
+import { installContractPage } from "@/features/vldc/data/contractPage";
 import { installActions } from "@/features/vldc/data/actions";
 import { installInboxPage } from "@/features/vldc/data/inboxPage";
 import { installPlansPage } from "@/features/vldc/data/plansPage";
 import { installNewsPage } from "@/features/vldc/data/newsPage";
 import { installNotificationSettingsPage } from "@/features/vldc/data/notificationSettingsPage";
 import { installCapabilityPage } from "@/features/vldc/data/capabilityPage";
+import { installAccountsPage } from "@/features/vldc/data/accountsPage";
 import { installDocAssign } from "@/features/vldc/data/docAssignPage";
 import { installSciencePage } from "@/features/vldc/data/sciencePage";
 import { installSubUnitPage } from "@/features/vldc/data/subUnitPage";
@@ -162,6 +165,7 @@ pages.today=['Hôm nay','Lịch, kế hoạch, thông báo và việc cần xử
 pages.calendar=['Lịch làm việc','Lịch Liên đoàn, đơn vị, dự án và cá nhân theo tuần'];
 pages.plans=['Kế hoạch','Kế hoạch Liên đoàn → đơn vị → dự án → cá nhân'];
 pages.notifications=['Quản lý thông báo','Chọn loại thông báo và nơi nhận: hệ thống, Gmail'];
+pages.accounts=['Tài khoản','Tài khoản đăng nhập gắn với hồ sơ nhân sự: vai trò, khoá/mở, đặt lại mật khẩu'];
 
 
 
@@ -387,19 +391,22 @@ Object.assign(window, {
 
 // Shared cross-account workflow (directives, delegated tasks, payment dossiers) backed by Firestore.
 // Business pages rebuilt on Firestore data (projects, finance, equipment, hr, risks, command, ...).
-installDataPages(render, { role: () => current });
+installDataPages(render, { role: () => current, perms: workflowPerms });
 installAccountingPages(render, { role: () => current, openModal });
 installUncExport({ openModal, closeModal });
 installKnowledgePages(render, { role: () => current, openModal, closeModal });
+installDmsPage(render, { role: () => current, openModal, closeModal });
+installContractPage(render, { role: () => current, openModal, closeModal });
 installActions({ role: () => current, openModal, closeModal });
 installInboxPage(render, { role: () => current });
 installPlansPage(render, { role: () => current, openModal, closeModal });
 installNewsPage(render, { role: () => current, perms: workflowPerms, openModal, closeModal });
 installNotificationSettingsPage(render);
-installCapabilityPage(render, { role: () => current, openModal, closeModal });
+installCapabilityPage(render, { role: () => current, perms: workflowPerms, openModal, closeModal });
+installAccountsPage(render, { perms: workflowPerms, openModal, closeModal });
 installDocAssign({ role: () => current, openModal, closeModal });
 installSciencePage(render, { role: () => current, openModal, closeModal });
-installSubUnitPage(render, { role: () => current, openModal, closeModal });
+installSubUnitPage(render, { role: () => current, perms: workflowPerms, openModal, closeModal });
 installProjectPage(render, { role: () => current, openModal, closeModal, go, rerender });
 installLedgerPages(render, { role: () => current, openModal, closeModal });
 installWorkflow(render, { show, go, rerender, openModal, closeModal });

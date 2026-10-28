@@ -45,7 +45,11 @@ export type Risk = {
   id: string; title: string; owner: string; probability: number; impact: number; mitigation: string; open: boolean; project?: string; subUnit?: string
 }
 
-export type OrgUnit = { id: string; name: string; type: string; leader: string; deputy?: string; staff: string; staffCount: number; mission: string; public: boolean }
+/** headId/deputyId: StaffProfile ids of trưởng/phó (leader/deputy are their names, derived by the backend). */
+export type OrgUnit = {
+  id: string; name: string; type: string; leader: string; deputy?: string; staff: string; staffCount: number; mission: string; public: boolean
+  headId?: string; deputyId?: string
+}
 export type OrgStats = {
   id: string; total: number; doctor: number; master: number; engineerBachelor: number; technicianWorker: number
   under5: number; from5to15: number; over15: number
@@ -127,6 +131,8 @@ export type Disbursement = { id: string; month: number; plan: number; actual: nu
 /** Skill levels 1–5; certExpiry "yyyy-mm-dd". */
 export type StaffSkill = {
   id: string; name: string; unit: string; geophysics: number; gis: number; data: number; pm: number; onField: boolean; certExpiry: string
+  /** Every assessed skill (code → level 1–5), the four above included. */
+  levels?: Record<string, number>
 }
 
 /** Amounts in million VND; dates "yyyy-mm-dd". kind "thu" = receivable contract, "chi" = payable. */
@@ -183,11 +189,20 @@ export type NewsPost = {
 
 export type Education = "Tiến sĩ" | "Thạc sĩ" | "Kỹ sư/Cử nhân" | "KTV/Công nhân"
 /** Public staff profile for the capability page; unit is a UnitCode, cert expiry "yyyy-mm-dd", experience in years. */
+export type StaffCert = { name: string; expiry: string; number?: string; issuedBy?: string }
+/** DANG_LAM = đang làm việc, TAM_NGHI = tạm nghỉ, NGHI_VIEC = đã nghỉ việc (kept for history). */
+export type StaffStatus = "DANG_LAM" | "TAM_NGHI" | "NGHI_VIEC"
 export type StaffProfile = {
   id: string; name: string; birthYear: number; education: Education; major: string; experience: number
-  unit: string; title: string; certs: { name: string; expiry: string }[]; onField: boolean
-  /** SubUnit id inside the unit. */
+  unit: string; title: string; certs: StaffCert[]; onField: boolean
+  /** SubUnit id inside the unit; "" = directly in the unit. */
   subUnit?: string
+  gender?: "Nam" | "Nữ"; phone?: string; email?: string
+  status?: StaffStatus; leftAt?: string
+  /** Sent with a save that moves the person: written into the transfer history. */
+  transferNote?: string
+  /** Read-only: the login account of the person (Tài khoản page). */
+  account?: string; accountActive?: boolean
 }
 
 export type ReplyResult = "Hoàn thành" | "Cần thêm thời gian" | "Không thuộc thẩm quyền"

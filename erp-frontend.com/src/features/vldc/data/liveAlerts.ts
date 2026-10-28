@@ -5,6 +5,7 @@ import { evaluateAlerts, type Alert } from "./alerts"
 import { localToday } from "./dates"
 import { vldcData } from "./registry"
 import type { AlertRule } from "./types"
+import { ledgerStore } from "./ledgerStore"
 
 /** Evaluates the given rules against the live collections and workflow (Alerts page + leader dashboard). */
 export function liveAlerts(rules: AlertRule[]): Alert[] {
@@ -12,7 +13,7 @@ export function liveAlerts(rules: AlertRule[]): Alert[] {
   return evaluateAlerts(rules, {
     projects: projectsView(),
     equipment: vldcData.get("equipment"),
-    contracts: vldcData.get("contracts"),
+    contracts: ledgerStore.legacyContracts(),
     inboxTasks: vldcData.get("inboxTasks"),
     openWork,
   }, localToday())

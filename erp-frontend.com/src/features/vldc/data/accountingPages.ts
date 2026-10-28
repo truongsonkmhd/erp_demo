@@ -13,6 +13,7 @@ import { localToday, vnDate } from "./dates"
 import * as M from "./metrics"
 import { bar, kpi, kpis, metric, tr, ty } from "./pages"
 import { vldcData } from "./registry"
+import { ledgerStore } from "./ledgerStore"
 import { UNC_TYPE, uncButton } from "./uncPage"
 import type { Contract, Project } from "./types"
 
@@ -41,9 +42,9 @@ const roleTitle = (r: string) => ROLE_TITLES[r] || r
 
 /** Doanh thu & công nợ for the federation head: revenue of receivable contracts, what is still owed, by customer. */
 function revenueSection(): string {
-  const r = A.revenueSummary(D("contracts"), today())
-  const ar = A.debtSummary(D("contracts"), "thu", today())
-  const thu = D("contracts").filter((c) => c.kind === "thu").length
+  const r = A.revenueSummary(ledgerStore.legacyContracts(), today())
+  const ar = A.debtSummary(ledgerStore.legacyContracts(), "thu", today())
+  const thu = ledgerStore.legacyContracts().filter((c) => c.kind === "thu").length
   const rows = r.customers.map((c) => `<tr><td><b>${esc(c.party)}</b><div class="mini">${c.contracts} hợp đồng</div></td><td>${tr(c.value)}</td><td>${tr(c.invoiced)}</td><td>${tr(c.collected)}</td><td><b>${tr(c.outstanding)}</b></td><td>${c.agingDays ? badge(`${c.agingDays} ngày`, c.agingDays > 60 ? "b-danger" : "b-warn") : c.outstanding ? badge("Trong hạn", "b-ok") : "–"}</td></tr>`)
   const total = `<tr><td><b>Tổng</b></td><td><b>${tr(r.contractValue)}</b></td><td><b>${tr(r.invoiced)}</b></td><td><b>${tr(r.collected)}</b></td><td><b>${tr(r.receivable)}</b></td><td></td></tr>`
   return `<h3 style="margin:0 0 10px">Doanh thu & công nợ</h3>${kpis(
@@ -62,7 +63,7 @@ function accounting(ctx: Ctx, chief = ctx.role() === "ketoantruong") {
   const v = A.voucherSummary(D("vouchers"))
   const pays = payments().filter((p) => !isClosed(p))
   const adv = A.advanceSummary(D("advances"), today())
-  const ar = A.debtSummary(D("contracts"), "thu", today())
+  const ar = A.debtSummary(ledgerStore.legacyContracts(), "thu", today())
   const close = A.closingSummary(D("closingTasks"))
   const cash = A.cashSummary(D("bankAccounts"), D("bankLines"))
   const mine = pays.filter((p) => p.owner === ctx.role())
@@ -141,7 +142,7 @@ function advances() {
 }
 
 function debtPage(kind: Contract["kind"]) {
-  const s = A.debtSummary(D("contracts"), kind, today())
+  const s = A.debtSummary(ledgerStore.legacyContracts(), kind, today())
   const rec = kind === "thu"
   const tiles = rec
     ? [kpi("Phải thu", tr(s.total), `${s.debts.length} hợp đồng`), kpi("Quá hạn", tr(s.overdue), "Đã qua hạn thanh toán"), kpi("> 60 ngày", tr(s.over60), `${s.over60Count} hợp đồng`), kpi("Đã thu lũy kế", tr(s.collected), "Theo milestone")]
@@ -235,9 +236,9 @@ function ledgers() {
 }
 
 function acctreports() {
-  const ar = A.debtSummary(D("contracts"), "thu", today())
-  const ap = A.debtSummary(D("contracts"), "chi", today())
-  const rev = A.revenueSummary(D("contracts"), today())
+  const ar = A.debtSummary(ledgerStore.legacyContracts(), "thu", today())
+  const ap = A.debtSummary(ledgerStore.legacyContracts(), "chi", today())
+  const rev = A.revenueSummary(ledgerStore.legacyContracts(), today())
   const adv = A.advanceSummary(D("advances"), today())
   const cash = A.cashSummary(D("bankAccounts"), D("bankLines"))
   const f = M.financeMetrics(D("financeLines"), disbursementView())
@@ -254,19 +255,6 @@ function acctreports() {
 }
 
 // ---------- Contracts & documents ----------
-
-function contractsPage(ctx: Ctx) {
-  const role = ctx.role()
-  const cs = D("contracts")
-  const ar = A.debtSummary(cs, "thu", today())
-  const paidOf = (c: Contract) => c.milestones.reduce((s, m) => s + m.paid, 0)
-  return `${kpis(
-    kpi("Hợp đồng đang quản lý", cs.length, tr(cs.reduce((s, c) => s + c.value, 0))),
-    kpi("Khách hàng / nhà cung cấp", `${cs.filter((c) => c.kind === "thu").length} / ${cs.filter((c) => c.kind === "chi").length}`, "Số hợp đồng theo loại"),
-    kpi("Phải thu còn lại", tr(ar.total), `${tr(ar.over60)} > 60 ngày`),
-    kpi("Rủi ro cao", cs.filter((c) => c.risk === "Cao").length, "Cần theo dõi"),
-  )}<div style="margin-top:14px">${card("Danh mục hợp đồng", table(["Mã", "Đối tác / nội dung", "Loại", "Giá trị", "Đã thanh toán", "Còn phải thanh toán", "Giai đoạn", "Nghĩa vụ tiếp theo", "Rủi ro", ""], cs.map((c) => `<tr><td><b>${esc(c.id)}</b></td><td>${esc(c.party)}<div class="mini">${esc(c.name)}</div></td><td>${c.kind === "thu" ? "Khách hàng" : "Nhà cung cấp"}</td><td>${tr(c.value)}</td><td>${tr(paidOf(c))}</td><td><b>${tr(c.value - paidOf(c))}</b></td><td>${esc(c.stage)}</td><td>${esc(c.nextObligation)}</td><td>${badge(c.risk, riskCls(c.risk))}</td><td>${btn("Mở", "contractDetail", c.id)}</td></tr>`)), A.canCreateContract(role) ? '<button class="btn btn-primary" onclick="contractForm()">+ Hợp đồng</button>' : "")}</div>`
-}
 
 const isDone = (status: string) => status === "Hoàn thành" || status === "Đã phát hành"
 
@@ -349,7 +337,7 @@ export function baseDashboardHtml(): string {
   const ps = projectsView()
   const f = M.financeMetrics(D("financeLines"), disbursementView())
   const ins = D("incomingDocuments")
-  const ar = A.debtSummary(D("contracts"), "thu", today())
+  const ar = A.debtSummary(ledgerStore.legacyContracts(), "thu", today())
   const eq = D("equipment")
   const ready = eq.length ? Math.round((eq.filter((e) => e.status !== "Bảo dưỡng").length / eq.length) * 100) : 0
   const avgTech = ps.length ? Math.round(ps.reduce((s, p) => s + p.technical, 0) / ps.length) : 0
@@ -381,20 +369,13 @@ function modals(ctx: Ctx) {
     open(`Hồ sơ thiết bị • ${e.id}`, `<h3 style="margin-top:0">${esc(e.name)}</h3><div class="grid twoeq"><div>${metric("Nhóm", esc(e.group))}${metric("Đơn vị quản lý", esc(e.unit))}${metric("Trạng thái", esc(e.status))}${metric("Số lượng", e.quantity)}${metric("Năm sử dụng", esc(e.year))}${metric("Tình trạng", esc(e.condition))}</div><div>${bar("Utilization", e.utilization)}${metric("Hạn kiểm định", `${vnDate(e.inspectionDue)}${M.inspectionSoon(e, today()) ? " • sắp đến hạn" : ""}`)}${metric("Chi phí sửa chữa", tr(e.repairCost))}${asset ? `${metric("Tài sản kế toán", `<a href="javascript:void 0" ${jsCall("assetAccountingDetail", asset.id)}>${esc(asset.id)}</a>`)}${metric("Giá trị còn lại", tr(asset.nbv))}` : metric("Tài sản kế toán", "Chưa liên kết")}</div></div>`)
   }
 
-  function contractDetail(id: string) {
-    const c = D("contracts").find((x) => x.id === id)
-    if (!c) return notFound("Hợp đồng", id)
-    const d = A.contractDebt(c, today())
-    const vs = D("vouchers").filter((v) => v.contractId === c.id)
-    open(`Hợp đồng • ${c.id}`, `<h3 style="margin-top:0">${esc(c.name)}</h3><div class="grid twoeq"><div>${metric(c.kind === "thu" ? "Khách hàng" : "Nhà cung cấp", esc(c.party))}${metric("Giá trị", tr(c.value))}${metric("Dự án", `<a href="javascript:void 0" ${jsCall("projectDetail", c.projectId)}>${esc(c.projectId)}</a>`)}${metric("Giai đoạn", esc(c.stage))}${metric("Còn phải " + (c.kind === "thu" ? "thu" : "trả"), tr(d.outstanding))}${metric("Rủi ro", badge(c.risk, riskCls(c.risk)))}</div><div><h4>Nghĩa vụ</h4>${c.obligations.map((o) => `<div class="folder">✓ ${esc(o)}</div>`).join("")}</div></div><h4 style="margin-top:12px">Mốc thanh toán</h4>${table(["Mốc", "Giá trị", "Đã xuất HĐ", "Đã thanh toán", "Hạn"], c.milestones.map((m) => `<tr><td>${esc(m.name)}</td><td>${tr(m.value)}</td><td>${tr(m.invoiced)}</td><td>${tr(m.paid)}</td><td>${vnDate(m.due)}${m.invoiced > m.paid && m.due < today() ? ` ${badge("Quá hạn", "b-danger")}` : ""}</td></tr>`))}<h4 style="margin-top:12px">Chứng từ liên quan</h4>${vs.map((v) => `<div class="mini"><a href="javascript:void 0" ${jsCall("voucherDetail", v.id)}>${esc(v.id)}</a> • ${vnDate(v.date)} • ${tr(v.amount)} • ${esc(v.status)}</div>`).join("") || '<div class="mini">Chưa có.</div>'}`)
-  }
-
+  /** The contract record (contractPage.ts) accepts the contract number used by these older pages. */
   function debtDetail(id: string) {
-    contractDetail(id)
+    ;(window as unknown as { contractDetail(id: string): void }).contractDetail(id)
   }
 
   function debtLetter(id: string) {
-    const c = D("contracts").find((x) => x.id === id)
+    const c = ledgerStore.legacyContracts().find((x) => x.id === id)
     if (!c) return notFound("Công văn đôn đốc", id)
     const d = A.contractDebt(c, today())
     open(`Dự thảo công văn đôn đốc • ${c.id}`, `<div class="meeting-minutes"><p>Kính gửi: <b>${esc(c.party)}</b></p><p>Căn cứ hợp đồng số <b>${esc(c.id)}</b> (${esc(c.name)}), đến ngày ${vnDate(today())} Quý đơn vị còn nợ <b>${tr(d.outstanding)}</b>, trong đó <b>${tr(d.overdue)}</b> đã quá hạn ${d.agingDays} ngày.</p><p>Đề nghị Quý đơn vị thanh toán số tiền trên trong vòng 10 ngày làm việc kể từ ngày nhận công văn này.</p></div><div class="toolbar" style="margin-top:10px"><button class="btn btn-primary" onclick="closeModal();show('documents')">Chuyển trình ký</button></div>`)
@@ -464,13 +445,13 @@ function modals(ctx: Ctx) {
     if (el) el.innerHTML = projectacct()
   }
 
-  return { equipmentDetail, contractDetail, debtDetail, debtLetter, voucherDetail, advanceDetail, assetAccountingDetail, documentDetail, bankReconcile, matchBankLine, ledgerDetail, toggleClosing, selectAcctProject }
+  return { equipmentDetail, debtDetail, debtLetter, voucherDetail, advanceDetail, assetAccountingDetail, documentDetail, bankReconcile, matchBankLine, ledgerDetail, toggleClosing, selectAcctProject }
 }
 
 const RENDERERS: Record<string, (ctx: Ctx) => string> = {
   vouchers, payments: paymentsPage, advances, receivables: () => debtPage("thu"), payables: () => debtPage("chi"),
   cashbank, acctassets, projectacct, reconcile, closing, ledgers, acctreports,
-  contracts: contractsPage, documents, crossflow, handoff,
+  documents, crossflow, handoff,
 }
 
 /** Registers the pages and the id-based detail modals (inline handlers live on window). */

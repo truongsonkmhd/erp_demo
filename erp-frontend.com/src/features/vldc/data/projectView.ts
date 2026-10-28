@@ -4,6 +4,7 @@ import { localToday } from "./dates"
 import { disbursementSeries, disbursementSummary } from "./disbursementCore"
 import { canSeeProject, computeProject, type WorkLink } from "./projectCore"
 import { vldcData } from "./registry"
+import { ledgerStore } from "./ledgerStore"
 import type { Project } from "./types"
 
 // The units of a project (Phòng Kỹ thuật and the approver always; the others once it is approved) see its work and note on it.
@@ -34,5 +35,5 @@ export function projectsView(): Project[] {
 }
 
 /** Giải ngân of the year from project budgets and the ledger's phiếu chi (replaces the static disbursement rows). */
-export const disbursementView = () => disbursementSeries(vldcData.get("projects"), vldcData.get("cashEntries"), localToday())
-export const spendView = () => disbursementSummary(vldcData.get("projects"), vldcData.get("cashEntries"), localToday())
+export const disbursementView = () => disbursementSeries(vldcData.get("projects"), ledgerStore.legacyCashEntries(), localToday())
+export const spendView = () => disbursementSummary(vldcData.get("projects"), ledgerStore.legacyCashEntries(), localToday())

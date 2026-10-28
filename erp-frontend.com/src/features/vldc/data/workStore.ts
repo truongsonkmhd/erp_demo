@@ -39,7 +39,9 @@ export async function runAction<T>(task: () => Promise<T>, then?: (result: T) =>
     then?.(result)
     return result
   } catch (error) {
-    alert(error instanceof Error ? error.message : String(error))
+    // The server answers 403 with a generic "Forbidden".
+    const forbidden = (error as { status?: number }).status === 403
+    alert(forbidden ? "Bạn không có quyền làm thao tác này." : error instanceof Error ? error.message : String(error))
     return undefined
   } finally {
     busy = false

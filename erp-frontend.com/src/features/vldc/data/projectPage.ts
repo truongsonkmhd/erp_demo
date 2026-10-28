@@ -1,8 +1,8 @@
 import { escapeHtml as esc, formatDate, formatMoney, jsCall, pagerHtml } from "../workflow/html"
 import { crumbsHtml, directiveFormHtml, multiSelectHtml, proposalFormHtml } from "../workflow/views"
-import { flowBarHtml, installBoard, issuePageHtml, mountBoard, projectSpaceHtml, proposalSpaceHtml } from "../workflow/boardViews"
+import { flowBarHtml, installBoard, issuePageHtml, mountBoard, proposalSpaceHtml } from "../workflow/boardViews"
+import { installTaskViews, mountTaskBoard, taskFormHtml, taskPageHtml, taskSpaceHtml } from "../workflow/taskViews"
 import { PROJECT_STATE, lozengeHtml, personName, projectBase, projectHeaderHtml } from "../workflow/workViews"
-import { projectsView } from "./projectView"
 import { entryStateHtml, me, onWorkUpdate, runAction, workCache } from "./workStore"
 import { WORK_TOPICS, orgApi, projectsApi, type OrgUnit, type ProjectDetail, type ProjectStatus, type SaveProject } from "./workApi"
 
@@ -82,19 +82,15 @@ export function installProjectPage(render: Record<string, () => void>, ctx: Ctx)
     if (first === "giao-viec") return directiveFormHtml()
     if (first === "moi") return projectFormHtml("")
     if (second === "sua") return projectFormHtml(first)
-    if (second === "viec") return issuePageHtml(third)
-    if (second === "giao-viec") return directiveFormHtml(first)
+    if (second === "viec") return taskPageHtml(first, third)
     const entry = detailEntry(first)
+    if (second === "giao-viec") return taskFormHtml(entry.data, first, entryStateHtml(entry))
     if (!entry.data) {
       const head = `<div class="vx-jira-head">${crumbsHtml([["Dự án", "projects"], [first]])}</div>`
       return entry.error ? `${head}<div class="mini" style="margin-top:8px">Không tìm thấy dự án ${esc(first)}.</div>` : head + entryStateHtml(entry)
     }
     const tab = second || "board"
-    if (tab === "board" || tab === "danh-sach") {
-      // The board still reads the work of the project from the older store until it moves to the task API.
-      const old = projectsView().find((x) => x.id === first)
-      if (old) return projectSpaceHtml(old, tab)
-    }
+    if (tab === "board" || tab === "danh-sach") return taskSpaceHtml(entry.data, tab)
     return projectHeaderHtml(entry.data, "tong-quan") + projectOverviewHtml(entry.data)
   }
 
@@ -103,10 +99,12 @@ export function installProjectPage(render: Record<string, () => void>, ctx: Ctx)
     if (!el) return
     el.innerHTML = pageFor()
     // A board (if this page has one) gets its drag and drop.
-    mountBoard()
+    if (route().first === "nhiem-vu") mountBoard()
+    else mountTaskBoard()
   }
   render.projects = rerender
   installBoard({ go: ctx.go, openModal: ctx.openModal, closeModal: ctx.closeModal })
+  installTaskViews({ go: ctx.go, openModal: ctx.openModal, closeModal: ctx.closeModal, rerender })
 
   /** New data: the list only redraws its table (the search box keeps focus); a form is never redrawn under the user. */
   onWorkUpdate((key) => {

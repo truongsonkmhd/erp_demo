@@ -23,7 +23,7 @@ import { TYPE_LABELS, type DirectiveLabels } from "./directiveList"
 import { workflowStore as store } from "./repository"
 import { leaderDashboardHtml, type CashFigures, type OrgFigures } from "./leaderDashboard"
 import { staffView } from "../data/staffView"
-import { cashSummary, debtSummary } from "../data/ledgerCore"
+import { ledgerStore } from "../data/ledgerStore"
 import { performanceHtml, unitDetailHtml } from "./kpiViews"
 import { kpiUnits, unitKpis } from "./kpi"
 import { vldcData } from "../data/registry"
@@ -403,10 +403,10 @@ export function installWorkflow(render: Record<string, () => void>, nextShell: S
   // The leader gets a purpose-built dashboard instead of the stacked legacy demo blocks.
   const unitDashboard = render.dashboard
   function leaderCash(): CashFigures {
-    const debts = vldcData.get("debtRecords"), entries = vldcData.get("cashEntries")
-    const d = debtSummary(debts)
-    const c = cashSummary(debts, entries, today().slice(0, 7))
-    return { revenue: d.total + c.thuOther, contracts: d.count, thu: c.thu, thuOther: c.thuOther, thuMonth: c.thuMonth, chi: c.chi, chiMonth: c.chiMonth, remaining: d.remaining, doneOwing: d.doneOwing.length }
+    // Computed by the backend from contracts (running ones), their payments and thu khác / chi khác.
+    const s = ledgerStore.summary()
+    const contracts = ledgerStore.contracts().filter((c) => c.kind === "thu" && c.status !== "Dự thảo").length
+    return { revenue: s.revenue, contracts, thu: s.thu, thuOther: s.thuOther, thuMonth: s.thuMonth, chi: s.chi, chiMonth: s.chiMonth, remaining: s.receivable, doneOwing: s.doneOwing }
   }
 
   /** Same counts as the Phòng ban page: staff profiles, its unit cards and the active tổ/phòng. */

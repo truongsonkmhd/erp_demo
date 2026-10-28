@@ -1,22 +1,11 @@
-import { escapeHtml as esc, formatBillion, jsCall } from "../workflow/html"
-import { ROLE_TITLES } from "../workflow/rules"
-import { crumbsHtml, directiveFormHtml, multiSelectHtml, proposalFormHtml } from "../workflow/views"
-import { flowBarHtml, installBoard, issuePageHtml, mountBoard, projectHeaderHtml, projectSpaceHtml, proposalSpaceHtml } from "../workflow/boardViews"
-import { tierOf } from "./access"
-import { workflowStore } from "../workflow/repository"
-import { localToday, vnDate } from "./dates"
-import * as M from "./metrics"
-import { ROLE_PROFILES, UNIT_DEFS, type UnitCode, unitCodeOf, unitName } from "./org"
-import {
-  CR_KINDS, PROJECT_APPROVER, PROJECT_LOZENGE, PROJECT_STATUSES, addChangeRequest, approvalOf, canCreateProject, canRequestDelete, cancelDeleteRequest, canSeeProject, canUpdateProject,
-  decideChangeRequest, decideDelete, decideProject, deleteBlocker, requestDelete, isProjectApprover, projectProblems, projectStateOf, submitProject,
-  type ProjectState, toggleMilestone, updateWbs, wbsRemovalProblems,
-} from "./projectCore"
-import { projectWork, projectsView } from "./projectView"
-import { vldcData } from "./registry"
-import { dmsStore } from "./dmsStore"
-import { resolveUnitChoice, unitChoiceGroups } from "./subUnitCore"
-import type { ChangeRequestKind, Project, ProjectStatus, StoredProject } from "./types"
+import { escapeHtml as esc, formatDate, formatMoney, jsCall, pagerHtml } from "../workflow/html"
+import { crumbsHtml, multiSelectHtml } from "../workflow/views"
+import { confirmDialog, notify, reasonDialog } from "../workflow/dialogs"
+import { installTaskViews, mountTaskBoard, taskFormHtml, taskPageHtml, taskSpaceHtml } from "../workflow/taskViews"
+import { PROJECT_STATE, flowBarHtml, lozengeHtml, personName, projectBase, projectHeaderHtml } from "../workflow/workViews"
+import { installMissionViews, isMissionListKey, missionFormHtml, missionPageHtml, missionSpaceHtml, mountMissionBoard, redrawMissionBody } from "../workflow/missionViews"
+import { entryStateHtml, me, onWorkUpdate, runAction, workCache } from "./workStore"
+import { WORK_TOPICS, orgApi, projectsApi, type OrgUnit, type ProjectDetail, type ProjectStatus, type SaveProject } from "./workApi"
 
 /**
  * Nhiệm vụ / Dự án in the style of Jira, on the project API: the directory of projects, each with Board / Danh sách
@@ -133,11 +122,9 @@ export function installProjectPage(render: Record<string, () => void>, ctx: Ctx)
     rerender()
   })
 
-  /** Tổng quan tab: who and when (with editing and the delete request), three figures and the update log. */
-  function projectOverviewHtml(p: Project): string {
-    const role = ctx.role()
-    const files = dmsStore.files().filter((f) => f.projectId === p.id)
-    const canEdit = canCreateProject(role)
+  /** Tổng quan tab: who and when (with editing and the delete request) and three figures. */
+  function projectOverviewHtml(p: ProjectDetail): string {
+    const can = p.permissions
     const actions = [
       can.canEdit ? `<button class="btn btn-light" ${jsCall("projectForm", p.code)}>Sửa dự án</button>` : "",
       can.canRequestDelete ? `<button class="btn btn-danger" ${jsCall("projectRequestDelete", p.code)}>Đề nghị xoá dự án</button>` : "",
@@ -157,10 +144,7 @@ export function installProjectPage(render: Record<string, () => void>, ctx: Ctx)
 <div class="vx-pj-tiles three" style="margin-top:14px"><div><span>Tiến độ</span><b>${p.approvalStatus === "APPROVED" ? `${p.progress}%` : "—"}</b><small>theo độ phức tạp của việc đã xong</small></div><div><span>Việc đang mở</span><b>${p.openTaskCount}</b><small>${p.overdueTaskCount ? `<span style="color:var(--danger)">${p.overdueTaskCount} quá hạn</span>` : "không có việc quá hạn"}</small></div><div><span>Hạn</span><b>${formatDate(p.endDate)}</b>${late}</div></div>`
   }
 
-  function projectFiles(id: string) {
-    const files = dmsStore.files().filter((f) => f.projectId === id)
-    ctx.openModal(`Tài liệu DMS • ${id}`, files.map((f) => `<div class="metric vx-cap-pick" ${jsCall("openDmsFile", f.id)}><span>${esc(f.name)}<br><small>${esc(f.folder)} • v${f.version}</small></span><b>${esc(f.status)}</b></div>`).join("") || '<div class="mini">Không có tài liệu.</div>')
-  }
+  // ---------- Lập / sửa dự án
 
   /** Units a project can be given to (the federation board itself aside), in directory order. */
   const projectUnits = (units: OrgUnit[]) => units.filter((u) => u.code !== "BLD")

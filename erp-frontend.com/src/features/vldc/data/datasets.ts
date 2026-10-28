@@ -5,7 +5,6 @@ import * as hr from "./seed/hr.ts"
 import * as org from "./seed/org.ts"
 import * as pr from "./seed/projects.ts"
 import * as acc from "./seed/accounting.ts"
-import * as ct from "./seed/contracts.ts"
 import * as fl from "./seed/flows.ts"
 import * as kn from "./seed/knowledge.ts"
 import * as gv from "./seed/governance.ts"
@@ -14,7 +13,6 @@ import * as st from "./seed/staff.ts"
 import * as da from "./seed/docAssignments.ts"
 import * as sc from "./seed/science.ts"
 import * as su from "./seed/subUnits.ts"
-import * as lg from "./seed/ledger.ts"
 import type { AuditEvent } from "./audit.ts"
 
 /**
@@ -44,7 +42,6 @@ export const DATASETS = {
   financeLines: { collection: "finance_lines", seed: pr.financeLines, pages: ["finance"] },
   disbursement: { collection: "disbursement", seed: pr.disbursement, pages: ["finance", "dashboard"] },
   staffSkills: { collection: "staff_skills", api: true, owned: true, seed: hr.staffSkills, pages: ["hr", "capability"] },
-  contracts: { collection: "contracts", seed: ct.contracts, pages: ["contracts", "receivables", "payables", "accounting", "acctreports"] },
   vouchers: { collection: "vouchers", seed: acc.vouchers, pages: ["vouchers", "ledgers", "reconcile", "accounting", "cashbank"] },
   advances: { collection: "advances", seed: acc.advances, pages: ["advances", "accounting", "acctreports"] },
   bankAccounts: { collection: "bank_accounts", seed: acc.bankAccounts, pages: ["cashbank", "reconcile", "acctreports"] },
@@ -70,8 +67,6 @@ export const DATASETS = {
   docAssignments: { collection: "doc_assignments", seed: da.docAssignments, pages: ["documents", "action", "dashboard"] },
   staffProfiles: { collection: "staff_profiles", api: true, owned: true, seed: st.staffProfiles, pages: ["capability", "hr", "organization", "units", "accounts"] },
   news: { collection: "news", api: true, seed: nw.news, pages: ["news", "dashboard"] },
-  debtRecords: { collection: "debt_records", seed: lg.debtRecords, pages: ["debts", "cashin", "cashout", "dashboard"] },
-  cashEntries: { collection: "cash_entries", seed: lg.cashEntries, pages: ["cashin", "cashout", "debts", "dashboard", "finance", "acctreports"] },
   auditEvents: { collection: "audit_events", seed: (): AuditEvent[] => [], pages: ["audit"] },
 } as const
 
